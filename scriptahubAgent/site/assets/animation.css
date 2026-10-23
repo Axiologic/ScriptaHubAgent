@@ -1,0 +1,8 @@
+.animation-page{padding-bottom:0}
+.animation-navigation{display:flex;align-items:center;justify-content:space-between;gap:16px;min-height:44px;padding:18px 0 12px}
+.animation-player-floor{width:100%;min-width:0;max-width:1100px;margin:0 auto;padding:0 0 22px}
+.animation-player-floor shf-player{--shf-radius:8px;max-width:1100px;margin:auto}
+@media(max-width:650px){:root .site-shell.animation-page{width:100%}.animation-page .site-header .header-create::before{font-size:16px}.animation-page .site-header .header-librarian::before{font-size:15px}}
+
+.animation-feedback{width:100%;min-width:0;max-width:1100px;margin:20px auto 48px;padding-top:24px;border-top:1px solid var(--line)}
+.animation-feedback>h2{font-size:clamp(20px,2vw,26px);margin:0 0 24px}.animation-feedback .workflow-layout{margin-top:0}

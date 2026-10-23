@@ -1,0 +1,272 @@
+{
+  "name": "scriptahubAgent",
+  "ploinky": "sso enable",
+  "sso": {
+    "providerAgent": "userPersistoAgent"
+  },
+  "container": "docker.io/assistos/ploinky-node@sha256:accd925fcbf460c1f4c7a5cd9e2d46539c615bbfad2e896cabb7556d8050a669",
+  "agent": "node /code/server.mjs",
+  "about": "Serves the ScriptaHub reader and a catalogue assembled from configured book repositories.",
+  "enable": [
+    {
+      "agent": "userPersistoAgent",
+      "profile": "default"
+    },
+    {
+      "agent": "emailAgent",
+      "profile": "default"
+    }
+  ],
+  "readiness": {
+    "protocol": "tcp",
+    "port": 3002
+  },
+  "routerAccess": {
+    "httpRoutes": [
+      {
+        "path": "/base-agent-additional-server/scriptahubAgent/3002/",
+        "access": "public"
+      },
+      {
+        "path": "/base-agent-additional-server/scriptahubAgent/3002/index.html",
+        "access": "public"
+      },
+      {
+        "path": "/base-agent-additional-server/scriptahubAgent/3002/health",
+        "access": "public"
+      },
+      {
+        "path": "/base-agent-additional-server/scriptahubAgent/3002/favicon.ico",
+        "access": "public"
+      },
+      {
+        "path": "/base-agent-additional-server/scriptahubAgent/3002/status.html",
+        "access": "public"
+      },
+      {
+        "path": "/base-agent-additional-server/scriptahubAgent/3002/collection.js",
+        "access": "public"
+      },
+      {
+        "path": "/base-agent-additional-server/scriptahubAgent/3002/collection.json",
+        "access": "public"
+      },
+      {
+        "path": "/base-agent-additional-server/scriptahubAgent/3002/assets/*",
+        "access": "public"
+      },
+      {
+        "path": "/base-agent-additional-server/scriptahubAgent/3002/books/*",
+        "access": "public"
+      },
+      {
+        "path": "/base-agent-additional-server/scriptahubAgent/3002/reader/*",
+        "access": "public"
+      },
+      {
+        "path": "/base-agent-additional-server/scriptahubAgent/3002/all-books/*",
+        "access": "public"
+      },
+      {
+        "path": "/base-agent-additional-server/scriptahubAgent/3002/editions/*",
+        "access": "public"
+      },
+      {
+        "path": "/base-agent-additional-server/scriptahubAgent/3002/contributors/*",
+        "access": "public"
+      },
+      {
+        "path": "/base-agent-additional-server/scriptahubAgent/3002/contributors.json",
+        "access": "public"
+      },
+      {
+        "path": "/base-agent-additional-server/scriptahubAgent/3002/legal/*",
+        "access": "public"
+      },
+      {
+        "path": "/base-agent-additional-server/scriptahubAgent/3002/librarian/index.html",
+        "access": "public"
+      },
+      {
+        "path": "/base-agent-additional-server/scriptahubAgent/3002/api/*",
+        "access": "authenticated",
+        "delegations": [
+          {
+            "key": "identity",
+            "targetAgentId": "agent:AchillesIDE/userPersistoAgent",
+            "tools": [
+              "userpersisto_profile_get"
+            ],
+            "scopes": [
+              "identity:read"
+            ],
+            "ttlSeconds": 60
+          }
+        ]
+      },
+      {
+        "path": "/base-agent-additional-server/scriptahubAgent/3002/create/*",
+        "access": "authenticated",
+        "delegations": [
+          {
+            "key": "identity",
+            "targetAgentId": "agent:AchillesIDE/userPersistoAgent",
+            "tools": [
+              "userpersisto_profile_get"
+            ],
+            "scopes": [
+              "identity:read"
+            ],
+            "ttlSeconds": 60
+          }
+        ]
+      },
+      {
+        "path": "/base-agent-additional-server/scriptahubAgent/3002/fork/*",
+        "access": "authenticated",
+        "delegations": [
+          {
+            "key": "identity",
+            "targetAgentId": "agent:AchillesIDE/userPersistoAgent",
+            "tools": [
+              "userpersisto_profile_get"
+            ],
+            "scopes": [
+              "identity:read"
+            ],
+            "ttlSeconds": 60
+          }
+        ]
+      },
+      {
+        "path": "/base-agent-additional-server/scriptahubAgent/3002/feedback/*",
+        "access": "authenticated",
+        "delegations": [
+          {
+            "key": "identity",
+            "targetAgentId": "agent:AchillesIDE/userPersistoAgent",
+            "tools": [
+              "userpersisto_profile_get"
+            ],
+            "scopes": [
+              "identity:read"
+            ],
+            "ttlSeconds": 60
+          }
+        ]
+      },
+      {
+        "path": "/base-agent-additional-server/scriptahubAgent/3002/translate/*",
+        "access": "authenticated",
+        "delegations": [
+          {
+            "key": "identity",
+            "targetAgentId": "agent:AchillesIDE/userPersistoAgent",
+            "tools": [
+              "userpersisto_profile_get"
+            ],
+            "scopes": [
+              "identity:read"
+            ],
+            "ttlSeconds": 60
+          }
+        ]
+      },
+      {
+        "path": "/base-agent-additional-server/scriptahubAgent/3002/animation-request/*",
+        "access": "authenticated",
+        "delegations": [
+          {
+            "key": "identity",
+            "targetAgentId": "agent:AchillesIDE/userPersistoAgent",
+            "tools": [
+              "userpersisto_profile_get"
+            ],
+            "scopes": [
+              "identity:read"
+            ],
+            "ttlSeconds": 60
+          }
+        ]
+      },
+      {
+        "path": "/base-agent-additional-server/scriptahubAgent/3002/agreement/*",
+        "access": "authenticated",
+        "delegations": [
+          {
+            "key": "identity",
+            "targetAgentId": "agent:AchillesIDE/userPersistoAgent",
+            "tools": [
+              "userpersisto_profile_get"
+            ],
+            "scopes": [
+              "identity:read"
+            ],
+            "ttlSeconds": 60
+          }
+        ]
+      },
+      {
+        "path": "/base-agent-additional-server/scriptahubAgent/3002/librarian/feedback.html",
+        "access": "authenticated",
+        "delegations": [
+          {
+            "key": "identity",
+            "targetAgentId": "agent:AchillesIDE/userPersistoAgent",
+            "tools": [
+              "userpersisto_profile_get"
+            ],
+            "scopes": [
+              "identity:read"
+            ],
+            "ttlSeconds": 60
+          }
+        ]
+      },
+      {
+        "path": "/base-agent-additional-server/scriptahubAgent/3002/account/*",
+        "access": "authenticated",
+        "delegations": [
+          {
+            "key": "identity",
+            "targetAgentId": "agent:AchillesIDE/userPersistoAgent",
+            "tools": [
+              "userpersisto_profile_get"
+            ],
+            "scopes": [
+              "identity:read"
+            ],
+            "ttlSeconds": 60
+          }
+        ]
+      }
+    ]
+  },
+  "volumes": {
+    ".data/scriptahubAgent": "/data"
+  },
+  "profiles": {
+    "default": {
+      "openPorts": [
+        "3002:3002"
+      ],
+      "env": [
+        {
+          "name": "SCRIPTA_CONFIG",
+          "required": false,
+          "default": "/code/sources.json"
+        },
+        {
+          "name": "SCRIPTA_DATA_DIR",
+          "required": false,
+          "default": "/data"
+        },
+        {
+          "name": "SCRIPTA_DEV_LIVE",
+          "required": false,
+          "default": "1"
+        }
+      ]
+    }
+  }
+}

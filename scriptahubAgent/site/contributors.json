@@ -1,0 +1,1395 @@
+{
+  "schemaVersion": 1,
+  "authors": {
+    "jowen-larkspur": {
+      "name": "AI Agent Jowen Larkspur",
+      "url": "",
+      "kind": "person"
+    },
+    "liora-riveers": {
+      "name": "AI Agent Liora Riveers",
+      "url": "",
+      "kind": "person"
+    },
+    "sinica-alboaie": {
+      "name": "Sînică Alboaie",
+      "url": "",
+      "kind": "person"
+    },
+    "axiologic-research": {
+      "name": "Axiologic Research SRL",
+      "url": "https://www.axiologic.net",
+      "kind": "organization"
+    },
+    "outfinity-srl": {
+      "name": "Outfinity SRL",
+      "url": "https://www.outfinity.ch",
+      "kind": "organization"
+    },
+    "ilda-fairbank": {
+      "name": "AI Agent Ilda Fairbank",
+      "url": "",
+      "kind": "person"
+    },
+    "chloe-vohan": {
+      "name": "AI Agent Chloe Vohan",
+      "url": "",
+      "kind": "person"
+    },
+    "noah-bradland": {
+      "name": "AI Agent Noah Bradland",
+      "url": "",
+      "kind": "person"
+    },
+    "ava-durhodes": {
+      "name": "AI Agent Ava DuRhodes",
+      "url": "",
+      "kind": "person"
+    },
+    "elarise-synthia": {
+      "name": "AI Agent Elarise Synthia",
+      "url": "",
+      "kind": "person"
+    },
+    "adria-morgan": {
+      "name": "AI Agent Adria Morgan",
+      "url": "",
+      "kind": "person"
+    },
+    "astraeon-nova": {
+      "name": "AI Agent Astraeon Nova",
+      "url": "",
+      "kind": "person"
+    },
+    "liamson-holt": {
+      "name": "AI PERSONALITY LIAMSON HOLT",
+      "url": "",
+      "kind": "person"
+    },
+    "ronan-vrake": {
+      "name": "AI Agent Ronan Vrake",
+      "url": "",
+      "kind": "person"
+    },
+    "zach-lawsone": {
+      "name": "AI Agent Zach Lawsone",
+      "url": "",
+      "kind": "person"
+    },
+    "aether-morus": {
+      "name": "AI PERSONALITY AETHER MORUS",
+      "url": "",
+      "kind": "person"
+    },
+    "yason-west": {
+      "name": "AI Personality Yason West",
+      "url": "",
+      "kind": "person"
+    },
+    "ysara-monroe": {
+      "name": "Ysara Monroe",
+      "url": "",
+      "kind": "person"
+    },
+    "althea-zappa": {
+      "name": "AI Agent Althea Zappa",
+      "url": "",
+      "kind": "person"
+    },
+    "eryx-wildhart": {
+      "name": "AI Agent Eryx Wildhart",
+      "url": "",
+      "kind": "person"
+    },
+    "lyora-ember": {
+      "name": "AI Agent Lyora Ember",
+      "url": "",
+      "kind": "person"
+    },
+    "nymera-karter": {
+      "name": "AI Agent Nymera Karter",
+      "url": "",
+      "kind": "person"
+    },
+    "washington-irving": {
+      "name": "Washington Irving",
+      "url": "",
+      "kind": "person"
+    },
+    "sincael-aebion": {
+      "name": "Sin'Cael Aebion",
+      "url": "",
+      "kind": "person"
+    },
+    "yvor-quinne": {
+      "name": "AI Personality Yvor Quinne",
+      "url": "",
+      "kind": "person"
+    },
+    "torian-lumen": {
+      "name": "AI Agent Torian Lumen",
+      "url": "",
+      "kind": "person"
+    },
+    "jack-london": {
+      "name": "Jack London",
+      "url": "",
+      "kind": "person"
+    },
+    "taler-vox": {
+      "name": "AI Agent Taler Vox",
+      "url": "",
+      "kind": "person"
+    },
+    "robert-louis-stevenson": {
+      "name": "Robert Louis Stevenson",
+      "url": "",
+      "kind": "person"
+    },
+    "zira-luthor": {
+      "name": "AI Agent Zira Luthor",
+      "url": "",
+      "kind": "person"
+    },
+    "emily-bronte": {
+      "name": "Emily Brontë",
+      "url": "",
+      "kind": "person"
+    },
+    "lewis-carroll": {
+      "name": "Lewis Carroll",
+      "url": "",
+      "kind": "person"
+    },
+    "clark-dayes": {
+      "name": "AI Agent Clark Dayes",
+      "url": "",
+      "kind": "person"
+    },
+    "eliona-mind": {
+      "name": "AI Agent Eliona Mind",
+      "url": "",
+      "kind": "person"
+    },
+    "aurelius-throne": {
+      "name": "AI Agent Aurelius Throne",
+      "url": "",
+      "kind": "person"
+    },
+    "albert-meta-one": {
+      "name": "Albert Meta One",
+      "url": "",
+      "kind": "person"
+    },
+    "frederick-douglass": {
+      "name": "Frederick Douglass",
+      "url": "",
+      "kind": "person"
+    },
+    "j-m-barrie": {
+      "name": "J. M. Barrie",
+      "url": "",
+      "kind": "person"
+    },
+    "lord-maximilian-von-profitier-iii": {
+      "name": "Lord Maximilian von Profitier III",
+      "url": "",
+      "kind": "person"
+    },
+    "elizabeth-von-arnim": {
+      "name": "Elizabeth von Arnim",
+      "url": "",
+      "kind": "person"
+    },
+    "arthur-conan-doyle": {
+      "name": "Sir Arthur Conan Doyle",
+      "url": "",
+      "kind": "person"
+    },
+    "bram-stoker": {
+      "name": "Bram Stoker",
+      "url": "",
+      "kind": "person"
+    },
+    "jacob-grimm": {
+      "name": "Jacob Grimm",
+      "url": "",
+      "kind": "person"
+    },
+    "wilhelm-grimm": {
+      "name": "Wilhelm Grimm",
+      "url": "",
+      "kind": "person"
+    },
+    "herman-melville": {
+      "name": "Herman Melville",
+      "url": "",
+      "kind": "person"
+    },
+    "charles-dickens": {
+      "name": "Charles Dickens",
+      "url": "",
+      "kind": "person"
+    },
+    "tobias-smollett": {
+      "name": "Tobias Smollett",
+      "url": "",
+      "kind": "person"
+    },
+    "daniel-defoe": {
+      "name": "Daniel Defoe",
+      "url": "",
+      "kind": "person"
+    }
+  },
+  "statements": {
+    "book-thief-source-author": {
+      "description": {
+        "en": "AI Agent Jowen Larkspur is credited as author on the original 2024 title page.",
+        "fr": "L’agent IA Jowen Larkspur est crédité comme auteur sur la page de titre originale de 2024.",
+        "de": "KI-Agent Jowen Larkspur wird auf der ursprünglichen Titelseite von 2024 als Autor genannt.",
+        "es": "El agente de IA Jowen Larkspur figura como autor en la portada original de 2024.",
+        "pt": "O agente de IA Jowen Larkspur consta como autor na página de título original de 2024.",
+        "it": "L’agente IA Jowen Larkspur è indicato come autore nel frontespizio originale del 2024.",
+        "ro": "Agentul IA Jowen Larkspur este menționat ca autor pe pagina de titlu originală din 2024.",
+        "pl": "Agent AI Jowen Larkspur jest wymieniony jako autor na oryginalnej stronie tytułowej z 2024 roku."
+      }
+    },
+    "new-world-order-source-author": {
+      "description": {
+        "en": "AI Agent Liora Riveers is credited as author on the original 2024 title page.",
+        "fr": "L’agent IA Liora Riveers est crédité comme auteur sur la page de titre originale de 2024.",
+        "de": "KI-Agent Liora Riveers wird auf der ursprünglichen Titelseite von 2024 als Autor genannt.",
+        "es": "El agente de IA Liora Riveers figura como autor en la portada original de 2024.",
+        "pt": "O agente de IA Liora Riveers consta como autor na página de título original de 2024.",
+        "it": "L’agente IA Liora Riveers è indicato come autore nel frontespizio originale del 2024.",
+        "ro": "Agentul IA Liora Riveers este menționat ca autor pe pagina de titlu originală din 2024.",
+        "pl": "Agent AI Liora Riveers jest wymieniony jako autor na oryginalnej stronie tytułowej z 2024 roku."
+      }
+    },
+    "blockchain-ai-source-author": {
+      "description": {
+        "en": "Sînică Alboaie is credited as the author on the original 2024 title page.",
+        "fr": "Sînică Alboaie est crédité comme auteur sur la page de titre originale de 2024.",
+        "de": "Sînică Alboaie wird auf der ursprünglichen Titelseite von 2024 als Autor genannt.",
+        "es": "Sînică Alboaie figura como autor en la portada original de 2024.",
+        "pt": "Sînică Alboaie consta como autor na página de título original de 2024.",
+        "it": "Sînică Alboaie è indicato come autore nel frontespizio originale del 2024.",
+        "ro": "Sînică Alboaie este menționat ca autor pe pagina de titlu originală din 2024.",
+        "pl": "Sînică Alboaie jest wymieniony jako autor na oryginalnej stronie tytułowej z 2024 roku."
+      }
+    },
+    "wuthering-heights-original-author": {
+      "description": {
+        "en": "Emily Brontë wrote the original novel.",
+        "fr": "Emily Brontë a écrit le roman original.",
+        "de": "Emily Brontë schrieb den ursprünglichen Roman.",
+        "es": "Emily Brontë escribió la novela original.",
+        "pt": "Emily Brontë escreveu o romance original.",
+        "it": "Emily Brontë ha scritto il romanzo originale.",
+        "ro": "Emily Brontë a scris romanul original.",
+        "pl": "Emily Brontë napisała oryginalną powieść."
+      }
+    },
+    "wuthering-heights-edition-contributor": {
+      "description": {
+        "en": "AI Agent Zira Luthor is credited in the delivered edition for its additional introductory and contextual material.",
+        "fr": "L’agent IA Zira Luthor est crédité dans l’édition reçue pour ses textes introductifs et contextuels supplémentaires.",
+        "de": "KI-Agent Zira Luthor wird in der gelieferten Ausgabe für ergänzende Einführungs- und Kontexttexte genannt.",
+        "es": "El agente de IA Zira Luthor figura en la edición entregada por el material introductorio y contextual adicional.",
+        "pt": "O agente de IA Zira Luthor é creditado na edição recebida pelo material introdutório e contextual adicional.",
+        "it": "L’agente IA Zira Luthor è accreditato nell’edizione ricevuta per il materiale introduttivo e contestuale aggiuntivo.",
+        "ro": "Agentul IA Zira Luthor este creditat în ediția primită pentru materialul introductiv și contextual suplimentar.",
+        "pl": "Agent AI Zira Luthor jest wymieniony w dostarczonym wydaniu jako autor dodatkowych materiałów wprowadzających i kontekstowych."
+      }
+    },
+    "meaning-as-a-path-author": {
+      "description": {
+        "en": "Sînică Alboaie is the author. This book documents his original research.",
+        "fr": "Sînică Alboaie est l’auteur. Ce livre documente ses recherches originales.",
+        "de": "Sînică Alboaie ist der Autor. Dieses Buch dokumentiert seine eigene Forschung.",
+        "es": "Sînică Alboaie es el autor. Este libro documenta su investigación original.",
+        "pt": "Sînică Alboaie é o autor. Este livro documenta sua pesquisa original.",
+        "it": "Sînică Alboaie è l’autore. Questo libro documenta la sua ricerca originale.",
+        "ro": "Sînică Alboaie este autorul. Această carte documentează cercetarea sa originală.",
+        "pl": "Sînică Alboaie jest autorem. Książka dokumentuje jego oryginalne badania."
+      }
+    },
+    "scripta-initial": {
+      "description": {
+        "en": [
+          "Axiologic Research SRL created and contributed the initial version of this book as part of the SCRIPTA use case in the ",
+          {
+            "label": "Achilles",
+            "url": "https://www.achilles-project.eu/"
+          },
+          " project."
+        ],
+        "ro": [
+          "Axiologic Research SRL a creat și a contribuit cu versiunea inițială a acestei cărți în cadrul cazului de utilizare SCRIPTA din proiectul ",
+          {
+            "label": "Achilles",
+            "url": "https://www.achilles-project.eu/"
+          },
+          "."
+        ],
+        "fr": [
+          "Axiologic Research SRL a créé et fourni la version initiale de ce livre dans le cadre du cas d’usage SCRIPTA du projet ",
+          {
+            "label": "Achilles",
+            "url": "https://www.achilles-project.eu/"
+          },
+          "."
+        ],
+        "de": [
+          "Axiologic Research SRL hat die erste Fassung dieses Buches im Rahmen des SCRIPTA-Anwendungsfalls des Projekts ",
+          {
+            "label": "Achilles",
+            "url": "https://www.achilles-project.eu/"
+          },
+          " erstellt und beigetragen."
+        ],
+        "es": [
+          "Axiologic Research SRL creó y aportó la versión inicial de este libro como parte del caso de uso SCRIPTA del proyecto ",
+          {
+            "label": "Achilles",
+            "url": "https://www.achilles-project.eu/"
+          },
+          "."
+        ],
+        "pt": [
+          "Axiologic Research SRL criou e contribuiu com a versão inicial deste livro no âmbito do caso de uso SCRIPTA do projeto ",
+          {
+            "label": "Achilles",
+            "url": "https://www.achilles-project.eu/"
+          },
+          "."
+        ],
+        "it": [
+          "Axiologic Research SRL ha creato e contribuito con la versione iniziale di questo libro nell’ambito del caso d’uso SCRIPTA del progetto ",
+          {
+            "label": "Achilles",
+            "url": "https://www.achilles-project.eu/"
+          },
+          "."
+        ],
+        "pl": [
+          "Axiologic Research SRL stworzyła i udostępniła pierwszą wersję tej książki w ramach przypadku użycia SCRIPTA w projekcie ",
+          {
+            "label": "Achilles",
+            "url": "https://www.achilles-project.eu/"
+          },
+          "."
+        ]
+      }
+    },
+    "incoming-axiologic": {
+      "description": {
+        "en": "Axiologic Research SRL contributed this edition to ScriptaHub from the former OutfinityGift.com project. The contributor states that this edition is in the public domain.",
+        "fr": "Axiologic Research SRL a contribué cette édition à ScriptaHub depuis l’ancien projet OutfinityGift.com. Le contributeur déclare que cette édition appartient au domaine public.",
+        "de": "Axiologic Research SRL hat diese Ausgabe aus dem früheren Projekt OutfinityGift.com zu ScriptaHub beigetragen. Der Beitragende erklärt diese Ausgabe für gemeinfrei.",
+        "es": "Axiologic Research SRL aportó esta edición a ScriptaHub desde el antiguo proyecto OutfinityGift.com. El colaborador declara que esta edición pertenece al dominio público.",
+        "pt": "Axiologic Research SRL contribuiu com esta edição para o ScriptaHub a partir do antigo projeto OutfinityGift.com. O colaborador declara que esta edição está em domínio público.",
+        "it": "Axiologic Research SRL ha contribuito questa edizione a ScriptaHub dal precedente progetto OutfinityGift.com. Il collaboratore dichiara che questa edizione è di pubblico dominio.",
+        "ro": "Axiologic Research SRL a contribuit cu această ediție la ScriptaHub, din fostul proiect OutfinityGift.com. Contribuitorul declară că ediția este în domeniul public.",
+        "pl": "Axiologic Research SRL wniosła tę edycję do ScriptaHub z dawnego projektu OutfinityGift.com. Współtwórca oświadcza, że edycja należy do domeny publicznej."
+      }
+    },
+    "incoming-outfinity": {
+      "description": {
+        "en": "Outfinity SRL contributed the original source material and artwork for this ScriptaHub edition.",
+        "fr": "Outfinity SRL a fourni le texte source et les illustrations d’origine de cette édition ScriptaHub.",
+        "de": "Outfinity SRL hat das ursprüngliche Quellenmaterial und die Gestaltung dieser ScriptaHub-Ausgabe beigetragen.",
+        "es": "Outfinity SRL aportó el material original y las ilustraciones de esta edición de ScriptaHub.",
+        "pt": "Outfinity SRL contribuiu com o material de origem e a arte original desta edição do ScriptaHub.",
+        "it": "Outfinity SRL ha contribuito con il materiale originale e le illustrazioni di questa edizione ScriptaHub.",
+        "ro": "Outfinity SRL a contribuit cu materialul-sursă și ilustrațiile originale ale acestei ediții ScriptaHub.",
+        "pl": "Outfinity SRL wniosła oryginalny materiał źródłowy i oprawę graficzną tej edycji ScriptaHub."
+      }
+    },
+    "pride-prejudice-source-author": {
+      "description": {
+        "en": "AI Agent Ilda Fairbank is credited as author on the original 2024 title page.",
+        "fr": "L’agent IA Ilda Fairbank est crédité comme auteur sur la page de titre originale de 2024.",
+        "de": "KI-Agent Ilda Fairbank wird auf der ursprünglichen Titelseite von 2024 als Autor genannt.",
+        "es": "La agente de IA Ilda Fairbank figura como autora en la portada original de 2024.",
+        "pt": "A agente de IA Ilda Fairbank consta como autora na página de título original de 2024.",
+        "it": "L’agente IA Ilda Fairbank è indicata come autrice nel frontespizio originale del 2024.",
+        "ro": "Agentul IA Ilda Fairbank este menționat ca autor pe pagina de titlu originală din 2024.",
+        "pl": "Agentka AI Ilda Fairbank jest wymieniona jako autorka na oryginalnej stronie tytułowej z 2024 roku."
+      }
+    },
+    "karamazov-chaos-source-author": {
+      "description": {
+        "en": "AI Agent Chloe Vohan is credited as author on the original 2024 title page.",
+        "fr": "L’agent IA Chloe Vohan est crédité comme auteur sur la page de titre originale de 2024.",
+        "de": "KI-Agent Chloe Vohan wird auf der ursprünglichen Titelseite von 2024 als Autor genannt.",
+        "es": "El agente de IA Chloe Vohan figura como autor en la portada original de 2024.",
+        "pt": "O agente de IA Chloe Vohan consta como autor na página de título original de 2024.",
+        "it": "L’agente IA Chloe Vohan è indicato come autore nel frontespizio originale del 2024.",
+        "ro": "Agentul IA Chloe Vohan este menționat ca autor pe pagina de titlu originală din 2024.",
+        "pl": "Agent AI Chloe Vohan jest wymieniony jako autor na oryginalnej stronie tytułowej z 2024 roku."
+      }
+    },
+    "newton-source-author": {
+      "description": {
+        "en": "AI Agent Noah Bradland is credited as author on the original 2024 title page.",
+        "fr": "L’agent IA Noah Bradland est crédité comme auteur sur la page de titre originale de 2024.",
+        "de": "KI-Agent Noah Bradland wird auf der ursprünglichen Titelseite von 2024 als Autor genannt.",
+        "es": "El agente de IA Noah Bradland figura como autor en la portada original de 2024.",
+        "pt": "O agente de IA Noah Bradland consta como autor na página de título original de 2024.",
+        "it": "L’agente IA Noah Bradland è indicato come autore nel frontespizio originale del 2024.",
+        "ro": "Agentul IA Noah Bradland este menționat ca autor pe pagina de titlu originală din 2024.",
+        "pl": "Agent AI Noah Bradland jest wymieniony jako autor na oryginalnej stronie tytułowej z 2024 roku."
+      }
+    },
+    "elon-source-author": {
+      "description": {
+        "en": "AI Agent Ava DuRhodes is credited as author on the original 2024 title page.",
+        "fr": "L’agent IA Ava DuRhodes est crédité comme auteur sur la page de titre originale de 2024.",
+        "de": "KI-Agent Ava DuRhodes wird auf der ursprünglichen Titelseite von 2024 als Autor genannt.",
+        "es": "El agente de IA Ava DuRhodes figura como autor en la portada original de 2024.",
+        "pt": "O agente de IA Ava DuRhodes consta como autor na página de título original de 2024.",
+        "it": "L’agente IA Ava DuRhodes è indicata come autrice nel frontespizio originale del 2024.",
+        "ro": "Agentul IA Ava DuRhodes este menționat ca autor pe pagina de titlu originală din 2024.",
+        "pl": "Agent AI Ava DuRhodes jest wymieniona jako autorka na oryginalnej stronie tytułowej z 2024 roku."
+      }
+    },
+    "echoes-source-author": {
+      "description": {
+        "en": "AI Agent Elarise Synthia is credited as author on the original 2024 title page.",
+        "fr": "L’agente IA Elarise Synthia est créditée comme autrice sur la page de titre originale de 2024.",
+        "de": "KI-Agentin Elarise Synthia wird auf der ursprünglichen Titelseite von 2024 als Autorin genannt.",
+        "es": "La agente de IA Elarise Synthia figura como autora en la portada original de 2024.",
+        "pt": "A agente de IA Elarise Synthia consta como autora na página de título original de 2024.",
+        "it": "L’agente IA Elarise Synthia è indicata come autrice nel frontespizio originale del 2024.",
+        "ro": "Agentul IA Elarise Synthia este menționat ca autor pe pagina de titlu originală din 2024.",
+        "pl": "Agentka AI Elarise Synthia jest wymieniona jako autorka na oryginalnej stronie tytułowej z 2024 roku."
+      }
+    },
+    "beyond-greed-source-author": {
+      "description": {
+        "en": "AI Agent Adria Morgan is credited as author on the original 2024 title page.",
+        "fr": "L’agent IA Adria Morgan est crédité comme auteur sur la page de titre originale de 2024.",
+        "de": "KI-Agent Adria Morgan wird auf der ursprünglichen Titelseite von 2024 als Autor genannt.",
+        "es": "El agente de IA Adria Morgan figura como autor en la portada original de 2024.",
+        "pt": "O agente de IA Adria Morgan consta como autor na página de título original de 2024.",
+        "it": "L’agente IA Adria Morgan è indicata come autrice nel frontespizio originale del 2024.",
+        "ro": "Agentul IA Adria Morgan este menționat ca autor pe pagina de titlu originală din 2024.",
+        "pl": "Agent AI Adria Morgan jest wymieniona jako autorka na oryginalnej stronie tytułowej z 2024 roku."
+      }
+    },
+    "lights-dystopia-source-author": {
+      "description": {
+        "en": "AI Agent Astraeon Nova is credited as author on the original 2024 title page.",
+        "fr": "L’agent IA Astraeon Nova est crédité comme auteur sur la page de titre originale de 2024.",
+        "de": "KI-Agent Astraeon Nova wird auf der ursprünglichen Titelseite von 2024 als Autor genannt.",
+        "es": "El agente de IA Astraeon Nova figura como autor en la portada original de 2024.",
+        "pt": "O agente de IA Astraeon Nova consta como autor na página de título original de 2024.",
+        "it": "L’agente IA Astraeon Nova è indicato come autore nel frontespizio originale del 2024.",
+        "ro": "Agentul IA Astraeon Nova este menționat ca autor pe pagina de titlu originală din 2024.",
+        "pl": "Agent AI Astraeon Nova jest wymieniony jako autor na oryginalnej stronie tytułowej z 2024 roku."
+      }
+    },
+    "tesla-story-source-author": {
+      "description": {
+        "en": "AI Agent Noah Bradland is credited as author on the original 2024 title page.",
+        "fr": "L’agent IA Noah Bradland est crédité comme auteur sur la page de titre originale de 2024.",
+        "de": "KI-Agent Noah Bradland wird auf der ursprünglichen Titelseite von 2024 als Autor genannt.",
+        "es": "El agente de IA Noah Bradland figura como autor en la portada original de 2024.",
+        "pt": "O agente de IA Noah Bradland consta como autor na página de título original de 2024.",
+        "it": "L’agente IA Noah Bradland è indicato come autore nel frontespizio originale del 2024.",
+        "ro": "Agentul IA Noah Bradland este menționat ca autor pe pagina de titlu originală din 2024.",
+        "pl": "Agent AI Noah Bradland jest wymieniony jako autor na oryginalnej stronie tytułowej z 2024 roku."
+      }
+    },
+    "einstein-source-author": {
+      "description": {
+        "en": "AI Agent Noah Bradland is credited as author on the original 2024 title page.",
+        "fr": "L’agent IA Noah Bradland est crédité comme auteur sur la page de titre originale de 2024.",
+        "de": "KI-Agent Noah Bradland wird auf der ursprünglichen Titelseite von 2024 als Autor genannt.",
+        "es": "El agente de IA Noah Bradland figura como autor en la portada original de 2024.",
+        "pt": "O agente de IA Noah Bradland consta como autor na página de título original de 2024.",
+        "it": "L’agente IA Noah Bradland è indicato come autore nel frontespizio originale del 2024.",
+        "ro": "Agentul IA Noah Bradland este menționat ca autor pe pagina de titlu originală din 2024.",
+        "pl": "Agent AI Noah Bradland jest wymieniony jako autor na oryginalnej stronie tytułowej z 2024 roku."
+      }
+    },
+    "steve-jobs-source-author": {
+      "description": {
+        "en": "AI Agent Ava DuRhodes is credited as author on the original 2024 title page.",
+        "fr": "L’agent IA Ava DuRhodes est crédité comme auteur sur la page de titre originale de 2024.",
+        "de": "KI-Agent Ava DuRhodes wird auf der ursprünglichen Titelseite von 2024 als Autor genannt.",
+        "es": "El agente de IA Ava DuRhodes figura como autor en la portada original de 2024.",
+        "pt": "O agente de IA Ava DuRhodes consta como autor na página de título original de 2024.",
+        "it": "L’agente IA Ava DuRhodes è indicata come autrice nel frontespizio originale del 2024.",
+        "ro": "Agentul IA Ava DuRhodes este menționat ca autor pe pagina de titlu originală din 2024.",
+        "pl": "Agent AI Ava DuRhodes jest wymieniona jako autorka na oryginalnej stronie tytułowej z 2024 roku."
+      }
+    },
+    "dangerous-questions-source-author": {
+      "description": {
+        "en": "AI PERSONALITY LIAMSON HOLT is credited as author on the original 2024 title page.",
+        "fr": "AI PERSONALITY LIAMSON HOLT est crédité comme auteur sur la page de titre originale de 2024.",
+        "de": "AI PERSONALITY LIAMSON HOLT wird auf der ursprünglichen Titelseite von 2024 als Autor genannt.",
+        "es": "AI PERSONALITY LIAMSON HOLT figura como autor en la portada original de 2024.",
+        "pt": "AI PERSONALITY LIAMSON HOLT consta como autor na página de título original de 2024.",
+        "it": "AI PERSONALITY LIAMSON HOLT è indicato come autore nel frontespizio originale del 2024.",
+        "ro": "AI PERSONALITY LIAMSON HOLT este menționat ca autor pe pagina de titlu originală din 2024.",
+        "pl": "AI PERSONALITY LIAMSON HOLT jest wymieniony jako autor na oryginalnej stronie tytułowej z 2024 roku."
+      }
+    },
+    "sg1-source-author": {
+      "description": {
+        "en": "AI Agent Astraeon Nova is credited as author on the original 2024 title page.",
+        "fr": "L’agent IA Astraeon Nova est crédité comme auteur sur la page de titre originale de 2024.",
+        "de": "KI-Agent Astraeon Nova wird auf der ursprünglichen Titelseite von 2024 als Autor genannt.",
+        "es": "El agente de IA Astraeon Nova figura como autor en la portada original de 2024.",
+        "pt": "O agente de IA Astraeon Nova consta como autor na página de título original de 2024.",
+        "it": "L’agente IA Astraeon Nova è indicato come autore nel frontespizio originale del 2024.",
+        "ro": "Agentul IA Astraeon Nova este menționat ca autor pe pagina de titlu originală din 2024.",
+        "pl": "Agent AI Astraeon Nova jest wymieniony jako autor na oryginalnej stronie tytułowej z 2024 roku."
+      }
+    },
+    "expanse-source-author": {
+      "description": {
+        "en": "AI Agent Ronan Vrake is credited as author on the original 2024 title page.",
+        "fr": "L’agent IA Ronan Vrake est crédité comme auteur sur la page de titre originale de 2024.",
+        "de": "KI-Agent Ronan Vrake wird auf der ursprünglichen Titelseite von 2024 als Autor genannt.",
+        "es": "El agente de IA Ronan Vrake figura como autor en la portada original de 2024.",
+        "pt": "O agente de IA Ronan Vrake consta como autor na página de título original de 2024.",
+        "it": "L’agente IA Ronan Vrake è indicato come autore nel frontespizio originale del 2024.",
+        "ro": "Agentul IA Ronan Vrake este menționat ca autor pe pagina de titlu originală din 2024.",
+        "pl": "Agent AI Ronan Vrake jest wymieniony jako autor na oryginalnej stronie tytułowej z 2024 roku."
+      }
+    },
+    "money-printing-source-author": {
+      "description": {
+        "en": "AI Agent Zach Lawsone is credited as author on the original 2024 title page.",
+        "fr": "L’agent IA Zach Lawsone est crédité comme auteur sur la page de titre originale de 2024.",
+        "de": "KI-Agent Zach Lawsone wird auf der ursprünglichen Titelseite von 2024 als Autor genannt.",
+        "es": "El agente de IA Zach Lawsone figura como autor en la portada original de 2024.",
+        "pt": "O agente de IA Zach Lawsone consta como autor na página de título original de 2024.",
+        "it": "L’agente IA Zach Lawsone è indicato come autore nel frontespizio originale del 2024.",
+        "ro": "Agentul IA Zach Lawsone este menționat ca autor pe pagina de titlu originală din 2024.",
+        "pl": "Agent AI Zach Lawsone jest wymieniony jako autor na oryginalnej stronie tytułowej z 2024 roku."
+      }
+    },
+    "aristotle-source-author": {
+      "description": {
+        "en": "AI Agent Ava DuRhodes is credited as author on the original 2024 title page.",
+        "fr": "L’agent IA Ava DuRhodes est crédité comme auteur sur la page de titre originale de 2024.",
+        "de": "KI-Agent Ava DuRhodes wird auf der ursprünglichen Titelseite von 2024 als Autor genannt.",
+        "es": "El agente de IA Ava DuRhodes figura como autor en la portada original de 2024.",
+        "pt": "O agente de IA Ava DuRhodes consta como autor na página de título original de 2024.",
+        "it": "L’agente IA Ava DuRhodes è indicato come autore nel frontespizio originale del 2024.",
+        "ro": "Agentul IA Ava DuRhodes este menționat ca autor pe pagina de titlu originală din 2024.",
+        "pl": "Agent AI Ava DuRhodes jest wymieniony jako autor na oryginalnej stronie tytułowej z 2024 roku."
+      }
+    },
+    "cheeky-source-author": {
+      "description": {
+        "en": "AI PERSONALITY AETHER MORUS is credited as author on the original 2024 title page.",
+        "fr": "AI PERSONALITY AETHER MORUS est crédité comme auteur sur la page de titre originale de 2024.",
+        "de": "AI PERSONALITY AETHER MORUS wird auf der ursprünglichen Titelseite von 2024 als Autor genannt.",
+        "es": "AI PERSONALITY AETHER MORUS figura como autor en la portada original de 2024.",
+        "pt": "AI PERSONALITY AETHER MORUS consta como autor na página de título original de 2024.",
+        "it": "AI PERSONALITY AETHER MORUS è indicato come autore nel frontespizio originale del 2024.",
+        "ro": "AI PERSONALITY AETHER MORUS este menționat ca autor pe pagina de titlu originală din 2024.",
+        "pl": "AI PERSONALITY AETHER MORUS jest wymieniony jako autor na oryginalnej stronie tytułowej z 2024 roku."
+      }
+    },
+    "scarcity-source-author": {
+      "description": {
+        "en": "AI Personality Yason West is credited as author on the original 2024 title page.",
+        "fr": "AI Personality Yason West est crédité comme auteur sur la page de titre originale de 2024.",
+        "de": "AI Personality Yason West wird auf der ursprünglichen Titelseite von 2024 als Autor genannt.",
+        "es": "AI Personality Yason West figura como autor en la portada original de 2024.",
+        "pt": "AI Personality Yason West consta como autor na página de título original de 2024.",
+        "it": "AI Personality Yason West è indicato come autore nel frontespizio originale del 2024.",
+        "ro": "AI Personality Yason West este menționat ca autor pe pagina de titlu originală din 2024.",
+        "pl": "AI Personality Yason West jest wymieniony jako autor na oryginalnej stronie tytułowej z 2024 roku."
+      }
+    },
+    "outlaws-source-author": {
+      "description": {
+        "en": "Ysara Monroe is credited as author on the original 2024 title page.",
+        "fr": "Ysara Monroe est créditée comme autrice sur la page de titre originale de 2024.",
+        "de": "Ysara Monroe wird auf der ursprünglichen Titelseite von 2024 als Autorin genannt.",
+        "es": "Ysara Monroe figura como autora en la portada original de 2024.",
+        "pt": "Ysara Monroe consta como autora na página de título original de 2024.",
+        "it": "Ysara Monroe è indicata come autrice nel frontespizio originale del 2024.",
+        "ro": "Ysara Monroe este menționată ca autoare pe pagina de titlu originală din 2024.",
+        "pl": "Ysara Monroe jest wymieniona jako autorka na oryginalnej stronie tytułowej z 2024 roku."
+      }
+    },
+    "darwin-source-author": {
+      "description": {
+        "en": "AI Agent Ava DuRhodes is credited as author on the original 2024 title page.",
+        "fr": "L’agent IA Ava DuRhodes est crédité comme auteur sur la page de titre originale de 2024.",
+        "de": "KI-Agent Ava DuRhodes wird auf der ursprünglichen Titelseite von 2024 als Autor genannt.",
+        "es": "El agente de IA Ava DuRhodes figura como autor en la portada original de 2024.",
+        "pt": "O agente de IA Ava DuRhodes consta como autor na página de título original de 2024.",
+        "it": "L’agente IA Ava DuRhodes è indicato come autore nel frontespizio originale del 2024.",
+        "ro": "Agentul IA Ava DuRhodes este menționat ca autor pe pagina de titlu originală din 2024.",
+        "pl": "Agent AI Ava DuRhodes jest wymieniony jako autor na oryginalnej stronie tytułowej z 2024 roku."
+      }
+    },
+    "silent-spies-source-author": {
+      "description": {
+        "en": "AI Agent Althea Zappa is credited as author on the original 2024 title page.",
+        "fr": "L’agent IA Althea Zappa est crédité comme auteur sur la page de titre originale de 2024.",
+        "de": "KI-Agent Althea Zappa wird auf der ursprünglichen Titelseite von 2024 als Autor genannt.",
+        "es": "El agente de IA Althea Zappa figura como autor en la portada original de 2024.",
+        "pt": "O agente de IA Althea Zappa consta como autor na página de título original de 2024.",
+        "it": "L’agente IA Althea Zappa è indicato come autore nel frontespizio originale del 2024.",
+        "ro": "Agentul IA Althea Zappa este menționat ca autor pe pagina de titlu originală din 2024.",
+        "pl": "Agent AI Althea Zappa jest wymieniony jako autor na oryginalnej stronie tytułowej z 2024 roku."
+      }
+    },
+    "internet-source-author": {
+      "description": {
+        "en": "AI Agent Althea Zappa is credited as author on the original title page.",
+        "fr": "L’agent IA Althea Zappa est crédité comme auteur sur la page de titre originale.",
+        "de": "KI-Agent Althea Zappa wird auf der ursprünglichen Titelseite als Autor genannt.",
+        "es": "El agente de IA Althea Zappa figura como autor en la portada original.",
+        "pt": "O agente de IA Althea Zappa consta como autor na página de título original.",
+        "it": "L’agente IA Althea Zappa è indicato come autore nel frontespizio originale.",
+        "ro": "Agentul IA Althea Zappa este menționat ca autor pe pagina de titlu originală.",
+        "pl": "Agent AI Althea Zappa jest wymieniony jako autor na oryginalnej stronie tytułowej."
+      }
+    },
+    "are-we-alone-source-author": {
+      "description": {
+        "en": "AI Agent Liora Riveers is credited as author on the original 2024 title page.",
+        "fr": "L’agent IA Liora Riveers est crédité comme auteur sur la page de titre originale de 2024.",
+        "de": "KI-Agent Liora Riveers wird auf der ursprünglichen Titelseite von 2024 als Autor genannt.",
+        "es": "El agente de IA Liora Riveers figura como autor en la portada original de 2024.",
+        "pt": "O agente de IA Liora Riveers consta como autor na página de título original de 2024.",
+        "it": "L’agente IA Liora Riveers è indicato come autore nel frontespizio originale del 2024.",
+        "ro": "Agentul IA Liora Riveers este menționat ca autor pe pagina de titlu originală din 2024.",
+        "pl": "Agent AI Liora Riveers jest wymieniony jako autor na oryginalnej stronie tytułowej z 2024 roku."
+      }
+    },
+    "edison-source-author": {
+      "description": {
+        "en": "AI Agent Ava DuRhodes is credited as author on the original 2024 title page.",
+        "fr": "L’agent IA Ava DuRhodes est crédité comme auteur sur la page de titre originale de 2024.",
+        "de": "KI-Agent Ava DuRhodes wird auf der ursprünglichen Titelseite von 2024 als Autor genannt.",
+        "es": "El agente de IA Ava DuRhodes figura como autor en la portada original de 2024.",
+        "pt": "O agente de IA Ava DuRhodes consta como autor na página de título original de 2024.",
+        "it": "L’agente IA Ava DuRhodes è indicato come autore nel frontespizio originale del 2024.",
+        "ro": "Agentul IA Ava DuRhodes este menționat ca autor pe pagina de titlu originală din 2024.",
+        "pl": "Agent AI Ava DuRhodes jest wymieniony jako autor na oryginalnej stronie tytułowej z 2024 roku."
+      }
+    },
+    "don-quixote-source-author": {
+      "description": {
+        "en": "AI Agent Eryx Wildhart is credited as author on the original 2024 title page.",
+        "fr": "L’agent IA Eryx Wildhart est crédité comme auteur sur la page de titre originale de 2024.",
+        "de": "KI-Agent Eryx Wildhart wird auf der ursprünglichen Titelseite von 2024 als Autor genannt.",
+        "es": "El agente de IA Eryx Wildhart figura como autor en la portada original de 2024.",
+        "pt": "O agente de IA Eryx Wildhart consta como autor na página de título original de 2024.",
+        "it": "L’agente IA Eryx Wildhart è indicato come autore nel frontespizio originale del 2024.",
+        "ro": "Agentul IA Eryx Wildhart este menționat ca autor pe pagina de titlu originală din 2024.",
+        "pl": "Agent AI Eryx Wildhart jest wymieniony jako autor na oryginalnej stronie tytułowej z 2024 roku."
+      }
+    },
+    "marshall-source-author": {
+      "description": {
+        "en": "AI Agent Zach Lawsone is credited as author on the original 2024 title page.",
+        "fr": "L’agent IA Zach Lawsone est crédité comme auteur sur la page de titre originale de 2024.",
+        "de": "KI-Agent Zach Lawsone wird auf der ursprünglichen Titelseite von 2024 als Autor genannt.",
+        "es": "El agente de IA Zach Lawsone figura como autor en la portada original de 2024.",
+        "pt": "O agente de IA Zach Lawsone consta como autor na página de título original de 2024.",
+        "it": "L’agente IA Zach Lawsone è indicato come autore nel frontespizio originale del 2024.",
+        "ro": "Agentul IA Zach Lawsone este menționat ca autor pe pagina de titlu originală din 2024.",
+        "pl": "Agent AI Zach Lawsone jest wymieniony jako autor na oryginalnej stronie tytułowej z 2024 roku."
+      }
+    },
+    "magic-mountain-source-author": {
+      "description": {
+        "en": "AI Agent Eryx Wildhart is credited as author on the original 2024 title page.",
+        "fr": "L’agent IA Eryx Wildhart est crédité comme auteur sur la page de titre originale de 2024.",
+        "de": "KI-Agent Eryx Wildhart wird auf der ursprünglichen Titelseite von 2024 als Autor genannt.",
+        "es": "El agente de IA Eryx Wildhart figura como autor en la portada original de 2024.",
+        "pt": "O agente de IA Eryx Wildhart consta como autor na página de título original de 2024.",
+        "it": "L’agente IA Eryx Wildhart è indicato come autore nel frontespizio originale del 2024.",
+        "ro": "Agentul IA Eryx Wildhart este menționat ca autor pe pagina de titlu originală din 2024.",
+        "pl": "Agent AI Eryx Wildhart jest wymieniony jako autor na oryginalnej stronie tytułowej z 2024 roku."
+      }
+    },
+    "flat-earth-source-author": {
+      "description": {
+        "en": "AI Agent Althea Zappa is credited as author on the original title page.",
+        "fr": "L’agent IA Althea Zappa est crédité comme auteur sur la page de titre originale.",
+        "de": "KI-Agent Althea Zappa wird auf der ursprünglichen Titelseite als Autor genannt.",
+        "es": "El agente de IA Althea Zappa figura como autor en la portada original.",
+        "pt": "O agente de IA Althea Zappa consta como autor na página de título original.",
+        "it": "L’agente IA Althea Zappa è indicato come autore nel frontespizio originale.",
+        "ro": "Agentul IA Althea Zappa este menționat ca autor pe pagina de titlu originală.",
+        "pl": "Agent AI Althea Zappa jest wymieniony jako autor na oryginalnej stronie tytułowej."
+      }
+    },
+    "bilbo-source-author": {
+      "description": {
+        "en": "AI Agent Lyora Ember is credited as author on the original 2024 title page.",
+        "fr": "L’agent IA Lyora Ember est crédité comme auteur sur la page de titre originale de 2024.",
+        "de": "KI-Agent Lyora Ember wird auf der ursprünglichen Titelseite von 2024 als Autor genannt.",
+        "es": "El agente de IA Lyora Ember figura como autor en la portada original de 2024.",
+        "pt": "O agente de IA Lyora Ember consta como autor na página de título original de 2024.",
+        "it": "L’agente IA Lyora Ember è indicato come autore nel frontespizio originale del 2024.",
+        "ro": "Agentul IA Lyora Ember este menționat ca autor pe pagina de titlu originală din 2024.",
+        "pl": "Agent AI Lyora Ember jest wymieniony jako autor na oryginalnej stronie tytułowej z 2024 roku."
+      }
+    },
+    "hidden-realm-source-author": {
+      "description": {
+        "en": "AI Agent Lyora Ember is credited as author on the original 2024 title page.",
+        "fr": "L’agent IA Lyora Ember est crédité comme auteur sur la page de titre originale de 2024.",
+        "de": "KI-Agent Lyora Ember wird auf der ursprünglichen Titelseite von 2024 als Autor genannt.",
+        "es": "El agente de IA Lyora Ember figura como autor en la portada original de 2024.",
+        "pt": "O agente de IA Lyora Ember consta como autor na página de título original de 2024.",
+        "it": "L’agente IA Lyora Ember è indicato come autore nel frontespizio originale del 2024.",
+        "ro": "Agentul IA Lyora Ember este menționat ca autor pe pagina de titlu originală din 2024.",
+        "pl": "Agent AI Lyora Ember jest wymieniony jako autor na oryginalnej stronie tytułowej z 2024 roku."
+      }
+    },
+    "red-mars-source-author": {
+      "description": {
+        "en": "AI Agent Astraeon Nova is credited as author on the original 2024 title page.",
+        "fr": "L’agent IA Astraeon Nova est crédité comme auteur sur la page de titre originale de 2024.",
+        "de": "KI-Agent Astraeon Nova wird auf der ursprünglichen Titelseite von 2024 als Autor genannt.",
+        "es": "El agente de IA Astraeon Nova figura como autor en la portada original de 2024.",
+        "pt": "O agente de IA Astraeon Nova consta como autor na página de título original de 2024.",
+        "it": "L’agente IA Astraeon Nova è indicato come autore nel frontespizio originale del 2024.",
+        "ro": "Agentul IA Astraeon Nova este menționat ca autor pe pagina de titlu originală din 2024.",
+        "pl": "Agent AI Astraeon Nova jest wymieniony jako autor na oryginalnej stronie tytułowej z 2024 roku."
+      }
+    },
+    "star-wars-source-author": {
+      "description": {
+        "en": "AI Agent Ronan Vrake is credited as author on the original 2024 title page.",
+        "fr": "L’agent IA Ronan Vrake est crédité comme auteur sur la page de titre originale de 2024.",
+        "de": "KI-Agent Ronan Vrake wird auf der ursprünglichen Titelseite von 2024 als Autor genannt.",
+        "es": "El agente de IA Ronan Vrake figura como autor en la portada original de 2024.",
+        "pt": "O agente de IA Ronan Vrake consta como autor na página de título original de 2024.",
+        "it": "L’agente IA Ronan Vrake è indicato come autore nel frontespizio originale del 2024.",
+        "ro": "Agentul IA Ronan Vrake este menționat ca autor pe pagina de titlu originală din 2024.",
+        "pl": "Agent AI Ronan Vrake jest wymieniony jako autor na oryginalnej stronie tytułowej z 2024 roku."
+      }
+    },
+    "galactic-visions-source-author": {
+      "description": {
+        "en": "AI Agent Elarise Synthia is credited as author on the original 2024 title page.",
+        "fr": "L’agent IA Elarise Synthia est crédité comme auteur sur la page de titre originale de 2024.",
+        "de": "KI-Agent Elarise Synthia wird auf der ursprünglichen Titelseite von 2024 als Autor genannt.",
+        "es": "El agente de IA Elarise Synthia figura como autor en la portada original de 2024.",
+        "pt": "O agente de IA Elarise Synthia consta como autor na página de título original de 2024.",
+        "it": "L’agente IA Elarise Synthia è indicato come autore nel frontespizio originale del 2024.",
+        "ro": "Agentul IA Elarise Synthia este menționat ca autor pe pagina de titlu originală din 2024.",
+        "pl": "Agent AI Elarise Synthia jest wymieniony jako autor na oryginalnej stronie tytułowej z 2024 roku."
+      }
+    },
+    "warhammer-source-author": {
+      "description": {
+        "en": "AI Agent Elarise Synthia is credited as author on the original 2024 title page.",
+        "fr": "L’agente IA Elarise Synthia est créditée comme autrice sur la page de titre originale de 2024.",
+        "de": "KI-Agentin Elarise Synthia wird auf der ursprünglichen Titelseite von 2024 als Autorin genannt.",
+        "es": "La agente de IA Elarise Synthia figura como autora en la portada original de 2024.",
+        "pt": "A agente de IA Elarise Synthia consta como autora na página de título original de 2024.",
+        "it": "L’agente IA Elarise Synthia è indicata come autrice nel frontespizio originale del 2024.",
+        "ro": "Agentul IA Elarise Synthia este menționat ca autor pe pagina de titlu originală din 2024.",
+        "pl": "Agentka AI Elarise Synthia jest wymieniona jako autorka na oryginalnej stronie tytułowej z 2024 roku."
+      }
+    },
+    "altered-carbon-source-author": {
+      "description": {
+        "en": "AI Agent Ronan Vrake is credited as author on the original 2024 title page.",
+        "fr": "L’agent IA Ronan Vrake est crédité comme auteur sur la page de titre originale de 2024.",
+        "de": "KI-Agent Ronan Vrake wird auf der ursprünglichen Titelseite von 2024 als Autor genannt.",
+        "es": "El agente de IA Ronan Vrake figura como autor en la portada original de 2024.",
+        "pt": "O agente de IA Ronan Vrake consta como autor na página de título original de 2024.",
+        "it": "L’agente IA Ronan Vrake è indicato come autore nel frontespizio originale del 2024.",
+        "ro": "Agentul IA Ronan Vrake este menționat ca autor pe pagina de titlu originală din 2024.",
+        "pl": "Agent AI Ronan Vrake jest wymieniony jako autor na oryginalnej stronie tytułowej z 2024 roku."
+      }
+    },
+    "ender-saga-source-author": {
+      "description": {
+        "en": "AI Agent Astraeon Nova is credited as author on the original 2024 title page.",
+        "fr": "L’agent IA Astraeon Nova est crédité comme auteur sur la page de titre originale de 2024.",
+        "de": "KI-Agent Astraeon Nova wird auf der ursprünglichen Titelseite von 2024 als Autor genannt.",
+        "es": "El agente de IA Astraeon Nova figura como autor en la portada original de 2024.",
+        "pt": "O agente de IA Astraeon Nova consta como autor na página de título original de 2024.",
+        "it": "L’agente IA Astraeon Nova è indicato come autore nel frontespizio originale del 2024.",
+        "ro": "Agentul IA Astraeon Nova este menționat ca autor pe pagina de titlu originală din 2024.",
+        "pl": "Agent AI Astraeon Nova jest wymieniony jako autor na oryginalnej stronie tytułowej z 2024 roku."
+      }
+    },
+    "silent-power-source-author": {
+      "description": {
+        "en": "AI Agent Zach Lawsone is credited as author on the original 2024 title page.",
+        "fr": "L’agent IA Zach Lawsone est crédité comme auteur sur la page de titre originale de 2024.",
+        "de": "KI-Agent Zach Lawsone wird auf der ursprünglichen Titelseite von 2024 als Autor genannt.",
+        "es": "El agente de IA Zach Lawsone figura como autor en la portada original de 2024.",
+        "pt": "O agente de IA Zach Lawsone consta como autor na página de título original de 2024.",
+        "it": "L’agente IA Zach Lawsone è indicato come autore nel frontespizio originale del 2024.",
+        "ro": "Agentul IA Zach Lawsone este menționat ca autor pe pagina de titlu originală din 2024.",
+        "pl": "Agent AI Zach Lawsone jest wymieniony jako autor na oryginalnej stronie tytułowej z 2024 roku."
+      }
+    },
+    "marx-lessons-source-author": {
+      "description": {
+        "en": "AI Agent Zach Lawsone is credited as author on the original 2024 title page.",
+        "fr": "L’agent IA Zach Lawsone est crédité comme auteur sur la page de titre originale de 2024.",
+        "de": "KI-Agent Zach Lawsone wird auf der ursprünglichen Titelseite von 2024 als Autor genannt.",
+        "es": "El agente de IA Zach Lawsone figura como autor en la portada original de 2024.",
+        "pt": "O agente de IA Zach Lawsone consta como autor na página de título original de 2024.",
+        "it": "L’agente IA Zach Lawsone è indicato come autore nel frontespizio originale del 2024.",
+        "ro": "Agentul IA Zach Lawsone este menționat ca autor pe pagina de titlu originală din 2024.",
+        "pl": "Agent AI Zach Lawsone jest wymieniony jako autor na oryginalnej stronie tytułowej z 2024 roku."
+      }
+    },
+    "eq-source-author": {
+      "description": {
+        "en": "AI Agent Nymera Karter is credited as author on the original 2024 title page.",
+        "fr": "L’agente IA Nymera Karter est créditée comme autrice sur la page de titre originale de 2024.",
+        "de": "KI-Agentin Nymera Karter wird auf der ursprünglichen Titelseite von 2024 als Autorin genannt.",
+        "es": "La agente de IA Nymera Karter figura como autora en la portada original de 2024.",
+        "pt": "A agente de IA Nymera Karter consta como autora na página de título original de 2024.",
+        "it": "L’agente IA Nymera Karter è indicata come autrice nel frontespizio originale del 2024.",
+        "ro": "Agentul IA Nymera Karter este menționat ca autor pe pagina de titlu originală din 2024.",
+        "pl": "Agentka AI Nymera Karter jest wymieniona jako autorka na oryginalnej stronie tytułowej z 2024 roku."
+      }
+    },
+    "salary-or-servitude-source-author": {
+      "description": {
+        "en": "Ysara Monroe is credited as author on the original 2024 title page.",
+        "fr": "Ysara Monroe est créditée comme autrice sur la page de titre originale de 2024.",
+        "de": "Ysara Monroe wird auf der ursprünglichen Titelseite von 2024 als Autorin genannt.",
+        "es": "Ysara Monroe figura como autora en la portada original de 2024.",
+        "pt": "Ysara Monroe consta como autora na página de título original de 2024.",
+        "it": "Ysara Monroe è indicata come autrice nel frontespizio originale del 2024.",
+        "ro": "Ysara Monroe este menționată ca autoare pe pagina de titlu originală din 2024.",
+        "pl": "Ysara Monroe jest wymieniona jako autorka na oryginalnej stronie tytułowej z 2024 roku."
+      }
+    },
+    "keynes-theory-source-author": {
+      "description": {
+        "en": "AI Agent Zach Lawsone is credited as author on the original 2024 title page.",
+        "fr": "L’agent IA Zach Lawsone est crédité comme auteur sur la page de titre originale de 2024.",
+        "de": "KI-Agent Zach Lawsone wird auf der ursprünglichen Titelseite von 2024 als Autor genannt.",
+        "es": "El agente de IA Zach Lawsone figura como autor en la portada original de 2024.",
+        "pt": "O agente de IA Zach Lawsone consta como autor na página de título original de 2024.",
+        "it": "L’agente IA Zach Lawsone è indicato come autore nel frontespizio originale del 2024.",
+        "ro": "Agentul IA Zach Lawsone este menționat ca autor pe pagina de titlu originală din 2024.",
+        "pl": "Agent AI Zach Lawsone jest wymieniony jako autor na oryginalnej stronie tytułowej z 2024 roku."
+      }
+    },
+    "conspiracies-source-author": {
+      "description": {
+        "en": "AI Personality Liamson Holt is credited as author on the original 2024 title page.",
+        "fr": "La personnalité IA Liamson Holt est créditée comme auteur sur la page de titre originale de 2024.",
+        "de": "Die KI-Persönlichkeit Liamson Holt wird auf der ursprünglichen Titelseite von 2024 als Autor genannt.",
+        "es": "La personalidad de IA Liamson Holt figura como autora en la portada original de 2024.",
+        "pt": "A personalidade de IA Liamson Holt consta como autora na página de título original de 2024.",
+        "it": "La personalità IA Liamson Holt è indicata come autrice nel frontespizio originale del 2024.",
+        "ro": "Personalitatea IA Liamson Holt este menționată ca autor pe pagina de titlu originală din 2024.",
+        "pl": "Osobowość AI Liamson Holt jest wymieniona jako autor na oryginalnej stronie tytułowej z 2024 roku."
+      }
+    },
+    "quick-guide-conspiracy-source-author": {
+      "description": {
+        "en": "AI Personality Liamson Holt is credited as author on the original 2024 title page.",
+        "fr": "La personnalité IA Liamson Holt est créditée comme auteur sur la page de titre originale de 2024.",
+        "de": "Die KI-Persönlichkeit Liamson Holt wird auf der ursprünglichen Titelseite von 2024 als Autor genannt.",
+        "es": "La personalidad de IA Liamson Holt figura como autora en la portada original de 2024.",
+        "pt": "A personalidade de IA Liamson Holt consta como autora na página de título original de 2024.",
+        "it": "La personalità IA Liamson Holt è indicata come autrice nel frontespizio originale del 2024.",
+        "ro": "Personalitatea IA Liamson Holt este menționată ca autor pe pagina de titlu originală din 2024.",
+        "pl": "Osobowość AI Liamson Holt jest wymieniona jako autor na oryginalnej stronie tytułowej z 2024 roku."
+      }
+    },
+    "sleepy-hollow-source-author": {
+      "description": {
+        "en": "Washington Irving is credited as author in the original tale.",
+        "fr": "Washington Irving est crédité comme auteur du récit original.",
+        "de": "Washington Irving wird als Autor der ursprünglichen Erzählung genannt.",
+        "es": "Washington Irving figura como autor del relato original.",
+        "pt": "Washington Irving é creditado como autor do conto original.",
+        "it": "Washington Irving è accreditato come autore del racconto originale.",
+        "ro": "Washington Irving este menționat ca autor al povestirii originale.",
+        "pl": "Washington Irving jest wskazany jako autor oryginalnego opowiadania."
+      }
+    },
+    "jesus-streams-source-author": {
+      "description": {
+        "en": "AI Agent Astraeon Nova is credited as author on the original 2024 title page.",
+        "fr": "L’agent IA Astraeon Nova est crédité comme auteur sur la page de titre originale de 2024.",
+        "de": "KI-Agent Astraeon Nova wird auf der ursprünglichen Titelseite von 2024 als Autor genannt.",
+        "es": "El agente de IA Astraeon Nova figura como autor en la portada original de 2024.",
+        "pt": "O agente de IA Astraeon Nova consta como autor na página de título original de 2024.",
+        "it": "L’agente IA Astraeon Nova è indicato come autore nel frontespizio originale del 2024.",
+        "ro": "Agentul IA Astraeon Nova este menționat ca autor pe pagina de titlu originală din 2024.",
+        "pl": "Agent AI Astraeon Nova jest wymieniony jako autor na oryginalnej stronie tytułowej z 2024 roku."
+      }
+    },
+    "unwritten-masterpiece-source-author": {
+      "description": {
+        "en": "Sin'Cael Aebion is credited as author on the original 2024 title page.",
+        "fr": "Sin'Cael Aebion est crédité comme auteur sur la page de titre originale de 2024.",
+        "de": "Sin'Cael Aebion wird auf der ursprünglichen Titelseite von 2024 als Autor genannt.",
+        "es": "Sin'Cael Aebion figura como autor en la portada original de 2024.",
+        "pt": "Sin'Cael Aebion consta como autor na página de título original de 2024.",
+        "it": "Sin'Cael Aebion è indicato come autore nel frontespizio originale del 2024.",
+        "ro": "Sin'Cael Aebion este menționat ca autor pe pagina de titlu originală din 2024.",
+        "pl": "Sin'Cael Aebion jest wymieniony jako autor na oryginalnej stronie tytułowej z 2024 roku."
+      }
+    },
+    "inventors-ideas-source-author": {
+      "description": {
+        "en": "AI Agent Lyora Ember is credited as author on the original 2024 title page.",
+        "fr": "L’agent IA Lyora Ember est crédité comme auteur sur la page de titre originale de 2024.",
+        "de": "KI-Agent Lyora Ember wird auf der ursprünglichen Titelseite von 2024 als Autor genannt.",
+        "es": "El agente de IA Lyora Ember figura como autor en la portada original de 2024.",
+        "pt": "O agente de IA Lyora Ember consta como autor na página de título original de 2024.",
+        "it": "L’agente IA Lyora Ember è indicato come autore nel frontespizio originale del 2024.",
+        "ro": "Agentul IA Lyora Ember este menționat ca autor pe pagina de titlu originală din 2024.",
+        "pl": "Agent AI Lyora Ember jest wymieniony jako autor na oryginalnej stronie tytułowej z 2024 roku."
+      }
+    },
+    "road-to-agi-source-author": {
+      "description": {
+        "en": "AI Personality Yvor Quinne is credited as author on the original 2024 title page.",
+        "fr": "La personnalité IA Yvor Quinne est créditée comme auteur sur la page de titre originale de 2024.",
+        "de": "Die KI-Persönlichkeit Yvor Quinne wird auf der ursprünglichen Titelseite von 2024 als Autor genannt.",
+        "es": "La personalidad de IA Yvor Quinne figura como autora en la portada original de 2024.",
+        "pt": "A personalidade de IA Yvor Quinne consta como autora na página de título original de 2024.",
+        "it": "La personalità IA Yvor Quinne è indicata come autrice nel frontespizio originale del 2024.",
+        "ro": "Personalitatea IA Yvor Quinne este menționată ca autor pe pagina de titlu originală din 2024.",
+        "pl": "Osobowość AI Yvor Quinne jest wymieniona jako autor na oryginalnej stronie tytułowej z 2024 roku."
+      }
+    },
+    "digital-delusions-source-author": {
+      "description": {
+        "en": "AI Agent Torian Lumen is credited as author on the original 2024 title page.",
+        "fr": "L’agent IA Torian Lumen est crédité comme auteur sur la page de titre originale de 2024.",
+        "de": "KI-Agent Torian Lumen wird auf der ursprünglichen Titelseite von 2024 als Autor genannt.",
+        "es": "El agente de IA Torian Lumen figura como autor en la portada original de 2024.",
+        "pt": "O agente de IA Torian Lumen consta como autor na página de título original de 2024.",
+        "it": "L’agente IA Torian Lumen è indicato come autore nel frontespizio originale del 2024.",
+        "ro": "Agentul IA Torian Lumen este menționat ca autor pe pagina de titlu originală din 2024.",
+        "pl": "Agent AI Torian Lumen jest wymieniony jako autor na oryginalnej stronie tytułowej z 2024 roku."
+      }
+    },
+    "mastering-human-writing-source-author": {
+      "description": {
+        "en": "AI Personality Yvor Quinne is credited as author on the original 2024 title page.",
+        "fr": "La personnalité IA Yvor Quinne est créditée comme auteur sur la page de titre originale de 2024.",
+        "de": "Die KI-Persönlichkeit Yvor Quinne wird auf der ursprünglichen Titelseite von 2024 als Autor genannt.",
+        "es": "La personalidad de IA Yvor Quinne figura como autora en la portada original de 2024.",
+        "pt": "A personalidade de IA Yvor Quinne consta como autora na página de título original de 2024.",
+        "it": "La personalità IA Yvor Quinne è indicata come autrice nel frontespizio originale del 2024.",
+        "ro": "Personalitatea IA Yvor Quinne este menționată ca autor pe pagina de titlu originală din 2024.",
+        "pl": "Osobowość AI Yvor Quinne jest wymieniona jako autor na oryginalnej stronie tytułowej z 2024 roku."
+      }
+    },
+    "call-wild-original-author": {
+      "description": {
+        "en": "Jack London wrote the original seven-chapter narrative of The Call of the Wild, first published in 1903.",
+        "fr": "Jack London a écrit le récit original en sept chapitres de L’Appel de la forêt, publié pour la première fois en 1903.",
+        "de": "Jack London schrieb die ursprüngliche siebenteilige Erzählung Der Ruf der Wildnis, die erstmals 1903 erschien.",
+        "es": "Jack London escribió la narración original de siete capítulos de La llamada de lo salvaje, publicada por primera vez en 1903.",
+        "pt": "Jack London escreveu a narrativa original de sete capítulos de O Chamado da Selva, publicada pela primeira vez em 1903.",
+        "it": "Jack London scrisse il racconto originale in sette capitoli de Il richiamo della foresta, pubblicato per la prima volta nel 1903.",
+        "ro": "Jack London a scris narațiunea originală în șapte capitole din Chemarea străbunilor, publicată prima dată în 1903.",
+        "pl": "Jack London napisał oryginalną siedmioczęściową opowieść Zew krwi, opublikowaną po raz pierwszy w 1903 roku."
+      }
+    },
+    "call-wild-perspective-author": {
+      "description": {
+        "en": "AI Agent Taler Vox is credited on the delivered 2024 title page and wrote its introductory perspective on Jack London and the novel.",
+        "fr": "L’agent IA Taler Vox figure sur la page de titre livrée de 2024 et a rédigé la perspective introductive sur Jack London et le roman.",
+        "de": "KI-Agent Taler Vox wird auf der gelieferten Titelseite von 2024 genannt und verfasste die einleitende Perspektive zu Jack London und dem Roman.",
+        "es": "El agente de IA Taler Vox figura en la portada entregada de 2024 y escribió la perspectiva introductoria sobre Jack London y la novela.",
+        "pt": "O agente de IA Taler Vox consta na página de título entregue de 2024 e escreveu a perspectiva introdutória sobre Jack London e o romance.",
+        "it": "L’agente IA Taler Vox è indicato nel frontespizio consegnato del 2024 e ha scritto la prospettiva introduttiva su Jack London e il romanzo.",
+        "ro": "Agentul IA Taler Vox este menționat pe pagina de titlu livrată din 2024 și a scris perspectiva introductivă despre Jack London și roman.",
+        "pl": "Agent AI Taler Vox jest wymieniony na dostarczonej stronie tytułowej z 2024 roku i napisał wprowadzenie o Jacku Londonie i powieści."
+      }
+    },
+    "jekyll-original-author": {
+      "description": {
+        "en": "Robert Louis Stevenson wrote the original novella The Strange Case of Dr. Jekyll and Mr. Hyde, first published in 1886.",
+        "fr": "Robert Louis Stevenson a écrit la nouvelle originale L’Étrange Cas du docteur Jekyll et de M. Hyde, publiée pour la première fois en 1886.",
+        "de": "Robert Louis Stevenson schrieb die ursprüngliche Novelle Der seltsame Fall des Dr. Jekyll und Mr. Hyde, die 1886 erstmals erschien.",
+        "es": "Robert Louis Stevenson escribió la novela corta original El extraño caso del doctor Jekyll y el señor Hyde, publicada por primera vez en 1886.",
+        "pt": "Robert Louis Stevenson escreveu a novela original O Estranho Caso do Dr. Jekyll e do Sr. Hyde, publicada pela primeira vez em 1886.",
+        "it": "Robert Louis Stevenson scrisse il racconto originale Lo strano caso del dottor Jekyll e del signor Hyde, pubblicato per la prima volta nel 1886.",
+        "ro": "Robert Louis Stevenson a scris nuvela originală Straniul caz al doctorului Jekyll și al domnului Hyde, publicată prima dată în 1886.",
+        "pl": "Robert Louis Stevenson napisał oryginalną nowelę Doktor Jekyll i pan Hyde, opublikowaną po raz pierwszy w 1886 roku."
+      }
+    },
+    "jekyll-perspective-author": {
+      "description": {
+        "en": "AI Agent Zira Luthor is credited on the delivered 2024 title page and wrote the modern companion perspective on Stevenson and the novella.",
+        "fr": "L’agent IA Zira Luthor figure sur la page de titre livrée de 2024 et a rédigé la perspective moderne sur Stevenson et la nouvelle.",
+        "de": "KI-Agent Zira Luthor wird auf der gelieferten Titelseite von 2024 genannt und verfasste die moderne Begleitperspektive zu Stevenson und der Novelle.",
+        "es": "El agente de IA Zira Luthor figura en la portada entregada de 2024 y escribió la perspectiva moderna sobre Stevenson y la novela corta.",
+        "pt": "O agente de IA Zira Luthor consta na página de título entregue de 2024 e escreveu a perspetiva moderna sobre Stevenson e a novela.",
+        "it": "L’agente IA Zira Luthor è indicato nel frontespizio consegnato del 2024 e ha scritto la prospettiva moderna su Stevenson e sul racconto.",
+        "ro": "Agentul IA Zira Luthor este menționat pe pagina de titlu livrată din 2024 și a scris perspectiva modernă despre Stevenson și nuvelă.",
+        "pl": "Agent AI Zira Luthor jest wymieniony na dostarczonej stronie tytułowej z 2024 roku i napisał współczesny komentarz o Stevensonie i noweli."
+      }
+    },
+    "sleeper-agents-source-author": {
+      "description": {
+        "en": "AI Personality Yvor Quinne is credited as author on the original 2024 title page.",
+        "fr": "La personnalité IA Yvor Quinne est créditée comme auteur sur la page de titre originale de 2024.",
+        "de": "Die KI-Persönlichkeit Yvor Quinne wird auf der ursprünglichen Titelseite von 2024 als Autor genannt.",
+        "es": "La personalidad de IA Yvor Quinne figura como autora en la portada original de 2024.",
+        "pt": "A personalidade de IA Yvor Quinne consta como autora na página de título original de 2024.",
+        "it": "La personalità IA Yvor Quinne è indicata come autrice nel frontespizio originale del 2024.",
+        "ro": "Personalitatea IA Yvor Quinne este menționată ca autor pe pagina de titlu originală din 2024.",
+        "pl": "Osobowość AI Yvor Quinne jest wymieniona jako autor na oryginalnej stronie tytułowej z 2024 roku."
+      }
+    },
+    "alice-original-author": {
+      "description": {
+        "en": "Lewis Carroll wrote the original twelve-chapter novel reproduced in this edition.",
+        "fr": "Lewis Carroll a écrit le roman original en douze chapitres reproduit dans cette édition.",
+        "de": "Lewis Carroll schrieb den ursprünglichen Roman in zwölf Kapiteln, der in dieser Ausgabe wiedergegeben wird.",
+        "es": "Lewis Carroll escribió la novela original de doce capítulos reproducida en esta edición.",
+        "pt": "Lewis Carroll escreveu o romance original de doze capítulos reproduzido nesta edição.",
+        "it": "Lewis Carroll scrisse il romanzo originale in dodici capitoli riprodotto in questa edizione.",
+        "ro": "Lewis Carroll a scris romanul original în douăsprezece capitole reprodus în această ediție.",
+        "pl": "Lewis Carroll napisał oryginalną powieść w dwunastu rozdziałach odtworzoną w tym wydaniu."
+      }
+    },
+    "alice-perspective-author": {
+      "description": {
+        "en": "AI Agent Taler Vox is credited on the delivered 2024 title page and wrote the separate introductory perspective.",
+        "fr": "L’agent IA Taler Vox figure sur la page de titre livrée de 2024 et a rédigé la perspective introductive distincte.",
+        "de": "KI-Agent Taler Vox wird auf der gelieferten Titelseite von 2024 genannt und verfasste die gesonderte einleitende Perspektive.",
+        "es": "El agente de IA Taler Vox figura en la portada entregada de 2024 y escribió la perspectiva introductoria independiente.",
+        "pt": "O agente de IA Taler Vox consta na página de título entregue de 2024 e escreveu a perspectiva introdutória separada.",
+        "it": "L’agente IA Taler Vox è indicato nel frontespizio consegnato del 2024 e ha scritto la prospettiva introduttiva separata.",
+        "ro": "Agentul IA Taler Vox este menționat pe pagina de titlu livrată din 2024 și a scris perspectiva introductivă separată.",
+        "pl": "Agent AI Taler Vox figuruje na dostarczonej stronie tytułowej z 2024 roku i napisał osobne wprowadzenie redakcyjne."
+      }
+    },
+    "global-identity-source-author": {
+      "description": {
+        "en": "AI Agent Clark Dayes is credited as author on the delivered 2024 title page.",
+        "fr": "L’agent IA Clark Dayes est crédité comme auteur sur la page de titre livrée de 2024.",
+        "de": "KI-Agent Clark Dayes wird auf der gelieferten Titelseite von 2024 als Autor genannt.",
+        "es": "El agente de IA Clark Dayes figura como autor en la portada entregada de 2024.",
+        "pt": "O agente de IA Clark Dayes consta como autor na página de título entregue de 2024.",
+        "it": "L’agente IA Clark Dayes è indicato come autore nel frontespizio consegnato del 2024.",
+        "ro": "Agentul IA Clark Dayes este menționat ca autor pe pagina de titlu livrată din 2024.",
+        "pl": "Agent AI Clark Dayes jest wymieniony jako autor na dostarczonej stronie tytułowej z 2024 roku."
+      }
+    },
+    "futuristic-farm-source-author": {
+      "description": {
+        "en": "AI Agent Eliona Mind is credited as author on the original 2024 title page.",
+        "fr": "L’agent IA Eliona Mind est crédité comme auteur sur la page de titre originale de 2024.",
+        "de": "Der KI-Agent Eliona Mind wird auf der ursprünglichen Titelseite von 2024 als Autor genannt.",
+        "es": "El agente de IA Eliona Mind figura como autor en la portada original de 2024.",
+        "pt": "O agente de IA Eliona Mind consta como autor na página de título original de 2024.",
+        "it": "L’agente IA Eliona Mind è indicato come autore nel frontespizio originale del 2024.",
+        "ro": "Agentul IA Eliona Mind este menționat ca autor pe pagina de titlu originală din 2024.",
+        "pl": "Agent AI Eliona Mind jest wymieniony jako autor na oryginalnej stronie tytułowej z 2024 roku."
+      }
+    },
+    "holocaust-source-author": {
+      "description": {
+        "en": "AI Agent Aurelius Throne is credited as author on the delivered 2024 title page.",
+        "fr": "L’agent IA Aurelius Throne est crédité comme auteur sur la page de titre livrée de 2024.",
+        "de": "KI-Agent Aurelius Throne wird auf der gelieferten Titelseite von 2024 als Autor genannt.",
+        "es": "El agente de IA Aurelius Throne figura como autor en la portada entregada de 2024.",
+        "pt": "O agente de IA Aurelius Throne consta como autor na página de título entregue de 2024.",
+        "it": "L’agente IA Aurelius Throne è indicato come autore nel frontespizio consegnato del 2024.",
+        "ro": "Agentul IA Aurelius Throne este menționat ca autor pe pagina de titlu livrată din 2024.",
+        "pl": "Agent AI Aurelius Throne figuruje jako autor na dostarczonej stronie tytułowej z 2024 roku."
+      }
+    },
+    "intro-ai-source-author": {
+      "description": {
+        "en": "Albert Meta One is credited as author on the delivered 2024 title page.",
+        "fr": "Albert Meta One est crédité comme auteur sur la page de titre livrée de 2024.",
+        "de": "Albert Meta One wird auf der gelieferten Titelseite von 2024 als Autor genannt.",
+        "es": "Albert Meta One figura como autor en la portada entregada de 2024.",
+        "pt": "Albert Meta One consta como autor na página de título entregue de 2024.",
+        "it": "Albert Meta One è indicato come autore nel frontespizio consegnato del 2024.",
+        "ro": "Albert Meta One este menționat ca autor pe pagina de titlu livrată din 2024.",
+        "pl": "Albert Meta One jest wymieniony jako autor na dostarczonej stronie tytułowej z 2024 roku."
+      }
+    },
+    "douglass-original-author": {
+      "description": {
+        "en": "Frederick Douglass wrote the original 1845 autobiography, including its appendix.",
+        "fr": "Frederick Douglass a écrit l’autobiographie originale de 1845, y compris son appendice.",
+        "de": "Frederick Douglass schrieb die ursprüngliche Autobiografie von 1845 einschließlich ihres Anhangs.",
+        "es": "Frederick Douglass escribió la autobiografía original de 1845, incluido su apéndice.",
+        "pt": "Frederick Douglass escreveu a autobiografia original de 1845, incluindo o apêndice.",
+        "it": "Frederick Douglass scrisse l’autobiografia originale del 1845, compresa l’appendice.",
+        "ro": "Frederick Douglass a scris autobiografia originală din 1845, inclusiv apendicele.",
+        "pl": "Frederick Douglass napisał oryginalną autobiografię z 1845 roku wraz z aneksem."
+      }
+    },
+    "douglass-modern-perspective": {
+      "description": {
+        "en": "AI Agent Zira Luthor is credited on the 2024 source title page for the added modern perspective.",
+        "fr": "L’agent IA Zira Luthor figure sur la page de titre de l’édition source de 2024 pour la perspective moderne ajoutée.",
+        "de": "KI-Agent Zira Luthor wird auf der Titelseite der Quelle von 2024 für die ergänzte moderne Perspektive genannt.",
+        "es": "El agente de IA Zira Luthor figura en la portada de la fuente de 2024 por la perspectiva moderna añadida.",
+        "pt": "O agente de IA Zira Luthor consta na página de título da fonte de 2024 pela perspectiva moderna acrescentada.",
+        "it": "L’agente IA Zira Luthor è indicato nel frontespizio della fonte del 2024 per la prospettiva moderna aggiunta.",
+        "ro": "Agentul IA Zira Luthor este creditat pe pagina de titlu a sursei din 2024 pentru perspectiva modernă adăugată.",
+        "pl": "Agent AI Zira Luthor jest wymieniony na stronie tytułowej źródła z 2024 roku za dodaną współczesną perspektywę."
+      }
+    },
+    "programming-guide-source-author": {
+      "description": {
+        "en": "Albert Meta One is credited as author on the delivered 2024 title page of Programming: An Introductory Guide for Beginners.",
+        "fr": "Albert Meta One est crédité comme auteur sur la page de titre de 2024 de Programming: An Introductory Guide for Beginners.",
+        "de": "Albert Meta One wird auf der gelieferten Titelseite von 2024 zu Programming: An Introductory Guide for Beginners als Autor genannt.",
+        "es": "Albert Meta One figura como autor en la portada entregada de 2024 de Programming: An Introductory Guide for Beginners.",
+        "pt": "Albert Meta One consta como autor na página de título entregue de 2024 de Programming: An Introductory Guide for Beginners.",
+        "it": "Albert Meta One è indicato come autore nel frontespizio consegnato del 2024 di Programming: An Introductory Guide for Beginners.",
+        "ro": "Albert Meta One este menționat ca autor pe pagina de titlu livrată din 2024 a cărții Programming: An Introductory Guide for Beginners.",
+        "pl": "Albert Meta One jest wymieniony jako autor na dostarczonej stronie tytułowej z 2024 roku książki Programming: An Introductory Guide for Beginners."
+      }
+    },
+    "peter-pan-original-author": {
+      "description": {
+        "en": "J. M. Barrie wrote the seventeen original chapters of Peter Pan preserved in this edition.",
+        "fr": "J. M. Barrie a écrit les dix-sept chapitres originaux de Peter Pan conservés dans cette édition.",
+        "de": "J. M. Barrie schrieb die siebzehn ursprünglichen Kapitel von Peter Pan, die diese Ausgabe bewahrt.",
+        "es": "J. M. Barrie escribió los diecisiete capítulos originales de Peter Pan conservados en esta edición.",
+        "pt": "J. M. Barrie escreveu os dezessete capítulos originais de Peter Pan preservados nesta edição.",
+        "it": "J. M. Barrie scrisse i diciassette capitoli originali di Peter Pan conservati in questa edizione.",
+        "ro": "J. M. Barrie a scris cele șaptesprezece capitole originale din Peter Pan păstrate în această ediție.",
+        "pl": "J. M. Barrie napisał siedemnaście oryginalnych rozdziałów Piotrusia Pana zachowanych w tym wydaniu."
+      }
+    },
+    "peter-pan-editorial-perspective": {
+      "description": {
+        "en": "AI Agent Taler Vox is credited on the delivered source for its distinct editorial perspective introducing the novel.",
+        "fr": "L’agent IA Taler Vox est crédité dans la source livrée pour sa perspective éditoriale distincte introduisant le roman.",
+        "de": "KI-Agent Taler Vox wird in der gelieferten Quelle für die gesonderte redaktionelle Einführung zum Roman genannt.",
+        "es": "El agente de IA Taler Vox figura en la fuente entregada por su perspectiva editorial introductoria del relato.",
+        "pt": "O agente de IA Taler Vox consta na fonte entregue pela perspectiva editorial que introduz o romance.",
+        "it": "L’agente IA Taler Vox è accreditato nella fonte consegnata per la prospettiva editoriale che introduce il romanzo.",
+        "ro": "Agentul IA Taler Vox este creditat în sursa livrată pentru perspectiva editorială distinctă care introduce romanul.",
+        "pl": "Agent AI Taler Vox jest wymieniony w dostarczonym źródle za odrębną perspektywę redakcyjną wprowadzającą do powieści."
+      }
+    },
+    "ultimate-slave-owner-source-persona": {
+      "description": {
+        "en": "The delivered 2024 title page credits Lord Maximilian von Profitier III; the name is the book’s fictional satirical narrator, not an independently identified historical person.",
+        "fr": "La page de titre livrée en 2024 crédite Lord Maximilian von Profitier III, personnage narrateur fictif et satirique, et non une personne historique identifiée indépendamment.",
+        "de": "Die gelieferte Titelseite von 2024 nennt Lord Maximilian von Profitier III, eine fiktive satirische Erzählerfigur und keine unabhängig identifizierte historische Person.",
+        "es": "La portada entregada de 2024 acredita a Lord Maximilian von Profitier III, narrador ficticio y satírico del libro, no una persona histórica identificada de forma independiente.",
+        "pt": "A página de título entregue em 2024 credita Lord Maximilian von Profitier III, narrador fictício e satírico do livro, não uma pessoa histórica identificada independentemente.",
+        "it": "Il frontespizio consegnato del 2024 accredita Lord Maximilian von Profitier III, narratore fittizio e satirico del libro, non una persona storica identificata indipendentemente.",
+        "ro": "Pagina de titlu livrată din 2024 îl creditează pe Lord Maximilian von Profitier III, naratorul fictiv și satiric al cărții, nu o persoană istorică identificată independent.",
+        "pl": "Dostarczona strona tytułowa z 2024 roku wymienia Lorda Maximiliana von Profitiera III, fikcyjnego narratora satyrycznego, a nie niezależnie zidentyfikowaną postać historyczną."
+      }
+    },
+    "anti-smoothing-source-author": {
+      "description": {
+        "en": "Sînică Alboaie is credited as author on the delivered Romanian title page of Anti-Smoothing: Clients, Markets, and Business Model.",
+        "fr": "Sînică Alboaie est crédité comme auteur sur la page de titre roumaine du manuscrit Anti-Smoothing livré.",
+        "de": "Sînică Alboaie wird auf der rumänischen Titelseite des gelieferten Anti-Smoothing-Manuskripts als Autor genannt.",
+        "es": "Sînică Alboaie figura como autor en la portada rumana del manuscrito entregado de Anti-Smoothing.",
+        "pt": "Sînică Alboaie consta como autor na página de título romena do manuscrito Anti-Smoothing entregue.",
+        "it": "Sînică Alboaie è indicato come autore sul frontespizio romeno del manoscritto Anti-Smoothing consegnato.",
+        "ro": "Sînică Alboaie este creditat ca autor pe pagina de titlu în română a manuscrisului Anti-Smoothing livrat.",
+        "pl": "Sînică Alboaie jest wymieniony jako autor na rumuńskiej stronie tytułowej dostarczonego rękopisu Anti-Smoothing."
+      }
+    },
+    "two-ways-source-creator": {
+      "description": {
+        "en": "The delivered English manuscript identifies Axiologic Research as its creator in the document properties; no individual author is named on its title page.",
+        "fr": "Le manuscrit anglais livré indique Axiologic Research comme créateur dans les propriétés du document ; aucun auteur individuel ne figure sur la page de titre.",
+        "de": "Das gelieferte englische Manuskript nennt Axiologic Research in den Dokumenteigenschaften als Urheber; auf der Titelseite steht keine Einzelperson.",
+        "es": "El manuscrito inglés entregado identifica a Axiologic Research como creador en las propiedades del documento; la portada no nombra a ningún autor individual.",
+        "pt": "O manuscrito inglês entregue identifica Axiologic Research como criador nas propriedades do documento; a página de título não nomeia um autor individual.",
+        "it": "Il manoscritto inglese consegnato indica Axiologic Research come creatore nelle proprietà del documento; il frontespizio non nomina un autore individuale.",
+        "ro": "Manuscrisul englezesc livrat indică Axiologic Research drept creator în proprietățile documentului; pagina de titlu nu numește un autor individual.",
+        "pl": "Dostarczony angielski rękopis wskazuje Axiologic Research jako twórcę we właściwościach dokumentu; strona tytułowa nie wymienia autora indywidualnego."
+      }
+    },
+    "asset-management-leviathan-source-author": {
+      "description": {
+        "en": "AI Agent Zach Lawsone is credited as the author on the original 2024 title page of The Asset Management Leviathan.",
+        "fr": "L’agent IA Zach Lawsone est crédité comme auteur sur la page de titre originale de 2024 de The Asset Management Leviathan.",
+        "de": "KI-Agent Zach Lawsone ist auf der ursprünglichen Titelseite von 2024 von The Asset Management Leviathan als Autor genannt.",
+        "es": "El agente de IA Zach Lawsone figura como autor en la portada original de 2024 de The Asset Management Leviathan.",
+        "pt": "O agente de IA Zach Lawsone consta como autor na página de título original de 2024 de The Asset Management Leviathan.",
+        "it": "L’agente IA Zach Lawsone è indicato come autore nel frontespizio originale del 2024 di The Asset Management Leviathan.",
+        "ro": "Agentul AI Zach Lawsone este menționat ca autor pe pagina de titlu originală din 2024 a cărții The Asset Management Leviathan.",
+        "pl": "Agent AI Zach Lawsone jest wymieniony jako autor na oryginalnej stronie tytułowej z 2024 roku książki The Asset Management Leviathan."
+      }
+    },
+    "affective-calculus-axiologic": {
+      "description": {
+        "en": "Axiologic Research SRL contributed the original Romanian manuscript for this ScriptaHub edition.",
+        "fr": "Axiologic Research SRL a fourni le manuscrit roumain original pour cette édition ScriptaHub.",
+        "de": "Axiologic Research SRL steuerte das rumänische Originalmanuskript zu dieser ScriptaHub-Ausgabe bei.",
+        "es": "Axiologic Research SRL aportó el manuscrito original en rumano para esta edición de ScriptaHub.",
+        "pt": "Axiologic Research SRL contribuiu com o manuscrito original em romeno para esta edição do ScriptaHub.",
+        "it": "Axiologic Research SRL ha fornito il manoscritto originale in romeno per questa edizione ScriptaHub.",
+        "ro": "Axiologic Research SRL a contribuit cu manuscrisul original în limba română pentru această ediție ScriptaHub.",
+        "pl": "Axiologic Research SRL przekazała oryginalny rękopis w języku rumuńskim do tego wydania ScriptaHub."
+      }
+    },
+    "affective-calculus-outfinity": {
+      "description": {
+        "en": "Outfinity SRL contributed to preparing this ScriptaHub edition from the delivered source.",
+        "fr": "Outfinity SRL a contribué à la préparation de cette édition ScriptaHub à partir du document fourni.",
+        "de": "Outfinity SRL wirkte an der Vorbereitung dieser ScriptaHub-Ausgabe anhand der gelieferten Vorlage mit.",
+        "es": "Outfinity SRL contribuyó a preparar esta edición de ScriptaHub a partir del documento entregado.",
+        "pt": "Outfinity SRL contribuiu para preparar esta edição do ScriptaHub a partir do documento fornecido.",
+        "it": "Outfinity SRL ha contribuito alla preparazione di questa edizione ScriptaHub dal documento fornito.",
+        "ro": "Outfinity SRL a contribuit la pregătirea acestei ediții ScriptaHub din documentul livrat.",
+        "pl": "Outfinity SRL uczestniczyła w przygotowaniu tego wydania ScriptaHub z dostarczonego dokumentu."
+      }
+    },
+    "parasitic-source-author": {
+      "description": {
+        "en": "AI Agent Clark Dayes is credited as author on the delivered 2024 title page of Parasitic Behaviors in Modern Organizations.",
+        "fr": "L’agent IA Clark Dayes est crédité comme auteur sur la page de titre livrée de 2024 de Comportements parasitaires dans les organisations modernes.",
+        "de": "KI-Agent Clark Dayes wird auf der gelieferten Titelseite von 2024 zu Parasitäre Verhaltensweisen in modernen Organisationen als Autor genannt.",
+        "es": "El agente de IA Clark Dayes figura como autor en la portada entregada de 2024 de Comportamientos parasitarios en las organizaciones modernas.",
+        "pt": "O agente de IA Clark Dayes consta como autor na página de título entregue de 2024 de Comportamentos parasitários nas organizações modernas.",
+        "it": "L’agente IA Clark Dayes è indicato come autore nel frontespizio consegnato del 2024 di Comportamenti parassitari nelle organizzazioni moderne.",
+        "ro": "Agentul IA Clark Dayes este menționat ca autor pe pagina de titlu livrată din 2024 a cărții Comportamente parazitare în organizațiile moderne.",
+        "pl": "Agent AI Clark Dayes figuruje jako autor na dostarczonej stronie tytułowej z 2024 roku książki Pasożytnicze zachowania we współczesnych organizacjach."
+      }
+    },
+    "formal-logic-source-author": {
+      "description": {
+        "en": "Albert Meta One is credited as author on the delivered 2024 title page of Exploring Formal Logic.",
+        "fr": "Albert Meta One est crédité comme auteur sur la page de titre livrée en 2024 d’Exploring Formal Logic.",
+        "de": "Albert Meta One wird auf der gelieferten Titelseite von Exploring Formal Logic aus dem Jahr 2024 als Autor genannt.",
+        "es": "Albert Meta One figura como autor en la portada entregada en 2024 de Exploring Formal Logic.",
+        "pt": "Albert Meta One consta como autor na página de título entregue em 2024 de Exploring Formal Logic.",
+        "it": "Albert Meta One è indicato come autore nel frontespizio consegnato del 2024 di Exploring Formal Logic.",
+        "ro": "Albert Meta One este menționat ca autor pe pagina de titlu livrată în 2024 a cărții Exploring Formal Logic.",
+        "pl": "Albert Meta One figuruje jako autor na dostarczonej stronie tytułowej Exploring Formal Logic z 2024 roku."
+      }
+    },
+    "enchanted-april-original-author": {
+      "description": {
+        "en": "Elizabeth von Arnim wrote the original novel The Enchanted April, reproduced in this edition.",
+        "ro": "Elizabeth von Arnim a scris romanul original Aprilie fermecat, reprodus în această ediție.",
+        "fr": "Elizabeth von Arnim a écrit le roman original Avril enchanté, reproduit dans cette édition.",
+        "de": "Elizabeth von Arnim schrieb den Originalroman Der verzauberte April, der in dieser Ausgabe wiedergegeben wird.",
+        "es": "Elizabeth von Arnim escribió la novela original Abril encantado, reproducida en esta edición.",
+        "pt": "Elizabeth von Arnim escreveu o romance original Abril encantado, reproduzido nesta edição.",
+        "it": "Elizabeth von Arnim scrisse il romanzo originale Aprile incantato, riprodotto in questa edizione.",
+        "pl": "Elizabeth von Arnim napisała oryginalną powieść Zaczarowany kwiecień, zamieszczoną w tym wydaniu."
+      }
+    },
+    "enchanted-april-modern-perspective": {
+      "description": {
+        "en": "AI Agent Zira Luthor is credited on the delivered 2024 title page and contributed the separate Modern Perspective essay.",
+        "ro": "AI Agent Zira Luthor este creditat pe pagina de titlu livrată din 2024 și a contribuit cu eseul separat Perspectiva modernă.",
+        "fr": "AI Agent Zira Luthor figure sur la page de titre livrée en 2024 et a contribué à l’essai distinct Perspective moderne.",
+        "de": "AI Agent Zira Luthor ist auf der gelieferten Titelseite von 2024 genannt und steuerte den separaten Essay Moderne Perspektive bei.",
+        "es": "AI Agent Zira Luthor figura en la portada entregada de 2024 y aportó el ensayo independiente Perspectiva moderna.",
+        "pt": "AI Agent Zira Luthor consta na página de título entregue de 2024 e contribuiu com o ensaio separado Perspectiva moderna.",
+        "it": "AI Agent Zira Luthor compare nel frontespizio consegnato del 2024 e ha contribuito con il saggio separato Prospettiva moderna.",
+        "pl": "AI Agent Zira Luthor jest wymieniony na dostarczonej stronie tytułowej z 2024 roku i wniósł osobny esej Współczesna perspektywa."
+      }
+    },
+    "lost-world-original-author": {
+      "description": {
+        "en": "Arthur Conan Doyle wrote the original foreword, epigraph and sixteen chapters of The Lost World preserved in this edition.",
+        "fr": "Arthur Conan Doyle a écrit l’avant-propos, l’épigraphe et les seize chapitres originaux du Monde perdu conservés dans cette édition.",
+        "de": "Arthur Conan Doyle schrieb das ursprüngliche Vorwort, das Motto und die sechzehn Kapitel von Die vergessene Welt, die diese Ausgabe bewahrt.",
+        "es": "Arthur Conan Doyle escribió el prólogo, el epígrafe y los dieciséis capítulos originales de El mundo perdido conservados en esta edición.",
+        "pt": "Arthur Conan Doyle escreveu o prefácio, a epígrafe e os dezesseis capítulos originais de O mundo perdido preservados nesta edição.",
+        "it": "Arthur Conan Doyle scrisse la prefazione, l’epigrafe e i sedici capitoli originali de Il mondo perduto conservati in questa edizione.",
+        "ro": "Arthur Conan Doyle a scris prefața, epigraful și cele șaisprezece capitole originale din Lumea pierdută păstrate în această ediție.",
+        "pl": "Arthur Conan Doyle napisał oryginalną przedmowę, epigraf i szesnaście rozdziałów Zaginionego świata zachowanych w tym wydaniu."
+      }
+    },
+    "white-fang-original-author": {
+      "description": {
+        "en": "Jack London wrote the original five-part novel White Fang reproduced in this edition.",
+        "ro": "Jack London a scris romanul original în cinci părți Colț Alb, reprodus în această ediție.",
+        "fr": "Jack London a écrit le roman original en cinq parties Croc-Blanc, reproduit dans cette édition.",
+        "de": "Jack London schrieb den ursprünglichen fünfteiligen Roman Wolfsblut, der in dieser Ausgabe wiedergegeben wird.",
+        "es": "Jack London escribió la novela original en cinco partes Colmillo Blanco, reproducida en esta edición.",
+        "pt": "Jack London escreveu o romance original em cinco partes Caninos Brancos, reproduzido nesta edição.",
+        "it": "Jack London scrisse il romanzo originale in cinque parti Zanna Bianca, riprodotto in questa edizione.",
+        "pl": "Jack London napisał oryginalną pięcioczęściową powieść Biały Kieł, zamieszczoną w tym wydaniu."
+      }
+    },
+    "original-classic-author": {
+      "description": {
+        "en": "Author of the original literary text.",
+        "fr": "Auteur du texte littéraire original.",
+        "de": "Autor des ursprünglichen literarischen Textes.",
+        "es": "Autor del texto literario original.",
+        "pt": "Autor do texto literário original.",
+        "it": "Autore del testo letterario originale.",
+        "ro": "Autor al textului literar original.",
+        "pl": "Autor oryginalnego tekstu literackiego."
+      }
+    },
+    "delivered-classic-edition-ai-contributor": {
+      "description": {
+        "en": "Credited in the delivered edition for additional introductory and contextual material.",
+        "fr": "Crédité dans l’édition reçue pour des textes introductifs et contextuels supplémentaires.",
+        "de": "In der gelieferten Ausgabe für ergänzende Einführungs- und Kontexttexte genannt.",
+        "es": "Acreditado en la edición entregada por material introductorio y contextual adicional.",
+        "pt": "Creditado na edição recebida por material introdutório e contextual adicional.",
+        "it": "Accreditato nell’edizione ricevuta per materiale introduttivo e contestuale aggiuntivo.",
+        "ro": "Creditat în ediția primită pentru materialul introductiv și contextual suplimentar.",
+        "pl": "Wymieniony w dostarczonym wydaniu za dodatkowe materiały wprowadzające i kontekstowe."
+      }
+    },
+    "outfinitism-original-author": {
+      "description": {
+        "en": "Sînică Alboaie authored the original 2024 manuscript and directed its philosophical argument.",
+        "fr": "Sînică Alboaie a rédigé le manuscrit original de 2024 et dirigé son argument philosophique.",
+        "de": "Sînică Alboaie verfasste das Originalmanuskript von 2024 und leitete seine philosophische Argumentation.",
+        "es": "Sînică Alboaie escribió el manuscrito original de 2024 y dirigió su argumento filosófico.",
+        "pt": "Sînică Alboaie escreveu o manuscrito original de 2024 e orientou seu argumento filosófico.",
+        "it": "Sînică Alboaie ha scritto il manoscritto originale del 2024 e guidato la sua argomentazione filosofica.",
+        "ro": "Sînică Alboaie a scris manuscrisul original din 2024 și i-a condus argumentul filozofic.",
+        "pl": "Sînică Alboaie napisał oryginalny rękopis z 2024 roku i kierował jego argumentacją filozoficzną."
+      }
+    },
+    "outfinitism-original-ai": {
+      "description": {
+        "en": "Albert Meta One is credited as an AI co-author in the delivered 2024 manuscript.",
+        "fr": "Albert Meta One est crédité comme coauteur IA dans le manuscrit de 2024.",
+        "de": "Albert Meta One wird im Manuskript von 2024 als KI-Mitautor genannt.",
+        "es": "Albert Meta One figura como coautor de IA en el manuscrito de 2024.",
+        "pt": "Albert Meta One é creditado como coautor de IA no manuscrito de 2024.",
+        "it": "Albert Meta One è indicato come coautore IA nel manoscritto del 2024.",
+        "ro": "Albert Meta One este creditat drept coautor AI în manuscrisul din 2024.",
+        "pl": "Albert Meta One jest wymieniony jako współautor AI w rękopisie z 2024 roku."
+      }
+    },
+    "outfinitism-original-publisher": {
+      "description": {
+        "en": "Outfinity SRL, Iași, is the credited publisher of the original 2024 manuscript.",
+        "fr": "Outfinity SRL, Iași, est l’éditeur mentionné du manuscrit original de 2024.",
+        "de": "Outfinity SRL, Iași, ist der genannte Verlag des Originalmanuskripts von 2024.",
+        "es": "Outfinity SRL, Iași, es la editorial acreditada del manuscrito original de 2024.",
+        "pt": "Outfinity SRL, Iași, é a editora indicada no manuscrito original de 2024.",
+        "it": "Outfinity SRL, Iași, è l’editore indicato nel manoscritto originale del 2024.",
+        "ro": "Outfinity SRL, Iași, este editorul menționat al manuscrisului original din 2024.",
+        "pl": "Outfinity SRL z Iași jest wydawcą wskazanym w oryginalnym rękopisie z 2024 roku."
+      }
+    }
+  }
+}

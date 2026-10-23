@@ -1,0 +1,9 @@
+/scriptahubAgent/data/
+.DS_Store
+
+# Local previews, Python caches and environment files
+/previews/
+__pycache__/
+*.py[cod]
+.env
+.env.*

@@ -1,0 +1,84 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <script data-site-theme-bootstrap>try{const t=localStorage.getItem("scripta-site-theme");document.documentElement.dataset.theme=["light","orange","nord","dark","dark-orange"].includes(t)?t:"light"}catch{document.documentElement.dataset.theme="light"}try{const s=Number(localStorage.getItem("scripta-site-scale-v2")||1);document.documentElement.style.setProperty("--site-scale",String(Number.isFinite(s)?Math.max(.8,Math.min(1.5,s)):1));document.documentElement.dataset.largeText=String(Number.isFinite(s)&&s>=1.25)}catch{}</script>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+  <meta name="theme-color" content="#11120f">
+  <meta name="description" content="ScriptaHub's adaptable online reader for books, web editions and audiobooks.">
+  <title>Reader · ScriptaHub</title>
+  <link rel="stylesheet" href="./reader.css?v=reader-unified">
+  <link rel="stylesheet" href="./reader-ui.css?v=reader-unified">
+  <script defer src="https://cloud.umami.is/script.js" data-website-id="e252999d-4479-42d7-9526-5f778846d4f6"></script>
+  <link rel="icon" href="../favicon.ico?v=3815ef18f3ed" sizes="16x16 32x32 48x48">
+  <link rel="icon" type="image/svg+xml" href="../assets/librarian-icon.svg?v=e8ae7ba5bc92">
+</head>
+<body>
+  <main class="reader-app" data-reader-app>
+    <script data-reader-theme-bootstrap>const readerInitialTheme=document.documentElement.dataset.theme||'light';const readerInitialApp=document.currentScript.parentElement;readerInitialApp.dataset.theme=readerInitialTheme.startsWith('dark')?'night':'paper';readerInitialApp.dataset.accent=readerInitialTheme;readerInitialApp.dataset.darkAccent=readerInitialTheme.startsWith('dark')?readerInitialTheme:'dark';</script>
+    <header class="reader-header">
+      <a class="reader-back" href="../index.html" data-reader-back aria-label="Return to the book page"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m14 6-6 6 6 6M8 12h13"/></svg><span>Back</span></a>
+      <div class="reader-identification">
+        <p class="reader-kicker" data-reader-format>Preparing edition</p>
+        <h1 data-reader-title>Reader</h1>
+      </div>
+      <div class="reader-header-actions">
+        <a class="reader-icon-button" data-reader-home href="../index.html?lang=en" aria-label="Home" title="Home"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 10.5 12 3l9 7.5M5.5 9v11h5v-6h3v6h5V9"/></svg></a>
+        <button type="button" class="reader-icon-button reader-theme-button" data-reader-theme aria-label="Change reader theme">☼</button>
+        <label class="reader-language" data-reader-language-wrap hidden><select data-reader-language aria-label="Language"></select></label>
+        <button class="reader-icon-button" type="button" data-reader-reset title="Start this edition again" aria-label="Start this edition again">↺</button>
+        <a class="reader-icon-button" href="#" data-reader-download title="Download PDF" aria-label="Download PDF" download hidden>↓</a>
+        <a class="reader-icon-button" href="#" data-reader-original title="Open the original file" aria-label="Open the original file" target="_blank" rel="noreferrer">↗</a>
+        <a class="reader-icon-button" data-reader-account href="../account/index.html" title="My account" aria-label="My account"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="8" r="3.5"/><path d="M5 21v-2a7 7 0 0 1 14 0v2"/></svg></a>
+      </div>
+      <a class="reader-translation-notice" data-reader-translation-notice hidden></a>
+    </header>
+
+    <section class="reader-stage-wrap" aria-live="polite">
+      <div class="reader-loading" data-reader-loading>
+        <span class="reader-spinner" aria-hidden="true"></span>
+        <p>Preparing your reading edition…</p>
+      </div>
+      <div class="reader-stage" data-reader-stage></div>
+    </section>
+
+    <footer class="reader-controls" data-reader-controls>
+      <div class="reader-progress-row">
+        <p data-reader-status>Finding the best available edition…</p>
+        <p data-reader-location></p>
+      </div>
+      <label class="reader-seek" aria-label="Reading progress">
+        <input type="range" min="0" max="100" step="0.1" value="0" data-reader-seek>
+      </label>
+      <div class="reader-toolbar">
+        <div class="reader-control-group" data-reader-pdf-controls hidden>
+          <button type="button" class="reader-button" data-reader-previous aria-label="Previous page">‹</button>
+          <label class="reader-page-label">Page <input type="number" min="1" inputmode="numeric" data-reader-page aria-label="Page number"> <span data-reader-page-total></span></label>
+          <button type="button" class="reader-button" data-reader-next aria-label="Next page">›</button>
+        </div>
+        <div class="reader-control-group" data-reader-reading-controls hidden>
+          <button type="button" class="reader-button" data-reader-reading-previous aria-label="Previous reading page">‹</button>
+          <span class="reader-virtual-page" data-reader-virtual-page>Page 1</span>
+          <button type="button" class="reader-button" data-reader-reading-next aria-label="Next reading page">›</button>
+        </div>
+        <div class="reader-control-group" data-reader-text-controls>
+          <button type="button" class="reader-button" data-reader-text-smaller aria-label="Decrease text size">A−</button>
+          <button type="button" class="reader-button reader-button-text" data-reader-text-size aria-label="Reset text size">Text</button>
+          <button type="button" class="reader-button" data-reader-text-larger aria-label="Increase text size">A+</button>
+        </div>
+        <div class="reader-control-group" data-reader-zoom-controls hidden>
+          <button type="button" class="reader-button" data-reader-zoom-out aria-label="Zoom out">−</button>
+          <button type="button" class="reader-button reader-button-text" data-reader-fit>Fit width</button>
+          <button type="button" class="reader-button" data-reader-zoom-in aria-label="Zoom in">+</button>
+        </div>
+        <div class="reader-audio" data-reader-audio hidden>
+          <audio controls preload="metadata" data-reader-audio-player></audio>
+        </div>
+      </div>
+    </footer>
+  </main>
+  <script defer src="../collection.js?v=5bba3407bf68"></script>
+  <script defer src="../assets/reading.js?v=e8f6fa2dec0f"></script>
+  <script defer src="./reader.js?v=reader-unified"></script>
+</body>
+</html>

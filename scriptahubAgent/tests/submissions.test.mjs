@@ -1,0 +1,57 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import fs from 'node:fs/promises';
+import os from 'node:os';
+import path from 'node:path';
+import crypto from 'node:crypto';
+import { createSiteServer } from '../server.mjs';
+
+process.env.SCRIPTA_RECORD_KEY = 'test-record-key-0123456789abcdef0123456789';
+
+test('authenticated PDF intake persists one pending task', async t => {
+  const root = await fs.mkdtemp(path.join(os.tmpdir(), 'scripta-upload-'));
+  t.after(() => fs.rm(root, { recursive: true, force: true }));
+  const site = path.join(root, 'site');
+  await fs.mkdir(site);
+  await fs.writeFile(path.join(site, 'index.html'), 'ok');
+  await fs.mkdir(path.join(site, 'create'));
+  await fs.writeFile(path.join(site, 'create', 'index.html'), 'create form');
+  const server = createSiteServer(site, { dataDir: root, verifyUser: async req => req.headers['x-test-user'] ? { id: req.headers['x-test-user'], email: 'alice@example.test', displayName: 'Alice' } : null }).listen(0, '127.0.0.1');
+  t.after(() => server.close());
+  await new Promise(resolve => server.once('listening', resolve));
+  const base = `http://127.0.0.1:${server.address().port}`;
+  const id = '9fdfd120-b243-4559-bc4d-41891967f0f6';
+  const makeBody = () => {
+    const form = new FormData();
+    form.set('metadata', JSON.stringify({ submissionId: id, kind: 'manuscript', agreementVersion: '2026-09-10', agreementAccepted: true, values: { titles: 'Test book' }, language: 'en' }));
+    form.append('documents', new Blob(['%PDF-1.7\npage'], { type: 'application/pdf' }), 'book.pdf');
+    return form;
+  };
+  const endpoint = `${base}/api/submissions`;
+  assert.equal((await fetch(`${base}/create/index.html`)).status, 401);
+  assert.equal((await fetch(`${base}/create/index.html`, { headers: { 'x-test-user': 'user:alice' } })).status, 200);
+  assert.equal((await fetch(endpoint, { method: 'POST', body: makeBody() })).status, 401);
+  const response = await fetch(endpoint, { method: 'POST', body: makeBody(), headers: { 'x-test-user': 'user:alice' } });
+  assert.equal(response.status, 202);
+  const received = await response.json();
+  assert.equal(received.state, 'pending');
+  assert.deepEqual(received.task, { schemaVersion: 1, id, type: 'scriptahub.manuscript' });
+  assert.equal((await fetch(endpoint, { method: 'POST', body: makeBody(), headers: { 'x-test-user': 'user:alice' } })).status, 202);
+  assert.equal((await fetch(endpoint, { method: 'POST', body: makeBody(), headers: { 'x-test-user': 'user:bob' } })).status, 409);
+  const record = JSON.parse(await fs.readFile(path.join(root, 'inbox', id, 'record.json'), 'utf8'));
+  assert.equal(record.files.length, 1);
+  assert.deepEqual(record.task, received.task);
+  assert.deepEqual(await fs.readdir(path.join(root, 'inbox')), [id]);
+  assert.deepEqual(record.contact, { email: 'alice@example.test', displayName: 'Alice' });
+  assert.match(record.files[0].sha256, /^[0-9a-f]{64}$/);
+  const status = await fetch(`${base}/api/submissions/${id}`, { headers: { 'x-test-user': 'user:alice' } });
+  assert.equal(status.status, 200);
+  assert.equal((await status.json()).task.id, id);
+  assert.equal((await fetch(`${base}/api/submissions/${id}`, { headers: { 'x-test-user': 'user:bob' } })).status, 403);
+  const session = await fetch(`${base}/api/session`, { headers: { 'x-test-user': 'user:alice' } });
+  assert.equal(session.status, 200);
+  assert.equal((await session.json()).user.email, 'alice@example.test');
+  const forged = makeBody();
+  forged.set('metadata', JSON.stringify({ submissionId: crypto.randomUUID(), kind: 'manuscript', agreementVersion: '2026-09-10', agreementAccepted: true, values: { name: 'Impersonated', titles: 'Test book' }, language: 'en' }));
+  assert.equal((await fetch(endpoint, { method: 'POST', body: forged, headers: { 'x-test-user': 'user:alice' } })).status, 400);
+});

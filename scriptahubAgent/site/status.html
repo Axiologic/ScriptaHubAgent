@@ -1,0 +1,53 @@
+<!doctype html>
+<html lang="ro">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="robots" content="noindex,nofollow,noarchive">
+  <script>try{const t=localStorage.getItem('scripta-site-theme');document.documentElement.dataset.theme=['light','orange','nord','dark','dark-orange'].includes(t)?t:'dark-orange'}catch{document.documentElement.dataset.theme='dark-orange'}</script>
+  <title>Progresul cărților și prezentărilor · ScriptaHub</title>
+  <link rel="stylesheet" href="assets/site.css">
+  <style>
+    .status-page{max-width:1180px;margin:0 auto;padding:48px clamp(20px,4vw,64px) 80px}.status-page h1{margin:0;font-size:clamp(2rem,5vw,3.5rem)}.status-page>p{max-width:72ch;color:var(--muted,#6d7475);font-size:1.05rem}.status-updated{margin:32px 0 20px}.status-counts{display:grid;grid-template-columns:repeat(auto-fit,minmax(145px,1fr));gap:12px}.status-counts div,.status-group{background:var(--surface,#fff);border:1px solid color-mix(in srgb,var(--ink,#172725) 14%,transparent);border-radius:14px}.status-counts div{padding:18px}.status-counts strong{display:block;font-size:2rem;line-height:1;color:var(--accent,#ff7900)}.status-counts span{display:block;margin-top:8px;font-size:.85rem}.status-group{margin-top:26px;padding:20px}.status-group h2{margin:0 0 14px;font-size:1.22rem}.status-group h2 small{color:var(--muted,#6d7475);font-weight:400}.status-list{display:grid;gap:8px}.status-list article{display:grid;grid-template-columns:1fr auto;gap:10px 16px;align-items:center;padding:14px 0;border-top:1px solid color-mix(in srgb,var(--ink,#172725) 12%,transparent)}.status-list article:first-child{border-top:0}.status-list h3{margin:0;font-size:1rem}.status-list p{margin:5px 0 0;color:var(--muted,#6d7475);font-size:.9rem}.status-actions{display:flex;gap:10px;white-space:nowrap}.status-actions a{font-size:.86rem;font-weight:700}.status-list details{grid-column:1/-1}.status-list summary{cursor:pointer;font-weight:700;font-size:.9rem}.status-list ol{margin:12px 0 0;padding-left:1.4rem;line-height:1.48}.status-list li+li{margin-top:4px}.status-plan{margin:10px 0;color:var(--muted,#6d7475);font-size:.9rem}.status-note{font-size:.9rem;color:var(--muted,#6d7475)}@media(max-width:580px){.status-page{padding-top:28px}.status-list article{display:flex;align-items:flex-start;flex-direction:column}.status-actions{padding-top:3px}}
+    .status-list article[hidden],.status-group[hidden]{display:none}.status-list h4{margin:20px 0 8px}.status-scene h5{font-size:.95rem;margin:16px 0 0}.status-search{display:block;margin:28px 0 12px;font-weight:600}.status-search input{display:block;width:100%;margin-top:8px;padding:12px;background:var(--surface);color:var(--ink);border:1px solid var(--muted);border-radius:6px}.status-gate{padding:16px;background:var(--surface);border-left:3px solid #ff7900}.status-hook{padding-top:14px}.status-list details{min-width:0}.status-list article>div{min-width:0}.status-list h3{overflow-wrap:anywhere}
+    .status-page{--status-orange:#b64b00;--status-line:rgba(182,75,0,.3)}
+    :root[data-theme="dark"] .status-page,:root[data-theme="dark-orange"] .status-page{--status-orange:#ff942f;--status-line:rgba(255,148,47,.35)}
+    .status-list h3{font-size:1.22rem;line-height:1.4}.status-page a,.status-list h3 a{color:var(--status-orange);text-decoration:none}.status-page a:hover{text-decoration:underline}.status-page a:focus-visible{outline:2px solid var(--status-orange);outline-offset:4px}.status-list article{padding:24px 0;border-top:2px solid var(--status-line)}.status-list{gap:12px}.status-list article:first-child{padding-top:10px}.status-list summary{color:var(--status-orange);padding:8px 0}.status-list details[open]{padding:0 16px 18px;border-left:3px solid var(--status-line);margin-top:8px}.status-list details[open] summary{padding-top:0}.status-list ol{max-width:78ch;line-height:1.7}.status-list li+li{margin-top:8px}.status-stages{line-height:1.7}.status-group{padding:24px}.status-active{border-color:var(--status-orange)}
+    .status-list details[open]{background:#fff3e7;padding:16px 22px 24px;border:1px solid var(--status-line);border-left:4px solid var(--status-orange);border-radius:8px;margin:8px 0 12px;width:100%;box-sizing:border-box}
+    :root[data-theme="dark"] .status-list details[open],:root[data-theme="dark-orange"] .status-list details[open]{background:#211b16}
+    .status-list details[open] summary{padding:0 0 14px;border-bottom:1px solid var(--status-line);margin-bottom:12px}.status-list details[open] h4{color:var(--status-orange)}
+    @media(max-width:580px){.status-list details[open]{padding:14px}.status-group{padding:16px}}
+    .status-list .status-spoken{font-size:1.06rem;line-height:1.65;color:var(--ink);margin:0 0 12px}.status-direction{margin:0 0 22px;font-size:.85rem;line-height:1.55}.status-direction div{display:grid;grid-template-columns:145px minmax(0,1fr);gap:10px;padding:5px 0}.status-direction dt{font-weight:650;color:var(--status-orange)}.status-direction dd{margin:0;color:var(--muted);overflow-wrap:anywhere}.status-scene{padding-top:12px}.status-scene+.status-scene{border-top:1px solid var(--status-line);margin-top:22px}.status-scene h5{color:var(--status-orange);font-size:1.05rem}.status-list details[open] ol{max-width:none}@media(max-width:580px){.status-direction div{grid-template-columns:1fr;gap:2px}.status-direction{font-size:.87rem}}
+    .status-page{padding-top:24px}.status-page h1{font-size:clamp(1.65rem,3.2vw,2.4rem)}.status-page>p{font-size:.94rem;line-height:1.5}.status-page>.status-note{font-size:.78rem;margin:0 0 12px}.status-updated{font-size:.82rem;margin:18px 0 12px}.status-gate{font-size:.9rem;padding:10px 14px}.status-counts div{padding:14px}.status-counts strong{font-size:1.7rem}.status-counts span{font-size:.76rem}.status-search{margin-top:18px}
+  </style>
+  <style>
+    .status-indicator{display:inline-flex;align-items:center;gap:.4em;vertical-align:middle;margin:3px 0 3px 10px;padding:3px 9px;border-radius:5px;background:color-mix(in srgb,var(--ink) 7%,transparent);color:var(--muted);font-size:.75rem;font-weight:650;line-height:1.5;letter-spacing:0;white-space:normal}
+    .status-indicator-active{color:var(--status-orange);background:color-mix(in srgb,var(--status-orange) 16%,transparent)}
+    .status-indicator-active>span{animation:status-pulse 1.6s ease-in-out infinite}
+    .status-indicator-failed{color:var(--ink);border:1px solid var(--status-orange)}
+    .status-indicator-done{color:var(--ink)}
+    .status-idle{font-size:.9rem;color:var(--muted)}
+    .status-counts small{display:block;margin-top:6px;font-size:.68rem;line-height:1.4;color:var(--muted)}
+    .status-table-scroll{overflow-x:auto}.status-finished table{width:100%;border-collapse:collapse;text-align:left;font-size:.92rem}.status-finished th,.status-finished td{padding:14px 12px;border-bottom:1px solid var(--status-line);vertical-align:top}.status-finished thead th{color:var(--muted);font-size:.8rem}.status-finished tbody th{min-width:170px}.status-finished tr[hidden]{display:none}
+    @keyframes status-pulse{50%{opacity:.35}}
+    @media(prefers-reduced-motion:reduce){.status-indicator-active>span{animation:none}}
+    .release-list{list-style:none;margin:0;padding:0}.release-list li{padding:13px 0;border-top:1px solid var(--status-line)}.release-list li:first-child{border-top:0}.release-list li[hidden]{display:none}.release-list a{font-weight:700}.release-list small{display:block;margin-top:4px;color:var(--muted);line-height:1.4}.release-state{display:inline-block;margin-left:10px;color:var(--status-orange);font-size:.8rem;font-weight:700}.release-fold{display:block}.release-fold summary{cursor:pointer;font-weight:700;font-size:1.2rem}.status-section-heading{margin:42px 0 8px;font-size:1.5rem}
+    .release-overall{display:grid;gap:7px;margin:16px 0 18px}.release-overall strong{font-size:1.08rem}.release-overall>span{color:var(--muted);font-size:.82rem}.release-progress{height:7px;max-width:460px;margin-top:9px;border-radius:99px;background:color-mix(in srgb,var(--ink) 13%,transparent);overflow:hidden}.release-progress span{display:block;height:100%;border-radius:inherit;background:var(--status-orange)}.release-list .release-progress{height:5px;margin-top:8px}
+  </style>
+</head>
+<body data-app-page="true">
+  <main class="status-page">
+    <p class="status-note">Pagină internă de lucru · fără link în navigarea publică</p>
+    <h1>Progresul cărților</h1>
+    <p>Stadiul conversiilor din <code>income</code>, cu ediții integrale și scurte în engleză și română.</p>
+    <div data-book-release-status aria-live="polite">Se încarcă progresul cărților…</div>
+    <h2 class="status-section-heading">Prezentările cărților</h2>
+    <p>Textele narate, planurile vizuale și producția audio sunt urmărite separat mai jos.</p>
+    <div data-voice-status aria-live="polite">Se încarcă progresul prezentărilor…</div>
+  </main>
+  <script src="assets/book-release-status.js"></script>
+  <script src="assets/book-release-status-view.js"></script>
+  <script src="assets/voice-migration-status.js?v=curiosity-v2"></script>
+  <script src="assets/status.js?v=book-progress-v5"></script>
+</body>
+</html>

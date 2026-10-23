@@ -1,0 +1,10 @@
+{
+  "schemaVersion": 1,
+  "repositories": [
+    {
+      "id": "scriptahub",
+      "url": "https://github.com/Axiologic/ScriptaHub.git",
+      "ref": "445a2ceabc0a63835e5abd1b287289e85e3c56aa"
+    }
+  ]
+}

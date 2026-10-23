@@ -1,0 +1,45 @@
+/* Applied only inside the embedded UserPersisto dashboard. */
+:root {
+  --text-color: var(--scripta-ink);
+  --secondary-text-color: var(--scripta-muted);
+  --border-color: var(--scripta-line);
+  --surface: var(--scripta-field);
+  --button-primary-background: var(--scripta-button-bg);
+  --button-primary-color: var(--scripta-button-ink);
+  --button-secondary-background: var(--scripta-surface);
+  --link-color: var(--scripta-green);
+  --border: var(--scripta-line);
+  --danger-color: light-dark(#b42318, #ffb4ab);
+}
+.up-enrollment button:hover:not(:disabled) { background: var(--scripta-button-hover); color: var(--scripta-button-ink); }
+.up-enrollment :focus-visible { outline-color: var(--scripta-green); }
+html, body { background: var(--scripta-panel); color: var(--scripta-ink); }
+a { color: var(--scripta-green); }
+.account-header, .account-details { border-color: var(--scripta-line); }
+.account-card { background: var(--scripta-surface); color: var(--scripta-ink); border-color: var(--scripta-line); box-shadow: none; }
+.page-heading p, .page-heading .eyebrow, .account-email, .card-description, .optional, .account-details, footer { color: var(--scripta-muted); }
+html body .pill, html body #account-role { background: var(--scripta-field); color: var(--scripta-ink); border-color: var(--scripta-line); }
+input, select, textarea, #profile-form input { background: var(--scripta-field); color: var(--scripta-ink); border-color: var(--scripta-line); }
+button, #profile-form button, .button-link { background: var(--scripta-button-bg); color: var(--scripta-button-ink); border-color: var(--scripta-button-bg); }
+button:hover:not(:disabled), #profile-form button:hover:not(:disabled), .button-link:hover { background: var(--scripta-button-hover); }
+html body #save-profile { background: var(--scripta-button-bg); color: var(--scripta-button-ink); border-color: var(--scripta-button-bg); }
+html body #save-profile:hover:not(:disabled) { background: var(--scripta-button-hover); }
+html body #save-profile:disabled { background: var(--scripta-button-bg); color: var(--scripta-button-ink); }
+.account-navigation a { background: var(--scripta-field); color: var(--scripta-ink); border-color: var(--scripta-line); }
+.account-navigation a:hover, .account-navigation a[aria-current="page"] { background: var(--scripta-button-bg); color: var(--scripta-button-ink); border-color: var(--scripta-button-bg); }
+.account-status:not(.error) { color: var(--scripta-green); }
+:focus-visible { outline-color: var(--scripta-green); }
+
+/* Conditional forms and management pages reached through the same iframe. */
+.form-input, html body #role-name:read-only { background: var(--scripta-field); color: var(--scripta-ink); border-color: var(--scripta-line); }
+.general-button { background: var(--scripta-button-bg); color: var(--scripta-button-ink); border-color: var(--scripta-button-bg); }
+.gray-button { background: var(--scripta-field); color: var(--scripta-ink); border-color: var(--scripta-line); }
+.role-card, .userpersisto-row.user-editor, .userpersisto-role-menu { background: var(--scripta-surface); color: var(--scripta-ink); border-color: var(--scripta-line); }
+.role-card[aria-current="true"] { border-color: var(--scripta-green); }
+.role-permission-picker summary, .role-permission-menu, .role-delete-confirmation, .userpersisto-role-picker summary { border-color: var(--scripta-line); }
+.role-permissions small { color: var(--scripta-muted); }
+.role-permissions label:hover, .userpersisto-role-choices label:hover { background: var(--scripta-field); }
+.userpersisto-role-picker summary:focus-visible { outline-color: var(--scripta-green); }
+.account-status.error, .up-enrollment .up-enrollment-status.error { color: var(--danger-color); }
+input { accent-color: var(--scripta-green); }
+::selection { background: var(--scripta-button-bg); color: var(--scripta-button-ink); }

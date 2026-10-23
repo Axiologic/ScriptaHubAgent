@@ -1,0 +1,79 @@
+:root {
+  color-scheme: light;
+  --standalone-surround: #e3e6e4;
+  --standalone-paper: #ffffff;
+  --standalone-paper-line: #d7dcda;
+  --standalone-ink: #10241b;
+  --standalone-link: #176b4b;
+  --standalone-size: 1.16rem;
+}
+
+* { box-sizing: border-box; }
+
+html {
+  background: var(--standalone-surround);
+  color: var(--standalone-ink);
+  scroll-behavior: smooth;
+}
+
+body {
+  width: min(calc(100% - 48px), 72ch);
+  min-height: 100vh;
+  margin: 0 auto;
+  padding: clamp(34px, 7vw, 76px) clamp(24px, 6vw, 72px) 90px;
+  background: var(--standalone-paper);
+  border-inline: 1px solid var(--standalone-paper-line);
+  box-shadow: 0 0 28px rgba(15, 23, 20, .08);
+  color: var(--standalone-ink);
+  font-family: Georgia, "Iowan Old Style", "Palatino Linotype", serif;
+  font-size: var(--standalone-size);
+  line-height: 1.72;
+  overflow-wrap: break-word;
+}
+
+h1, h2, h3, h4 {
+  margin: 2em 0 .7em;
+  color: inherit;
+  font-family: "Segoe UI", system-ui, sans-serif;
+  line-height: 1.22;
+}
+
+h1 { font-size: 1.9em; }
+h2 { font-size: 1.34em; }
+
+h1:first-child, h2:first-child { margin-top: 0; }
+p {
+  margin: 0 0 .72em;
+  text-indent: 1.45em;
+  text-align: justify;
+  text-justify: inter-word;
+  hyphens: auto;
+}
+p.pdf-page-header, p.pdf-page-number { text-indent: 0; }
+.pdf-table-wrap { max-width: 100%; margin: 1.2em 0; overflow-x: auto; }
+.pdf-table { width: 100%; border-collapse: collapse; font-family: "Segoe UI", system-ui, sans-serif; font-size: .9em; }
+.pdf-table :is(th, td) { padding: .55em .7em; border: 1px solid color-mix(in srgb, currentColor 24%, transparent); text-align: left; vertical-align: top; }
+.pdf-table th { background: color-mix(in srgb, currentColor 8%, transparent); }
+.pdf-figure { margin: 1.4em 0; text-align: center; }
+.pdf-figure img { width: auto; max-width: 100%; margin: 0 auto; }
+.pdf-figure figcaption { margin-top: .4em; font: .75em/1.4 "Segoe UI", system-ui, sans-serif; opacity: .68; }
+a { color: var(--standalone-link); }
+img { display: block; max-width: 100%; height: auto; margin: 1.6em auto; }
+blockquote { margin: 1.5em 0; padding: .4em 1.1em; border-left: 3px solid #43a978; }
+
+html[data-theme="night"] {
+  color-scheme: dark;
+  --standalone-surround: #3a3e42;
+  --standalone-paper: #080a0c;
+  --standalone-paper-line: #52575b;
+  --standalone-ink: #f1f3f0;
+  --standalone-link: #9af2c6;
+}
+
+@media (max-width: 600px) {
+  body { width: 100%; padding: 34px 25px 72px; border-inline: 0; box-shadow: none; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  html { scroll-behavior: auto; }
+}

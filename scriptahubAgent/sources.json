@@ -1,0 +1,8 @@
+{
+  "schemaVersion": 1,
+  "syncIntervalSeconds": 60,
+  "repositories": [
+    "https://github.com/Axiologic/scriptaBooks-1/blob/master/collection.json",
+    "https://raw.githubusercontent.com/Axiologic/scriptaBooks-legacy/master/collection.json"
+  ]
+}
