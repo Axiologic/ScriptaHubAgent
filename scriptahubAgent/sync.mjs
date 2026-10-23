@@ -113,7 +113,10 @@ async function bridgeBookForms(bookRoot) {
 }
 
 export async function buildSnapshot({ configPath = process.env.SCRIPTA_CONFIG || path.join(codeDir, 'sources.json'), dataDir = process.env.SCRIPTA_DATA_DIR || path.join(codeDir, 'data'), allowLocal = false, config: suppliedConfig, resolved: suppliedResolved, signal } = {}) {
-  const config = suppliedConfig || JSON.parse(await fs.readFile(configPath, 'utf8'));
+  const config = suppliedConfig || JSON.parse(await fs.readFile(path.join(dataDir, 'sources.json'), 'utf8').catch(error => {
+    if (error.code !== 'ENOENT') throw error;
+    return fs.readFile(configPath, 'utf8');
+  }));
   const resolved = suppliedResolved || await resolveSources(config, { allowLocal, signal });
   const fingerprint = await snapshotFingerprint(config);
   const sources = sourceState(resolved);

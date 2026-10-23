@@ -1,0 +1,66 @@
+{
+  "tools": [
+    {
+      "name": "scriptahub_config_get",
+      "title": "Get ScriptaHub content sources",
+      "description": "Administrator configuration for content catalogue URLs and refresh interval.",
+      "command": "node",
+      "args": [
+        "tools/settings-tool.mjs"
+      ],
+      "cwd": "/code",
+      "timeoutMs": 90000,
+      "inputSchema": {
+        "type": "object",
+        "properties": {},
+        "additionalProperties": false
+      },
+      "tags": [
+        "admin"
+      ],
+      "env": {
+        "TOOL_NAME": "scriptahub_config_get"
+      }
+    },
+    {
+      "name": "scriptahub_config_set",
+      "title": "Save ScriptaHub content sources",
+      "description": "Administrator configuration for content catalogue URLs and refresh interval.",
+      "command": "node",
+      "args": [
+        "tools/settings-tool.mjs"
+      ],
+      "cwd": "/code",
+      "timeoutMs": 90000,
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "repositories": {
+            "type": "array",
+            "maxItems": 100,
+            "items": {
+              "type": "string",
+              "maxLength": 4096
+            }
+          },
+          "syncIntervalSeconds": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 2147483
+          }
+        },
+        "additionalProperties": false,
+        "required": [
+          "repositories",
+          "syncIntervalSeconds"
+        ]
+      },
+      "tags": [
+        "admin"
+      ],
+      "env": {
+        "TOOL_NAME": "scriptahub_config_set"
+      }
+    }
+  ]
+}

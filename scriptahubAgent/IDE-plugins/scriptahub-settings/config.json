@@ -1,0 +1,13 @@
+{
+  "pluginCategory": "application",
+  "id": "scriptahub-settings",
+  "component": "scriptahub-settings",
+  "location": [],
+  "label": "ScriptaHub",
+  "tooltip": "Configure book repositories and catalogue refresh.",
+  "presenter": "ScriptaHubSettings",
+  "type": "global",
+  "autoPin": false,
+  "dependencies": [],
+  "settings": "scriptahub-settings"
+}

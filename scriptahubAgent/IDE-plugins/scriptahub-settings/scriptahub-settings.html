@@ -1,0 +1,16 @@
+<div class="scriptahub-settings-modal">
+  <div class="modal-header"><div class="modal-title">ScriptaHub Settings</div><button type="button" class="close" data-local-action="closeModal" aria-label="Close">×</button></div>
+  <div class="modal-body scriptahub-settings-body">
+    <fieldset id="scriptaSettingsControls" disabled>
+      <section aria-labelledby="scriptaSourcesTitle">
+        <div class="scripta-sources-heading"><h3 id="scriptaSourcesTitle">Content repositories</h3><button type="button" class="gray-button" data-local-action="addRepository">+ Add repository</button></div>
+        <p id="scriptaSourcesHelp">Use a collection.json URL from your repository. Raw HTTPS URLs and GitHub blob links are accepted.</p>
+        <ul id="scriptaRepositories" aria-label="Content repositories"></ul>
+      </section>
+      <label class="form-item"><span class="form-label">Refresh interval (seconds)</span><input id="scriptaSyncInterval" class="form-input" type="number" min="1" max="2147483" step="1" required></label>
+      <p>Additions, edits and deletions apply when you save. Sources are validated before saving; no restart is needed.</p>
+      <div class="scriptahub-settings-actions"><button type="button" class="general-button" data-local-action="saveSettings">Save changes</button></div>
+    </fieldset>
+    <p id="scriptaSettingsStatus" role="status" aria-live="polite"></p>
+  </div>
+</div>

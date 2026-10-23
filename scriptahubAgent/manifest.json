@@ -268,5 +268,15 @@
         }
       ]
     }
-  }
+  },
+  "ideSettings": [
+    {
+      "key": "scriptahub-settings",
+      "label": "ScriptaHub",
+      "scope": "workspace",
+      "pluginKey": "scriptahubAgent/scriptahub-settings",
+      "settingsComponent": "scriptahub-settings",
+      "adminOnly": true
+    }
+  ]
 }

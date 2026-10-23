@@ -3,6 +3,8 @@ import fs from 'node:fs';
 import fsp from 'node:fs/promises';
 import path from 'node:path';
 import { Readable } from 'node:stream';
+import { spawn } from 'node:child_process';
+import { loadSourceConfig, settingsFile } from './settings.mjs';
 import { pipeline } from 'node:stream/promises';
 import { activeSite, buildSnapshot, resolveSources, safeRelative, snapshotFingerprint, sourceState } from './sync.mjs';
 import { bridgeBookHtml, publishedFileUrl, responseText } from './published-content.mjs';
@@ -197,7 +199,7 @@ export function createSiteServer(siteRoot, { dataDir: submissionDataDir = dataDi
 async function main() {
   const refresh = new AbortController();
   const configPath = process.env.SCRIPTA_CONFIG || path.join(import.meta.dirname, 'sources.json');
-  const interval = syncIntervalMs(JSON.parse(await fsp.readFile(configPath, 'utf8')));
+  let interval = syncIntervalMs(await loadSourceConfig({ configPath, dataDir }));
   let site;
   try { site = await activeSite(dataDir); }
   catch (error) {
@@ -208,25 +210,38 @@ async function main() {
   const stopNotifications = startNotificationWorker({ dataDir });
   let stopping = false;
   let timer;
-  const shutdown = () => {
+  let settingsWatcher;
+  let settingsServer;
+  const shutdown = (code = 0) => {
     if (stopping) return;
     stopping = true;
     refresh.abort();
     clearInterval(timer);
     stopNotifications();
+    settingsWatcher?.close();
+    settingsServer?.kill('SIGTERM');
     server.close();
     // Ploinky requires a clean exit to acknowledge a targeted drain.
-    setTimeout(() => process.exit(0), 3000).unref();
-    process.exitCode = 0;
+    setTimeout(() => process.exit(code), 3000).unref();
+    process.exitCode = code;
   };
-  process.once('SIGTERM', shutdown);
-  process.once('SIGINT', shutdown);
+  process.once('SIGTERM', () => shutdown());
+  process.once('SIGINT', () => shutdown());
   let refreshing = false;
+  let refreshAgain = false;
   const refreshCatalogue = async () => {
-    if (stopping || refreshing) return;
+    if (stopping) return;
+    if (refreshing) { refreshAgain = true; return; }
     refreshing = true;
     try {
-      const config = JSON.parse(await fsp.readFile(configPath, 'utf8'));
+      const config = await loadSourceConfig({ configPath, dataDir });
+      const nextInterval = syncIntervalMs(config);
+      if (nextInterval !== interval) {
+        interval = nextInterval;
+        clearInterval(timer);
+        timer = setInterval(() => { void refreshCatalogue(); }, interval);
+        timer.unref();
+      }
       const resolved = await resolveSources(config, { signal: refresh.signal });
       const fingerprint = await snapshotFingerprint(config);
       const sources = sourceState(resolved);
@@ -241,10 +256,25 @@ async function main() {
       }
     } catch (error) {
       if (!stopping) console.error(`Keeping prior ScriptaHub snapshot: ${error.message}`);
-    } finally { refreshing = false; }
+    } finally {
+      refreshing = false;
+      if (refreshAgain && !stopping) { refreshAgain = false; void refreshCatalogue(); }
+    }
   };
   timer = setInterval(() => { void refreshCatalogue(); }, interval);
   timer.unref();
+  settingsWatcher = fs.watch(dataDir, (_event, filename) => {
+    if (filename === path.basename(settingsFile(dataDir))) void refreshCatalogue();
+  });
+  settingsWatcher.on('error', error => console.error(`ScriptaHub settings watch failed: ${error.message}`));
+  // Explorer Configure uses the standard Ploinky MCP server alongside the site.
+  if (process.env.PLOINKY_AGENT_ID) {
+    settingsServer = spawn(process.execPath, [path.join(process.env.PLOINKY_AGENT_RUNTIME_ROOT || '/Agent', 'server/AgentServer.mjs')], {
+      env: { ...process.env, PORT: '7000' }, stdio: 'inherit',
+    });
+    settingsServer.once('error', error => { console.error(`Settings server failed: ${error.message}`); shutdown(1); });
+    settingsServer.once('exit', () => { if (!stopping) shutdown(1); });
+  }
   await refreshCatalogue();
 }
 

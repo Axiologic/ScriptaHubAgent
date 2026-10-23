@@ -1,0 +1,17 @@
+.scriptahub-settings-body { display: grid; gap: 16px; max-height: 75vh; overflow-y: auto; box-sizing: border-box; }
+.scriptahub-settings-body fieldset { display: grid; gap: 20px; min-width: 0; border: 0; padding: 0; margin: 0; }
+.scriptahub-settings-body .form-item { display: grid; gap: 8px; }
+.scriptahub-settings-body p { margin: 0; color: var(--secondary-text-color, #57606a); font-size: 13px; line-height: 1.5; }
+.scriptahub-settings-body #scriptaSyncInterval { max-width: 180px; }
+.scripta-sources-heading { display: flex; flex-wrap: wrap; gap: 12px; justify-content: space-between; align-items: center; margin-bottom: 10px; }
+.scripta-sources-heading h3 { font-size: 16px; margin: 0; }
+#scriptaRepositories { display: grid; gap: 12px; list-style: none; padding: 0; margin: 16px 0 0; }
+.scripta-repository { display: flex; flex-wrap: wrap; align-items: flex-start; gap: 12px; border: 1px solid var(--border-color, #d6d9de); border-radius: 8px; padding: 16px; }
+.scripta-repository-content { display: grid; gap: 8px; flex: 1 1 280px; min-width: 0; }
+.scripta-repository-content strong { overflow-wrap: anywhere; font-size: 14px; }
+.scripta-repository-content input { width: 100%; min-width: 0; box-sizing: border-box; }
+.scripta-repository-url { overflow-wrap: anywhere; }
+.scripta-repository-actions { display: flex; gap: 8px; }
+.scripta-repository-actions .scripta-delete { color: var(--danger-color, #b42318); }
+.scripta-repository-empty { padding: 20px; border: 1px dashed var(--border-color, #d6d9de); border-radius: 8px; color: var(--secondary-text-color, #57606a); }
+.scriptahub-settings-body #scriptaSettingsStatus.error { color: var(--danger-color, #b42318); }
