@@ -1,5 +1,6 @@
 (() => {
   'use strict';
+  const policy = import(new URL('submission-policy.js', document.currentScript.src));
   const translations = {
     en: ['Submitting your contribution…', 'Contribution received. Reference:', 'Submitting this form sends it to ScriptaHub. Selected documents are uploaded after you accept the agreement.'],
     ro: ['Se trimite contribuția…', 'Contribuția a fost primită. Referință:', 'Trimiterea formularului îl transmite către ScriptaHub. Documentele selectate sunt încărcate după acceptarea acordului.'],
@@ -38,7 +39,7 @@
       return await new Promise((resolve, reject) => {
         const tx = db.transaction('files', 'readonly');
         const request = tx.objectStore('files').get(key);
-        request.onsuccess = () => resolve(request.result || []);
+        request.onsuccess = () => resolve(request.result);
         request.onerror = () => reject(request.error);
       });
     } finally { db.close(); }
@@ -55,6 +56,14 @@
     } finally { db.close(); }
   }
   const root = new URL('../', document.currentScript.src);
+  async function saveDraftFiles(key, selected, previousKey, expectedNames) {
+    const files = selected.length || !expectedNames.length ? selected : await retrieve(previousKey);
+    if (!Array.isArray(files) || files.length !== expectedNames.length || files.some((file, index) => file.name !== expectedNames[index])) {
+      throw new Error('The draft documents are no longer available. Select them again before continuing.');
+    }
+    (await policy).validateDocuments(files);
+    await store(key, files);
+  }
   function contributionKind(draft, count) {
     const source = new URL(draft.returnUrl).pathname;
     if (source.includes('/fork/')) return 'fork';
@@ -67,11 +76,15 @@
     const line = draft.lines.find(value => /^(?:Book ID|Source book ID):\s*/.test(value));
     return line?.split(':').slice(1).join(':').trim() || undefined;
   }
+  const sending = new WeakSet();
   async function submitDirect(metadata, files, status, button) {
+    if (sending.has(button) || button.dataset.submissionComplete === 'true') return false;
+    sending.add(button);
     button.disabled = true;
     status.textContent = words()[0];
     let received;
     try {
+      (await policy).validateDocuments(files);
       const body = new FormData();
       body.set('metadata', JSON.stringify(metadata));
       for (const file of files) body.append('documents', file, file.name);
@@ -79,14 +92,17 @@
       received = await response.json();
       if (!response.ok) throw new Error(received.error || `Upload failed (${response.status})`);
       status.textContent = `${words()[1]} ${received.submissionId}`;
+      button.dataset.submissionComplete = 'true';
       return true;
     } catch (error) {
-      status.textContent = received?.submissionId ? `${words()[1]} ${received.submissionId}` : error.message;
-      if (!received) button.disabled = false;
+      status.textContent = error.message;
+      button.disabled = false;
       return false;
-    }
+    } finally { sending.delete(button); }
   }
-  globalThis.ScriptaContributionBridge = { saveFiles: store, submitDirect, note: language => (translations[language] || translations.en)[2] };
+  globalThis.ScriptaContributionBridge = { saveDraftFiles, submitDirect,
+    newSubmissionId: async () => (await policy).newSubmissionId(),
+    note: language => (translations[language] || translations.en)[2] };
   async function submit(detail) {
     const draftId = new URL(location.href).searchParams.get('draft');
     const status = document.querySelector('[data-workflow-status]');
@@ -94,6 +110,9 @@
     if (!draftId || !status || !button) return;
     try {
       const files = await retrieve(draftId);
+      if (!Array.isArray(files) || files.length !== detail.draft.files.length || files.some((file, index) => file.name !== detail.draft.files[index])) {
+        throw new Error('The draft documents are no longer available. Return to the form and select them again.');
+      }
       const kind = contributionKind(detail.draft, files.length);
       const metadata = { submissionId: draftId, kind, agreementVersion: detail.agreementVersion, agreementAccepted: true,
         values: detail.draft.values, language: lang(), ...(bookId(detail.draft) ? { bookId: bookId(detail.draft) } : {}) };
@@ -143,7 +162,7 @@
   const observer = new MutationObserver(() => {
     if (account) showAccount();
     else if (accountRequired) requireLogin();
-    for (const note of document.querySelectorAll('.workflow-form > .workflow-note, .agreement-page .workflow-note')) {
+    for (const note of document.querySelectorAll('.workflow-form > .workflow-note, .create-form-footer .workflow-note, .agreement-page .workflow-note')) {
       if (note.dataset.agentCopy) continue;
       note.textContent = words()[2];
       note.dataset.agentCopy = 'true';

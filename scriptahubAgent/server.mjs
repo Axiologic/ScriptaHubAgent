@@ -11,6 +11,8 @@ import { bridgeBookHtml, publishedFileUrl, responseText } from './published-cont
 import { renderAnimationPage, renderBookPage, validateContentBook } from './content-v2.mjs';
 import { readBody, readSubmission, saveSubmission, verifyRouterUser } from './submissions.mjs';
 import { startNotificationWorker } from './notifications.mjs';
+import { DashboardStore } from './dashboard-store.mjs';
+import { handleDashboard } from './dashboard-http.mjs';
 
 const port = Number(process.env.SCRIPTA_PORT || 3002);
 const dataDir = process.env.SCRIPTA_DATA_DIR || path.join(import.meta.dirname, 'data');
@@ -120,17 +122,28 @@ export function createSiteServer(siteRoot, { dataDir: submissionDataDir = dataDi
   let canonicalRoot = fs.realpathSync(siteRoot);
   let bookRoutes = remoteRoutes(siteRoot);
   const canonicalLiveRoot = liveSiteRoot ? fs.realpathSync(liveSiteRoot) : null;
+  let store;
+  const getStore = () => store ||= new DashboardStore(submissionDataDir);
+  const catalogue = () => {
+    try { return JSON.parse(fs.readFileSync(path.join(currentSiteRoot, 'collection.json'), 'utf8')).books || []; }
+    catch (error) { if (error.code === 'ENOENT') return []; throw error; }
+  };
   const server = http.createServer(async (req, res) => {
     try {
       const url = new URL(req.url, 'http://localhost');
       let pathname = url.pathname;
       if (pathname === base) pathname = '/';
       else if (pathname.startsWith(`${base}/`)) pathname = pathname.slice(base.length);
+      if (pathname.startsWith('/api/dashboard')) {
+        await handleDashboard({ req, res, url, pathname, verifyUser, getStore, catalogue, dataDir: submissionDataDir });
+        return;
+      }
       if (pathname === '/api/submissions' && req.method === 'POST') {
         const body = await readBody(req);
         const user = await verifyUser(req, url, body);
         if (!user) { res.writeHead(401); res.end(); return; }
-        const received = await saveSubmission({ body, contentType: req.headers['content-type'], user, dataDir: submissionDataDir });
+        getStore().remember(user, catalogue());
+        const received = await saveSubmission({ body, contentType: req.headers['content-type'], user, dataDir: submissionDataDir, store: getStore() });
         const payload = JSON.stringify(received);
         res.writeHead(202, { 'content-type': 'application/json', 'content-length': Buffer.byteLength(payload), 'cache-control': 'no-store' });
         res.end(payload);
@@ -140,7 +153,7 @@ export function createSiteServer(siteRoot, { dataDir: submissionDataDir = dataDi
       if (submissionId && req.method === 'GET') {
         const user = await verifyUser(req, url, Buffer.alloc(0));
         if (!user) { res.writeHead(401); res.end(); return; }
-        const payload = JSON.stringify(await readSubmission({ submissionId, user, dataDir: submissionDataDir }));
+        const payload = JSON.stringify(await readSubmission({ submissionId, user, dataDir: submissionDataDir, store: getStore() }));
         res.writeHead(200, { 'content-type': 'application/json', 'cache-control': 'private, no-store' });
         res.end(payload);
         return;
@@ -150,6 +163,7 @@ export function createSiteServer(siteRoot, { dataDir: submissionDataDir = dataDi
       if (pathname === '/api/session') {
         const user = await verifyUser(req, url, Buffer.alloc(0));
         if (!user) { res.writeHead(401); res.end(); return; }
+        getStore().remember(user, catalogue());
         const payload = JSON.stringify({ user: { id: user.id, email: user.email, displayName: user.displayName || '' } });
         res.writeHead(200, { 'content-type': 'application/json', 'cache-control': 'private, no-store' });
         res.end(payload);
@@ -193,6 +207,7 @@ export function createSiteServer(siteRoot, { dataDir: submissionDataDir = dataDi
     currentSiteRoot = nextRoot;
     bookRoutes = nextRoutes;
   };
+  server.once('close', () => store?.close());
   return server;
 }
 

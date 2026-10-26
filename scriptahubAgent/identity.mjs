@@ -43,7 +43,8 @@ export async function verifyRouterUser(req, url, body, { verifier, createClient 
     const user = profile.user;
     if (user?.id !== actor.id.slice(5) || user.status !== 'active' || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(user.email || '')) return null;
     return { id: actor.id, email: user.email, displayName: user.displayName || user.username || '',
-      roles: profile.roles || [], capabilities: profile.capabilities || [] };
+      roles: profile.roles || [], capabilities: profile.capabilities || [],
+      installationAdministratorId: profile.installationAdministratorId ? `user:${profile.installationAdministratorId}` : null };
   } catch { throw Object.assign(new Error('Identity service is unavailable'), { status: 503 }); }
   finally { await client?.close(); }
 }

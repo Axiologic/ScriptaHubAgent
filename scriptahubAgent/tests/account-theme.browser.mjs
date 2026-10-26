@@ -23,21 +23,21 @@ const temporary=await fs.mkdtemp(path.join(os.tmpdir(),'scriptahub-account-brows
 let server,browser;
 try{
  const snapshot=await buildSnapshot({config:{schemaVersion:1,repositories:[]},dataDir:temporary});
- server=createSiteServer(snapshot.site,{verifyUser:async()=>({id:'user:fixture',email:'reader@example.org',displayName:'Reader'})});
+ server=createSiteServer(snapshot.site,{dataDir:temporary,verifyUser:async()=>({id:'user:fixture',email:'reader@example.org',displayName:'Reader'})});
  await new Promise(resolve=>server.listen(0,'127.0.0.1',resolve));
  const origin=`http://127.0.0.1:${server.address().port}`;
  const base=origin+'/base-agent-additional-server/scriptahubAgent/3002/';
  browser=await chromium.launch({headless:true,...(process.env.CHROMIUM_EXECUTABLE ? {executablePath:process.env.CHROMIUM_EXECUTABLE} : {}),args:['--disable-background-networking','--disable-sync','--disable-extensions','--mute-audio']});
  const context=await browser.newContext({viewport:{width:1440,height:1000}});
  await context.route('**/*',route=>{
-  if(route.request().url()===origin+'/base-agent-additional-server/userPersistoAgent/7000/service/dashboard/')return route.fulfill({contentType:'text/html',body:provider});
+  if(route.request().url()===origin+'/base-agent-additional-server/userPersistoAgent/7000/service/dashboard/?view=account')return route.fulfill({contentType:'text/html',body:provider});
   return route.request().url().startsWith(origin)?route.continue():route.abort();
  });
  const page=await context.newPage(),errors=[];page.on('pageerror',error=>errors.push(error.message));
  await page.goto(base+'index.html?lang=ro',{waitUntil:'networkidle'});
  const account=page.locator('[data-account-link]');assert.equal(await account.getAttribute('aria-label'),'Contul meu');
  await account.click();await page.waitForLoadState('networkidle');
- assert.equal(await page.locator('iframe').getAttribute('src'),'/base-agent-additional-server/userPersistoAgent/7000/service/dashboard/');
+ assert.equal(await page.locator('iframe').getAttribute('src'),'/base-agent-additional-server/userPersistoAgent/7000/service/dashboard/?view=account');
  const frame = page.frames().find(frame => frame.url().includes('/service/dashboard/'));
  assert.ok(frame);
  for (const theme of ['light', 'dark', 'orange', 'nord', 'dark-orange']) {
@@ -111,7 +111,8 @@ try{
    });
    assert.equal(await save.evaluate(button => getComputedStyle(button).backgroundColor),hoverExpected,theme + ': save profile hover');
    await save.evaluate(button => button.disabled = true);
-   assert.equal(await save.evaluate(button => getComputedStyle(button).backgroundColor),expectedButton.background,theme + ': save profile disabled');
+   assert.equal(await save.evaluate(button => getComputedStyle(button).backgroundColor),palette.field,theme + ': save profile disabled');
+   assert.equal(await save.evaluate(button => getComputedStyle(button).color),palette.muted,theme + ': disabled text');
    await save.evaluate(button => button.disabled = false);
    await page.mouse.move(0,0);
    const expectedField = await page.evaluate(() => {
@@ -128,6 +129,12 @@ try{
  await Promise.all([frame.waitForNavigation({waitUntil:'load'}), frame.evaluate(() => location.reload())]);
  await frame.locator('[data-scriptahub-account-theme]').waitFor({state:'attached'});
  assert.equal(await frame.locator('[data-scriptahub-account-theme]').count(),1);
+ const sheetOrder = await frame.locator('head link[rel="stylesheet"]').evaluateAll(nodes => nodes.map(node => node.hasAttribute('data-scriptahub-account-theme')));
+ assert.equal(sheetOrder.at(-1),true,'application styles must follow the fully parsed provider styles after iframe navigation');
+ const applicationFont = await page.evaluate(() => getComputedStyle(document.documentElement).fontFamily);
+ const cards = await frame.locator('.account-card').evaluateAll(nodes => nodes.map(node => ({font:getComputedStyle(node).fontFamily,radius:getComputedStyle(node).borderRadius,padding:getComputedStyle(node).padding})));
+ assert.ok(cards.length);
+ for (const card of cards) assert.deepEqual(card,{font:applicationFont,radius:'10px',padding:'18px 20px'});
  await page.screenshot({path:path.join(temporary,'account-desktop.png')});
  await page.setViewportSize({width:390,height:844});assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth>innerWidth),false);
  await page.screenshot({path:path.join(temporary,'account-mobile.png')});

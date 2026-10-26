@@ -22,6 +22,7 @@
     "port": 3002
   },
   "routerAccess": {
+    "entryPath": "/base-agent-additional-server/scriptahubAgent/3002/",
     "httpRoutes": [
       {
         "path": "/base-agent-additional-server/scriptahubAgent/3002/",

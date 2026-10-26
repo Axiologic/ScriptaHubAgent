@@ -34,13 +34,14 @@ test('authenticated PDF intake persists one pending task', async t => {
   const response = await fetch(endpoint, { method: 'POST', body: makeBody(), headers: { 'x-test-user': 'user:alice' } });
   assert.equal(response.status, 202);
   const received = await response.json();
-  assert.equal(received.state, 'pending');
-  assert.deepEqual(received.task, { schemaVersion: 1, id, type: 'scriptahub.manuscript' });
+  assert.equal(received.state, 'accepted');
+  assert.deepEqual(received.task, { schemaVersion: 1, id, type: 'scriptahub.manuscript', state: 'queued' });
+  assert.match(received.bookId, /^bk-[a-f0-9]+$/);
   assert.equal((await fetch(endpoint, { method: 'POST', body: makeBody(), headers: { 'x-test-user': 'user:alice' } })).status, 202);
   assert.equal((await fetch(endpoint, { method: 'POST', body: makeBody(), headers: { 'x-test-user': 'user:bob' } })).status, 409);
   const record = JSON.parse(await fs.readFile(path.join(root, 'inbox', id, 'record.json'), 'utf8'));
   assert.equal(record.files.length, 1);
-  assert.deepEqual(record.task, received.task);
+  assert.equal(record.task, null, 'inbox is immutable provenance, not an execution queue');
   assert.deepEqual(await fs.readdir(path.join(root, 'inbox')), [id]);
   assert.deepEqual(record.contact, { email: 'alice@example.test', displayName: 'Alice' });
   assert.match(record.files[0].sha256, /^[0-9a-f]{64}$/);

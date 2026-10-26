@@ -1,6 +1,7 @@
 import fs from 'node:fs/promises';
 import path from 'node:path';
 import crypto from 'node:crypto';
+import { DatabaseSync } from 'node:sqlite';
 import { callAgent } from './identity.mjs';
 import { verifyRecord } from './record-integrity.mjs';
 
@@ -26,6 +27,14 @@ async function notify(directory, record, state, send) {
 export async function processNotificationRecord(directory, { send = defaultSend } = {}) {
   const record = verifyRecord(JSON.parse(await fs.readFile(path.join(directory, 'record.json'), 'utf8')));
   if (!record.contact?.email || !record.id) return;
+  if (record.state === 'received') {
+    // A complete upload is not acknowledged until database registration succeeds.
+    let database;
+    try {
+      database = new DatabaseSync(path.join(directory, '..', '..', 'dashboard.sqlite'), { readOnly: true });
+      if (!database.prepare('SELECT 1 FROM changes WHERE id=?').get(record.id)) return;
+    } finally { database?.close(); }
+  }
   const state = JSON.parse(await fs.readFile(path.join(directory, 'notification-state.json'), 'utf8').catch(error => {
     if (error.code === 'ENOENT') return '{}';
     throw error;

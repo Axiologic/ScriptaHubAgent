@@ -1,6 +1,7 @@
+import { accountLogoutPath } from './account-context.js';
 (() => {
   'use strict';
-  const root = new URL('../', document.currentScript.src);
+  const root = new URL('../', import.meta.url);
   const labels = {
     en: ['My account', 'Home', 'Sign-in & security'],
     ro: ['Contul meu', 'Acasă', 'Autentificare și securitate'],
@@ -16,24 +17,38 @@
   const words = labels[language];
   document.documentElement.lang = language;
   document.title = words[0] + ' · ScriptaHub';
-  document.querySelector('[data-account-text="home"]').textContent = words[1];
+  const homeLabel = document.querySelector('[data-account-text="home"]');
+  if (homeLabel) homeLabel.textContent = words[1];
   document.querySelector('.account-page section').setAttribute('aria-label', words[0]);
   const frame = document.querySelector('.account-security-frame');
   function syncAccountTheme() {
     try {
       const document = frame.contentDocument;
-      if (!document?.head || !frame.contentWindow.location.pathname.startsWith('/base-agent-additional-server/userPersistoAgent/7000/service/dashboard/')) return;
-      if (!document.querySelector('[data-scriptahub-account-theme]')) {
-        const stylesheet = document.createElement('link');
-        stylesheet.rel = 'stylesheet';
-        stylesheet.href = new URL('assets/account-provider.css?v=account-palette', root).href;
-        stylesheet.dataset.scriptahubAccountTheme = '';
-        document.head.append(stylesheet);
+      const expected = new URL(frame.getAttribute('src'), location.href);
+      const actual = new URL(frame.contentWindow.location.href);
+      if (!document?.head || expected.origin !== location.origin || actual.origin !== expected.origin
+        || !actual.pathname.startsWith(expected.pathname)) return;
+      document.documentElement.dataset.scriptaEmbedded = 'true';
+      for (const signOut of document.querySelectorAll('.account-sign-out')) {
+        signOut.setAttribute('href', accountLogoutPath(root, location.href));
+        signOut.setAttribute('target', '_top');
       }
+      let stylesheet = document.querySelector('[data-scriptahub-account-theme]');
+      if (!stylesheet) {
+        stylesheet = document.createElement('link');
+        stylesheet.rel = 'stylesheet';
+        stylesheet.href = new URL('assets/account-provider.css?v=account-theme-2', root).href;
+        stylesheet.dataset.scriptahubAccountTheme = '';
+      }
+      // The first call may run while the iframe is still parsing its own styles.
+      // Restore cascade order on load and on every application theme update.
+      if (document.head.lastElementChild !== stylesheet) document.head.append(stylesheet);
       const style = getComputedStyle(window.document.documentElement);
-      for (const name of ['ink', 'muted', 'panel', 'surface', 'field', 'line', 'green', 'button-bg', 'button-hover', 'button-ink']) {
+      for (const name of ['ink', 'content', 'muted', 'panel', 'surface', 'field', 'line', 'green', 'button-bg', 'button-hover', 'button-ink', 'action-font-size']) {
         document.documentElement.style.setProperty(`--scripta-${name}`, style.getPropertyValue(`--${name}`));
       }
+      document.documentElement.style.setProperty('--scripta-font-family', style.fontFamily);
+      document.documentElement.style.setProperty('--scripta-font-size', style.fontSize);
       document.documentElement.style.colorScheme = style.colorScheme;
     } catch (error) {
       // An external identity redirect cannot be styled by the embedding page.
@@ -41,6 +56,6 @@
     }
   }
   frame.addEventListener('load', syncAccountTheme);
-  new MutationObserver(syncAccountTheme).observe(document.documentElement, { attributes: true, attributeFilter: ['data-theme'] });
+  new MutationObserver(syncAccountTheme).observe(document.documentElement, { attributes: true, attributeFilter: ['data-theme', 'style'] });
   syncAccountTheme();
 })();

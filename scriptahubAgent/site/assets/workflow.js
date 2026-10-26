@@ -82,14 +82,14 @@
   Object.entries(agreementSteps).forEach(([code, words]) => { text[code].contractItems[0] = words[5]; });
 
   const createFieldLabels = {
-    en: { title: "Proposed title", titleHint: "A working title (optional)", chooseFiles: "Choose attachments" },
-    fr: { title: "Titre proposé", titleHint: "Un titre de travail (facultatif)", chooseFiles: "Choisir les pièces jointes" },
-    de: { title: "Vorgeschlagener Titel", titleHint: "Ein Arbeitstitel (optional)", chooseFiles: "Anhänge auswählen" },
-    es: { title: "Título propuesto", titleHint: "Un título provisional (opcional)", chooseFiles: "Elegir adjuntos" },
-    pt: { title: "Título proposto", titleHint: "Um título provisório (opcional)", chooseFiles: "Escolher anexos" },
-    it: { title: "Titolo proposto", titleHint: "Un titolo provvisorio (facoltativo)", chooseFiles: "Scegli allegati" },
-    ro: { title: "Titlu propus", titleHint: "Un titlu de lucru (opțional)", chooseFiles: "Alege atașamente" },
-    pl: { title: "Proponowany tytuł", titleHint: "Tytuł roboczy (opcjonalnie)", chooseFiles: "Wybierz załączniki" },
+    en: { title: "Proposed title", titleHint: "A working title (optional)", chooseFiles: "Choose attachments", filesHint: "Attach a manuscript or reference material to support your proposal (optional)." },
+    fr: { title: "Titre proposé", titleHint: "Un titre de travail (facultatif)", chooseFiles: "Choisir les pièces jointes", filesHint: "Joignez un manuscrit ou des documents de référence à votre proposition (facultatif)." },
+    de: { title: "Vorgeschlagener Titel", titleHint: "Ein Arbeitstitel (optional)", chooseFiles: "Anhänge auswählen", filesHint: "Fügen Sie ein Manuskript oder Referenzmaterial hinzu (optional)." },
+    es: { title: "Título propuesto", titleHint: "Un título provisional (opcional)", chooseFiles: "Elegir adjuntos", filesHint: "Adjunta un manuscrito o material de referencia a tu propuesta (opcional)." },
+    pt: { title: "Título proposto", titleHint: "Um título provisório (opcional)", chooseFiles: "Escolher anexos", filesHint: "Anexe um manuscrito ou material de referência à proposta (opcional)." },
+    it: { title: "Titolo proposto", titleHint: "Un titolo provvisorio (facoltativo)", chooseFiles: "Scegli allegati", filesHint: "Allega un manoscritto o materiale di riferimento alla proposta (facoltativo)." },
+    ro: { title: "Titlu propus", titleHint: "Un titlu de lucru (opțional)", chooseFiles: "Alege atașamente", filesHint: "Atașează un manuscris sau materiale de referință pentru propunerea ta (opțional)." },
+    pl: { title: "Proponowany tytuł", titleHint: "Tytuł roboczy (opcjonalnie)", chooseFiles: "Wybierz załączniki", filesHint: "Dodaj rękopis lub materiały źródłowe do propozycji (opcjonalnie)." },
   };
 
   const escape = (value) => String(value ?? "").replace(/[&<>'"]/g, (character) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", "'": "&#39;", '"': "&quot;" })[character]);
@@ -133,15 +133,17 @@
     form._draftFiles = draft.files;
   }
   async function beginAgreement(subject, lines, lang, form, files = []) {
-    const id = globalThis.crypto?.randomUUID?.() || `${Date.now()}-${Math.random().toString(36).slice(2)}`;
+    let id;
+    try { id = await globalThis.ScriptaContributionBridge.newSubmissionId(); }
+    catch (error) { root.querySelector('[data-workflow-status]').textContent = error.message; return; }
     const back = new URL(location.href); back.searchParams.set("draft", id);
     const values = Object.fromEntries([...new FormData(form)].filter(([, value]) => typeof value === "string"));
     const draft = {subject, lines, values, files, returnUrl: back.href, createdAt: Date.now()};
     try {
-      await globalThis.ScriptaContributionBridge.saveFiles(id, [...(form.elements.documents?.files || [])]);
+      await globalThis.ScriptaContributionBridge.saveDraftFiles(id, [...(form.elements.documents?.files || [])], params().get('draft'), files);
       sessionStorage.setItem(draftPrefix + id, JSON.stringify(draft));
     }
-    catch { root.querySelector("[data-workflow-status]").textContent = agreementSteps[lang][4]; return; }
+    catch (error) { root.querySelector("[data-workflow-status]").textContent = error.message || agreementSteps[lang][4]; return; }
     const target = new URL("agreement/index.html", siteRoot);
     target.searchParams.set("lang", lang); target.searchParams.set("draft", id);
     history.replaceState(history.state, "", back);
@@ -155,7 +157,7 @@
     root.querySelector(".contribution-agreement .eyebrow").remove();
     if (!draft) { root.querySelector(".contract-accept").remove(); return; }
     const form = root.querySelector("[data-agreement-form]"), checkbox = root.querySelector("[data-contract-accept]");
-    checkbox.addEventListener("change", () => { form.querySelector("button").disabled = !checkbox.checked; });
+    checkbox.addEventListener("change", () => { const button = form.querySelector("button"); button.disabled = !checkbox.checked || button.dataset.submissionComplete === 'true'; });
     form.addEventListener("submit", event => {
       event.preventDefault();
       if (!checkbox.checked) return;
@@ -184,21 +186,14 @@
     document.title = `${words.createTitle} · ScriptaHub`;
 
     root.innerHTML = `${fork ? backToBook(book, lang) : ""}${pageHero(words.createKicker, words.createTitle, fork ? labels[1] : "")}${fork ? `<div class="fork-source">${compactBookContext(book, lang, words, false)}</div>` : ""}<section class="workflow-layout create-workflow-layout"><form class="workflow-form create-workflow-form" data-workflow-form><div class="form-grid create-form-grid">
-      <label class="form-file-field"><input class="form-file-input" type="file" name="documents" multiple aria-label="${escape(words.files)}"><span class="form-file-picker"><strong>${escape(words.files)}</strong><span class="form-file-button"><svg aria-hidden="true" viewBox="0 0 24 24"><path d="M8.5 12.8 14 7.3a3.2 3.2 0 0 1 4.5 4.5l-7.1 7.1a5 5 0 0 1-7.1-7.1l7.5-7.5"/></svg>${escape(fields.chooseFiles)}</span><span class="form-file-selection" data-file-selection aria-live="polite"></span></span></label>
       ${field(fields.title, "titles", "text", false, fields.titleHint, false, "create-title-field")}
       ${textarea(words.prompt, "prompt", words.promptHint, true, "create-instructions-field")}
-      </div><button class="workflow-submit" type="submit">${escape(agreementSteps[lang][0])}</button><p class="workflow-note">${escape(ScriptaContributionBridge.note(lang))}</p><p class="workflow-status" data-workflow-status aria-live="polite"></p></form></section>`;
+      <label class="form-file-field"><input class="form-file-input" type="file" name="documents" multiple aria-label="${escape(words.files)}"><span class="form-file-picker"><strong>${escape(words.files)}</strong><span class="form-file-hint">${escape(fields.filesHint)}</span><span class="form-file-button"><svg aria-hidden="true" viewBox="0 0 24 24"><path d="M8.5 12.8 14 7.3a3.2 3.2 0 0 1 4.5 4.5l-7.1 7.1a5 5 0 0 1-7.1-7.1l7.5-7.5"/></svg>${escape(fields.chooseFiles)}</span><span class="form-file-selection" data-file-selection aria-live="polite"></span></span></label>
+      </div><div class="create-form-footer"><p class="workflow-note">${escape(ScriptaContributionBridge.note(lang))}</p><button class="workflow-submit" type="submit">${escape(agreementSteps[lang][0])}<svg aria-hidden="true" viewBox="0 0 24 24"><path d="M4 12h16m-6-6 6 6-6 6"/></svg></button></div><p class="workflow-status" data-workflow-status aria-live="polite"></p></form></section>`;
     const form = root.querySelector("form");
     restoreDraft(form);
     const documents = form.elements.documents;
     const fileSelection = form.querySelector("[data-file-selection]");
-    const compactFileName = (name) => {
-      const dot = name.lastIndexOf(".");
-      const extension = dot > 0 && name.length - dot <= 8 ? name.slice(dot) : "";
-      const stem = extension ? name.slice(0, dot) : name;
-      const headLength = Math.max(6, 14 - extension.length);
-      return name.length <= headLength + extension.length ? name : `${stem.slice(0, headLength)}…${extension}`;
-    };
     const updateFileSelection = () => {
       const names = documents.files.length ? [...documents.files].map((file) => file.name) : (form._draftFiles || []);
       fileSelection.replaceChildren();
@@ -206,7 +201,7 @@
       const list = document.createElement("ul");
       names.forEach((name) => {
         const item = document.createElement("li");
-        item.textContent = compactFileName(name);
+        item.textContent = name;
         item.title = name;
         list.append(item);
       });

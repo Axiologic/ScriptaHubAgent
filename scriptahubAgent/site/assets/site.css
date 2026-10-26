@@ -1028,131 +1028,97 @@ button, select { cursor: pointer; }
   :root .site-header .theme-switcher button { width: 28px; min-width: 28px; height: 28px; }
 }
 
-/* Compact proposal workspace: short decisions first, source material beside them. */
+/* Book proposals: editorial fields beside a dedicated attachment panel. */
 [data-workflow-page="create"] .workflow-hero {
   grid-template-columns: minmax(0, 1fr);
-  padding: clamp(22px, 3vw, 36px) 0 clamp(18px, 2.4vw, 28px);
+  padding: clamp(26px, 3vw, 42px) 0 24px;
 }
-[data-workflow-page="create"] .workflow-hero h1 {
-  max-width: none;
-  font-size: clamp(2rem, 3.5vw, 3.65rem);
-  letter-spacing: -.055em;
-  line-height: .98;
+html[lang] [data-workflow-page="create"] .workflow-hero h1 {
+  max-width: 24ch;
+  font-size: clamp(1.8rem, 3vw, 2.8rem);
+  letter-spacing: -.045em;
+  line-height: 1.12;
   white-space: normal;
 }
 [data-workflow-page="create"] .create-workflow-layout {
-  grid-template-columns: minmax(0, 1fr) minmax(220px, .3fr);
-  gap: clamp(20px, 2.7vw, 38px);
-  padding: clamp(20px, 2.7vw, 34px) 0 38px;
+  grid-template-columns: minmax(0, 1fr);
+  padding: 24px 0 40px;
 }
-[data-workflow-page="create"] .create-workflow-form { padding: clamp(18px, 2vw, 26px); }
+.create-workflow-form { min-width: 0; }
+[data-workflow-page="create"] .create-workflow-form.workflow-form {
+  padding: clamp(20px, 2.8vw, 36px);
+  border: 1px solid var(--line);
+  border-radius: 14px;
+}
 .create-form-grid {
-  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) minmax(170px, .72fr);
-  grid-template-areas:
-    "name email files"
-    "url title files"
-    "instructions instructions instructions";
-  gap: 14px;
+  grid-template-columns: minmax(0, 1.65fr) minmax(220px, 1fr);
+  grid-template-areas: "title files" "instructions files";
+  gap: 24px;
+  align-items: start;
 }
-.create-name-field { grid-area: name; }
-.create-email-field { grid-area: email; }
-.create-url-field { grid-area: url; }
 .create-title-field { grid-area: title; }
 .create-instructions-field { grid-area: instructions; }
-.create-form-grid .form-field input { min-height: 40px; }
-.create-instructions-field textarea { min-height: 142px; }
+.create-form-grid .form-field { gap: 10px; min-width: 0; }
+.create-form-grid .form-field input,
+.create-form-grid .form-field textarea { border-radius: 9px; padding: 13px 14px; font-size: .85rem; font-weight: 400; }
+.create-form-grid .form-field input { min-height: 48px; }
+.create-form-grid .form-field input::placeholder,
+.create-form-grid .form-field textarea::placeholder { color: var(--muted); opacity: 1; }
+.create-instructions-field textarea { min-height: 200px; line-height: 1.6; }
 .form-file-field { position: relative; display: block; min-width: 0; align-self: stretch; grid-area: files; color: var(--content); cursor: pointer; }
 .form-file-input {
-  position: absolute !important;
-  width: 1px !important;
-  height: 1px !important;
-  padding: 0 !important;
-  overflow: hidden;
-  clip: rect(0 0 0 0);
-  clip-path: inset(50%);
-  opacity: 0;
-  white-space: nowrap;
-  border: 0 !important;
-  appearance: none;
+  position: absolute !important; width: 1px !important; height: 1px !important;
+  padding: 0 !important; overflow: hidden; clip: rect(0 0 0 0);
+  clip-path: inset(50%); opacity: 0; white-space: nowrap; border: 0 !important; appearance: none;
 }
 .form-file-picker {
-  display: flex;
-  width: 100%;
-  height: 100%;
-  min-height: 0;
-  padding: 14px;
-  align-items: flex-start;
-  border: 1px solid color-mix(in srgb, var(--green) 18%, var(--line));
-  border-radius: 4px;
-  background: color-mix(in srgb, var(--green) 5%, var(--field));
-  flex-direction: column;
+  display: flex; width: 100%; height: 100%; min-height: 240px;
+  padding: clamp(18px, 2vw, 28px); align-items: flex-start;
+  border: 1px dashed color-mix(in srgb, var(--green) 45%, var(--line));
+  border-radius: 12px; background: color-mix(in srgb, var(--green) 4%, var(--surface));
+  flex-direction: column; gap: 14px;
   transition: border-color .16s ease, background-color .16s ease, box-shadow .16s ease;
 }
-.form-file-picker strong { color: var(--ink); font-size: .8rem; line-height: 1.3; }
+.form-file-picker strong { color: var(--ink); font-size: .85rem; line-height: 1.4; }
+.form-file-hint { color: var(--muted); font-size: .76rem; line-height: 1.6; }
 .form-file-button {
-  display: inline-flex;
-  min-height: 34px;
-  margin-top: 11px;
-  padding: 0 12px;
-  align-items: center;
-  border-radius: 4px;
-  background: #075e54;
-  color: #ffffff;
-  font-size: .76rem;
-  font-weight: 750;
-  line-height: 1;
-  gap: 7px;
+  display: inline-flex; max-width: 100%; min-height: 42px; padding: 10px 14px;
+  align-items: center; gap: 8px; border: 1px solid var(--line); border-radius: 8px;
+  background: var(--surface); color: var(--green); font-size: .76rem; font-weight: 700; line-height: 1.4;
 }
-.form-file-button svg { width: 15px; height: 15px; overflow: visible; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
-.form-file-selection { width: 100%; min-height: 28px; margin-top: 12px; }
-.form-file-selection:empty { min-height: 0; margin-top: 0; }
-.form-file-selection ul { display: flex; max-height: 66px; margin: 0; padding: 0; overflow: hidden auto; align-content: flex-start; flex-wrap: wrap; gap: 6px; list-style: none; }
+.form-file-button svg { flex: 0 0 18px; width: 18px; height: 18px; overflow: visible; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
+.form-file-selection { width: 100%; min-width: 0; }
+.form-file-selection:empty { display: none; }
+.form-file-selection ul { display: grid; max-height: 180px; margin: 0; padding: 0; overflow-y: auto; gap: 8px; list-style: none; }
 .form-file-selection li {
-  width: 104px;
-  height: 28px;
-  padding: 0 10px;
-  overflow: hidden;
-  border: 1px solid color-mix(in srgb, var(--green) 24%, var(--line));
-  border-radius: 999px;
-  background: var(--panel);
-  color: var(--ink);
-  font-size: .68rem;
-  font-weight: 700;
-  line-height: 26px;
-  text-align: center;
-  text-overflow: clip;
-  white-space: nowrap;
+  padding: 8px 10px; overflow: hidden; border: 1px solid var(--line); border-radius: 6px;
+  background: var(--surface); color: var(--content); font-size: .72rem; line-height: 1.4;
+  text-overflow: ellipsis; white-space: nowrap;
 }
 .form-file-field:hover .form-file-picker,
 .form-file-field:focus-within .form-file-picker {
-  border-color: var(--green);
-  background: color-mix(in srgb, var(--green) 7%, var(--field));
+  border-color: var(--green); background: color-mix(in srgb, var(--green) 7%, var(--surface));
   box-shadow: 0 0 0 3px color-mix(in srgb, var(--green) 12%, transparent);
 }
-
+.create-form-footer { display: flex; align-items: center; justify-content: space-between; gap: 24px; margin-top: 28px; padding-top: 24px; border-top: 1px solid var(--line); }
+.create-form-footer .workflow-note { max-width: 65ch; margin: 0; }
+.create-form-footer .workflow-submit { flex: 0 0 auto; display: inline-flex; align-items: center; gap: 14px; min-height: 46px; margin: 0; border-color: transparent; border-radius: 8px; padding: 12px 22px; }
+.create-form-footer .workflow-submit svg { width: 18px; height: 18px; fill: none; stroke: currentColor; stroke-width: 1.8; }
+:root .create-form-footer .workflow-submit::before { content: none; }
+.create-form-footer .workflow-submit:focus-visible { outline: 2px solid var(--green); outline-offset: 3px; }
+.create-workflow-form .workflow-status:empty { display: none; }
 @media (max-width: 900px) {
-  [data-workflow-page="create"] .create-workflow-layout { grid-template-columns: minmax(0, 1fr); }
-  .create-form-grid {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-    grid-template-areas:
-      "name email"
-      "url title"
-      "files files"
-      "instructions instructions";
-  }
-  .form-file-picker { min-height: 130px; }
+  .create-form-grid { grid-template-columns: minmax(0, 1fr); grid-template-areas: "title" "instructions" "files"; }
+  .form-file-picker { min-height: 0; }
+}
+@media (max-width: 590px) {
+  html[lang] [data-workflow-page="create"] .workflow-hero h1 { font-size: clamp(1.7rem, 7vw, 2.3rem); }
+  .create-form-grid { gap: 20px; }
+  .create-instructions-field textarea { min-height: 180px; }
+  .create-form-footer { align-items: stretch; flex-direction: column; gap: 18px; }
+  .create-form-footer .workflow-submit { justify-content: center; }
 }
 
-@media (max-width: 590px) {
-  [data-workflow-page="create"] .workflow-hero h1 { font-size: clamp(1.9rem, 9vw, 2.65rem); }
-  .create-form-grid {
-    grid-template-columns: minmax(0, 1fr);
-    grid-template-areas: "name" "email" "url" "title" "files" "instructions";
-    gap: 12px;
-  }
-  .form-file-picker { min-height: 140px; }
-  .create-instructions-field textarea { min-height: 150px; }
-}
 
 /* One icon rhythm for every labelled action. */
 :root {
@@ -1612,7 +1578,7 @@ body[data-book-workflow] .animation-contribution>.workflow-hero{padding-bottom:8
  .book-side-actions{flex-wrap:wrap}
  .book-side-actions .button{flex:1 1 auto;min-width:max-content}
 }
-.workflow-account{margin:0 0 1rem;padding:.65rem .9rem;border-radius:.7rem;background:#f0f4ef;color:#34503a;font-size:.9rem}
+.workflow-account{display:flex;align-items:center;gap:9px;margin:0 0 24px;padding:0 0 18px;border-bottom:1px solid var(--line);color:var(--muted);font-size:.75rem;line-height:1.5;overflow-wrap:anywhere}.workflow-account::before{content:"";flex:0 0 7px;width:7px;height:7px;border-radius:50%;background:var(--green)}
 
 .site-header .header-tools > .header-account { width: 34px; padding: 0; }
 @media (max-width: 590px) { .site-header .header-tools > .header-account { width: 28px; } }
@@ -1624,6 +1590,18 @@ body[data-book-workflow] .animation-contribution>.workflow-hero{padding-bottom:8
 :root .site-header.header-unified .header-tools { display: flex; flex: 1; flex-wrap: nowrap; width: auto; gap: 16px; }
 :root .header-unified .header-navigation, :root .header-unified .header-preferences { display: flex; align-items: center; gap: 6px; }
 :root .header-unified .header-actions { display: contents; }
+.header-account-menu { position: relative; order: 3; flex: none; }
+:root .site-icon-button { display: inline-flex; flex: none; align-items: center; justify-content: center; width: 38px; min-width: 38px; height: 38px; min-height: 38px; padding: 0; border: 1px solid var(--line); border-radius: 3px; background: var(--field); color: var(--muted); cursor: pointer; }
+:root .site-icon-button svg { display: block; flex: none; width: 19px; height: 19px; }
+:root .site-icon-button:hover:not(:disabled) { background: var(--inset-hover); color: var(--green); }
+:root .site-icon-button:focus-visible { outline: 2px solid var(--green); outline-offset: 3px; }
+:root .site-icon-button:disabled { background: var(--field); color: var(--muted); cursor: default; }
+:root .button.button-no-icon::before { content: none; }
+.header-account-menu > button { cursor: pointer; }
+.header-account-options[hidden] { display: none; }
+.header-account-options { position: absolute; z-index: 100; right: 0; top: calc(100% + 8px); display: grid; width: max-content; min-width: 180px; max-width: calc(100vw - 32px); padding: 6px; border: 1px solid var(--line); border-radius: 10px; background: var(--surface); }
+:root .site-header.header-unified .header-account-options > a { display: flex; align-items: center; min-height: 44px; padding: 8px 12px; box-sizing: border-box; border: 0; border-radius: 6px; background: transparent; color: var(--ink); font-size: var(--action-font-size); text-decoration: none; }
+:root .site-header.header-unified .header-account-options > a:is(:hover,:focus-visible,[aria-current="page"]) { background: var(--field); color: var(--green); }
 :root .header-unified .header-navigation { order: 0; }
 :root .header-unified .header-actions .header-create { order: 1; }
 :root .header-unified .header-preferences { order: 2; padding-left: 16px; border-left: 1px solid var(--line); }
@@ -1631,11 +1609,14 @@ body[data-book-workflow] .animation-contribution>.workflow-hero{padding-bottom:8
 :root .site-header.header-unified :is(a,button,select) { box-shadow: none; }
 :root .site-header.header-unified :is(a,button) svg { display: block; flex: none; width: 19px; height: 19px; }
 :root .site-header.header-unified .header-navigation > a,
+:root .site-header.header-unified .header-account-menu > .header-account,
 :root .site-header.header-unified .header-actions > .header-account { display: inline-flex; flex: none; align-items: center; justify-content: center; width: 38px; min-width: 38px; height: 38px; min-height: 38px; padding: 0; border: 1px solid transparent; border-radius: 10px; background: transparent; color: var(--muted); font-size: 0; box-shadow: none; text-decoration: none; }
 :root .site-header.header-unified .header-navigation > a::before { content: none; }
 :root .site-header.header-unified .header-navigation > a:hover,
 :root .site-header.header-unified .header-navigation > a[aria-current="page"] { background: var(--field); color: var(--green); border-color: transparent; }
+:root .site-header.header-unified .header-account-menu > .header-account,
 :root .site-header.header-unified .header-actions > .header-account { background: var(--field); border-color: var(--line); }
+:root .site-header.header-unified .header-account-menu > .header-account:hover,
 :root .site-header.header-unified .header-actions > .header-account:hover { background: var(--inset-hover); color: var(--green); }
 :root .site-header.header-unified .header-actions > .header-create { display: inline-flex; align-items: center; justify-content: center; gap: 7px; height: 38px; min-height: 38px; padding: 0 15px; border: 1px solid var(--button-bg); border-radius: 10px; background: var(--button-bg); color: var(--button-ink); box-shadow: none; font-size: 13px; font-weight: 650; text-decoration: none; white-space: nowrap; }
 :root .site-header.header-unified .header-actions > .header-create::before { content: none; }

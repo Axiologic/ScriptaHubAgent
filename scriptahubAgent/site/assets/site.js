@@ -241,8 +241,7 @@
     const create = tools.querySelector('[data-create-link]');
     create.innerHTML = headerIcon('plus') + `<span>${createLabels[language]}</span>`;
     const account = tools.querySelector('[data-account-link]');
-    account.innerHTML = headerIcon('account');
-    actions.append(create, account);
+    actions.append(create, account.closest('.header-account-menu'));
     tools.append(navigation, preferences, actions);
   }
   const boundedSiteScale = value => Number.isFinite(Number(value)) ? Math.max(.8, Math.min(1.5, Number(value))) : 1;
@@ -357,6 +356,51 @@
       link.setAttribute('aria-label', accountLabel);
       link.title = accountLabel;
       link.href = new URL(`account/index.html?lang=${language}`, siteRootUrl).href;
+      let menu = tools.querySelector('.header-account-menu');
+      if (!menu) {
+        menu = document.createElement('div');
+        menu.className = 'header-account-menu';
+        const toggle = document.createElement('button');
+        toggle.type = 'button';
+        toggle.className = 'header-home header-account site-icon-button';
+        toggle.setAttribute('aria-expanded', 'false');
+        toggle.innerHTML = headerIcon('account');
+        const panel = document.createElement('nav');
+        panel.className = 'header-account-options';
+        panel.id = `header-account-options-${document.querySelectorAll('.header-account-menu').length}`;
+        panel.hidden = true;
+        toggle.setAttribute('aria-controls', panel.id);
+        panel.setAttribute('aria-label', 'Account');
+        tools.append(menu);
+        menu.append(toggle, panel);
+        panel.append(link);
+        const close = () => { panel.hidden = true; toggle.setAttribute('aria-expanded', 'false'); };
+        toggle.addEventListener('click', () => {
+          panel.hidden = !panel.hidden;
+          toggle.setAttribute('aria-expanded', String(!panel.hidden));
+        });
+        document.addEventListener('click', event => { if (!menu.contains(event.target)) close(); });
+        menu.addEventListener('keydown', event => {
+          if (event.key === 'Escape') { close(); toggle.focus(); }
+        });
+      }
+      menu.querySelector('button').setAttribute('aria-label', accountLabel);
+      menu.querySelector('button').title = accountLabel;
+      link.className = 'account-menu-link';
+      link.textContent = accountLabel;
+      let dashboard = tools.querySelector('[data-dashboard-link]');
+      if (!dashboard) {
+        dashboard = document.createElement('a');
+        dashboard.dataset.dashboardLink = '';
+        dashboard.className = 'account-menu-link';
+        dashboard.textContent = 'Dashboard';
+        link.before(dashboard);
+      }
+      dashboard.href = new URL(`account/dashboard.html?lang=${language}`, siteRootUrl).href;
+      for (const item of [link, dashboard]) {
+        if (new URL(item.href).pathname === location.pathname) item.setAttribute('aria-current', 'page');
+        else item.removeAttribute('aria-current');
+      }
     });
     document.querySelectorAll("[data-home-link], .site-header .wordmark").forEach((link) => {
       link.href = new URL(`index.html?lang=${language}`, siteRootUrl).href;

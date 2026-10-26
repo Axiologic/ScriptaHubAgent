@@ -1,5 +1,19 @@
 /* Applied only inside the embedded UserPersisto dashboard. */
-:root {
+:root[data-scripta-embedded] {
+  --account-bg: var(--scripta-panel);
+  --account-surface: var(--scripta-surface);
+  --account-soft: var(--scripta-field);
+  --account-text: var(--scripta-ink);
+  --account-muted: var(--scripta-muted);
+  --account-border: var(--scripta-line);
+  --account-border-strong: var(--scripta-line);
+  --account-primary: var(--scripta-button-bg);
+  --account-on-primary: var(--scripta-button-ink);
+  --account-link: var(--scripta-green);
+  --account-active-bg: var(--scripta-field);
+  --account-success: var(--scripta-green);
+  --account-focus: var(--scripta-green);
+  --account-shadow: transparent;
   --text-color: var(--scripta-ink);
   --secondary-text-color: var(--scripta-muted);
   --border-color: var(--scripta-line);
@@ -10,21 +24,36 @@
   --link-color: var(--scripta-green);
   --border: var(--scripta-line);
   --danger-color: light-dark(#b42318, #ffb4ab);
+  --account-danger: var(--danger-color);
+  font-family: var(--scripta-font-family);
+  font-size: var(--scripta-font-size);
 }
 .up-enrollment button:hover:not(:disabled) { background: var(--scripta-button-hover); color: var(--scripta-button-ink); }
 .up-enrollment :focus-visible { outline-color: var(--scripta-green); }
 html, body { background: var(--scripta-panel); color: var(--scripta-ink); }
+body { font-family: var(--scripta-font-family); font-size: var(--scripta-action-font-size); line-height: 1.5; }
 a { color: var(--scripta-green); }
 .account-header, .account-details { border-color: var(--scripta-line); }
-.account-card { background: var(--scripta-surface); color: var(--scripta-ink); border-color: var(--scripta-line); box-shadow: none; }
+.account-card { background: var(--scripta-surface); color: var(--scripta-ink); border-color: var(--scripta-line); border-radius: 10px; padding: 18px 20px; box-shadow: none; }
+.account-grid { gap: 16px; align-items: start; }
+.page-heading { margin-bottom: 16px; }
+.page-heading h1 { font-family: inherit; }
+.account-card h2 { font-size: 1rem; font-weight: 650; line-height: 1.4; }
+.up-enrollment h3 { font-family: inherit; font-size: var(--scripta-action-font-size); font-weight: 650; }
+.account-card :is(.account-email,.card-description,.account-details), .page-heading p, #profile-form label, .up-enrollment :is(p,label,details) { font-size: var(--scripta-action-font-size); }
 .page-heading p, .page-heading .eyebrow, .account-email, .card-description, .optional, .account-details, footer { color: var(--scripta-muted); }
 html body .pill, html body #account-role { background: var(--scripta-field); color: var(--scripta-ink); border-color: var(--scripta-line); }
 input, select, textarea, #profile-form input { background: var(--scripta-field); color: var(--scripta-ink); border-color: var(--scripta-line); }
 button, #profile-form button, .button-link { background: var(--scripta-button-bg); color: var(--scripta-button-ink); border-color: var(--scripta-button-bg); }
+:is(#profile-form button,.up-enrollment button,.button-link) { font-family: inherit; font-size: var(--scripta-action-font-size); font-weight: 650; line-height: 1.4; border-radius: 3px; min-height: 40px; }
+:is(#profile-form input,.up-enrollment input,.up-enrollment select,.up-enrollment textarea:not([readonly])) { font-family: inherit; font-size: var(--scripta-action-font-size); border-radius: 7px; }
+.up-enrollment :is(.up-password-setup,.up-totp-setup,.up-reauth,.up-contact) { padding: 16px; border-radius: 10px; }
+.up-enrollment .up-secondary { background: var(--scripta-field); color: var(--scripta-ink); border-color: var(--scripta-line); }
+.up-enrollment .up-secondary:hover:not(:disabled) { background: var(--scripta-surface); color: var(--scripta-green); border-color: var(--scripta-green); }
 button:hover:not(:disabled), #profile-form button:hover:not(:disabled), .button-link:hover { background: var(--scripta-button-hover); }
 html body #save-profile { background: var(--scripta-button-bg); color: var(--scripta-button-ink); border-color: var(--scripta-button-bg); }
 html body #save-profile:hover:not(:disabled) { background: var(--scripta-button-hover); }
-html body #save-profile:disabled { background: var(--scripta-button-bg); color: var(--scripta-button-ink); }
+html body :is(#save-profile,.up-enrollment button):disabled { background: var(--scripta-field); color: var(--scripta-muted); border-color: var(--scripta-line); opacity: .65; cursor: default; }
 .account-navigation a { background: var(--scripta-field); color: var(--scripta-ink); border-color: var(--scripta-line); }
 .account-navigation a:hover, .account-navigation a[aria-current="page"] { background: var(--scripta-button-bg); color: var(--scripta-button-ink); border-color: var(--scripta-button-bg); }
 .account-status:not(.error) { color: var(--scripta-green); }
@@ -43,3 +72,4 @@ html body #save-profile:disabled { background: var(--scripta-button-bg); color: 
 .account-status.error, .up-enrollment .up-enrollment-status.error { color: var(--danger-color); }
 input { accent-color: var(--scripta-green); }
 ::selection { background: var(--scripta-button-bg); color: var(--scripta-button-ink); }
+@media (max-width: 740px) { .account-card { padding: 16px; } }

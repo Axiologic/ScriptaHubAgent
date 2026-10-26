@@ -9,10 +9,11 @@ test('signed UserPersisto delegation supplies the contact identity', async () =>
   const calls = [];
   const createClient = async (agent, options) => {
     calls.push({ agent, options });
-    return { callTool: async () => ({ content: [{ type: 'text', text: JSON.stringify({ user: { id: 'alice', status: 'active', email: 'alice@example.test', displayName: 'Alice' }, roles: ['user'] }) }] }), close: async () => {} };
+    return { callTool: async () => ({ content: [{ type: 'text', text: JSON.stringify({ user: { id: 'alice', status: 'active', email: 'alice@example.test', displayName: 'Alice' }, roles: ['user'], installationAdministratorId: 'system' }) }] }), close: async () => {} };
   };
   const user = await verifyRouterUser(req, url, Buffer.alloc(0), { verifier, createClient });
   assert.deepEqual({ id: user.id, email: user.email }, { id: 'user:alice', email: 'alice@example.test' });
+  assert.equal(user.installationAdministratorId, 'user:system');
   assert.deepEqual(calls, [{ agent: 'userPersistoAgent', options: { userDelegationToken: 'grant' } }]);
   assert.equal(await verifyRouterUser(req, url, Buffer.alloc(0), { verifier: { verifyHttpRouteAuthInfoFromHeaders: () => ({ ...verifier.verifyHttpRouteAuthInfoFromHeaders(), payload: { sub: 'user:bob', actor: { kind: 'user', id: 'user:alice' } } }) }, createClient }), null);
   assert.equal(calls.length, 1);

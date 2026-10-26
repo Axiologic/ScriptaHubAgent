@@ -49,14 +49,18 @@
     document.querySelector('meta[name="description"]')?.setAttribute("content", words.lead);
     const agreement = {en:"I accept the contribution agreement",ro:"Accept acordul de contribuție",fr:"J’accepte l’accord de contribution",de:"Ich akzeptiere die Beitragsvereinbarung",es:"Acepto el acuerdo de contribución",pt:"Aceito o acordo de contribuição",it:"Accetto l’accordo di contribuzione",pl:"Akceptuję umowę dotyczącą wkładu"};
     root.innerHTML = `<section class="workflow-hero"><div><p class="eyebrow">${escape(words.kicker)}</p><h1>${escape(words.title)}</h1></div><p class="lead">${escape(words.lead)}</p></section><section class="workflow-layout"><form class="workflow-form" data-librarian-form><div class="form-grid"><label class="form-field form-field-wide"><span>${escape(words.request)}</span><textarea name="request" required placeholder="${escape(words.requestHint)}">${escape(initialQuery)}</textarea></label><label class="form-field form-field-wide"><span>${escape(words.expectations)}</span><textarea name="expectations" required placeholder="${escape(words.expectationsHint)}"></textarea></label></div><label class="contract-accept"><input type="checkbox" name="agreement" required><span>${escape(agreement[language])} · <a href="../agreement/index.html?lang=${language}">ScriptaHub</a></span></label><button class="workflow-submit" type="submit">${escape(words.send)}</button><p class="workflow-note">${escape(ScriptaContributionBridge.note(language))}</p><p class="workflow-status" data-librarian-status aria-live="polite"></p></form><aside class="workflow-context"><p class="eyebrow">ScriptaHub</p><h2>${escape(words.sideTitle)}</h2><p>${escape(words.sideBody)}</p></aside></section>`;
-    root.querySelector("form").addEventListener("submit", (event) => {
+    root.querySelector("form").addEventListener("submit", async (event) => {
       event.preventDefault();
       const form = event.currentTarget;
       if (!form.reportValidity()) return;
       const data = new FormData(form);
       const values = Object.fromEntries([...data].filter(([key]) => key !== 'agreement'));
-      const metadata = {submissionId: crypto.randomUUID(), kind:'librarian-feedback', agreementVersion:'2026-09-10', agreementAccepted:true, values, language};
-      void globalThis.ScriptaContributionBridge.submitDirect(metadata, [], root.querySelector('[data-librarian-status]'), form.querySelector('button[type=submit]'));
+      const status = root.querySelector('[data-librarian-status]');
+      try {
+        form.dataset.submissionId ||= await ScriptaContributionBridge.newSubmissionId();
+        const metadata = {submissionId: form.dataset.submissionId, kind:'librarian-feedback', agreementVersion:'2026-09-10', agreementAccepted:true, values, language};
+        await globalThis.ScriptaContributionBridge.submitDirect(metadata, [], status, form.querySelector('button[type=submit]'));
+      } catch (error) { status.textContent = error.message; }
     });
   }
 
