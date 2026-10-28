@@ -1,11 +1,12 @@
-.scriptahub-settings-body { display: grid; gap: 16px; max-height: 75vh; overflow-y: auto; box-sizing: border-box; }
+.scriptahub-settings-body { display: flex; flex-direction: column; gap: 16px; flex: 1 1 auto; min-height: 0; overflow-y: auto; box-sizing: border-box; }
 .scriptahub-settings-body fieldset { display: grid; gap: 20px; min-width: 0; border: 0; padding: 0; margin: 0; }
 .scriptahub-settings-body .form-item { display: grid; gap: 8px; }
 .scriptahub-settings-body p { margin: 0; color: var(--secondary-text-color, #57606a); font-size: 13px; line-height: 1.5; }
 .scriptahub-settings-body #scriptaSyncInterval { max-width: 180px; }
 .scripta-sources-heading { display: flex; flex-wrap: wrap; gap: 12px; justify-content: space-between; align-items: center; margin-bottom: 10px; }
 .scripta-sources-heading h3 { font-size: 16px; margin: 0; }
-#scriptaRepositories { display: grid; gap: 12px; list-style: none; padding: 0; margin: 16px 0 0; }
+.scripta-repositories-caption { display: flex; align-items: center; gap: 8px; margin-top: 20px; color: var(--secondary-text-color, #57606a); font-size: 13px; }
+#scriptaRepositories { display: grid; gap: 12px; list-style: none; padding: 0; margin: 10px 0 0; }
 .scripta-repository { display: flex; flex-wrap: wrap; align-items: flex-start; gap: 12px; border: 1px solid var(--border-color, #d6d9de); border-radius: 8px; padding: 16px; }
 .scripta-repository-content { display: grid; gap: 8px; flex: 1 1 280px; min-width: 0; }
 .scripta-repository-content strong { overflow-wrap: anywhere; font-size: 14px; }
@@ -15,3 +16,347 @@
 .scripta-repository-actions .scripta-delete { color: var(--danger-color, #b42318); }
 .scripta-repository-empty { padding: 20px; border: 1px dashed var(--border-color, #d6d9de); border-radius: 8px; color: var(--secondary-text-color, #57606a); }
 .scriptahub-settings-body #scriptaSettingsStatus.error { color: var(--danger-color, #b42318); }
+
+dialog.modal.scriptahub-settings-dialog {
+  --modal-width: 760px;
+  --modal-max-width: 760px;
+  --modal-max-height: 720px;
+  /* Keep one centered size on both tabs, including below Explorer's mobile
+     breakpoint, where the generic modal otherwise becomes full-width. */
+  width: min(var(--modal-width), calc(100vw - 32px));
+  min-width: 0;
+  max-width: calc(100vw - 32px);
+  height: min(720px, calc(100dvh - 32px));
+  max-height: calc(100dvh - 32px);
+  inset: 0;
+  margin: auto;
+}
+.scriptahub-settings-modal { display: flex; flex-direction: column; width: 100%; height: 100%; min-width: 0; min-height: 0; }
+.scripta-settings-tabs { margin: 0; padding: 0; gap: 24px; flex-wrap: nowrap; border-bottom: 1px solid var(--border); }
+.scripta-settings-tabs .settings-tab {
+  margin-bottom: -1px;
+  padding: 10px 2px;
+  min-height: 44px;
+  border: 0;
+  border-bottom: 2px solid transparent;
+  border-radius: 0;
+  box-shadow: none;
+  background: transparent;
+  color: var(--text-soft);
+  white-space: normal;
+  text-align: center;
+}
+.scripta-settings-tabs .settings-tab:hover { color: var(--text); background: transparent; }
+.scripta-settings-tabs .settings-tab.active { color: var(--accent); border-bottom-color: var(--accent); background: transparent; }
+.scripta-settings-tabs .settings-tab:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.scripta-settings-panel { display: grid; align-content: start; gap: 24px; min-width: 0; }
+.scripta-settings-panel[hidden] { display: none; }
+.scripta-settings-panel h3 { margin: 0; font-size: 16px; }
+.scripta-processing-settings, .scripta-publication-settings { display: grid; gap: 16px; }
+.scripta-processing-settings { border-top: 1px solid var(--border-color, #d6d9de); padding-top: 20px; }
+.scripta-settings-fields { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; }
+.scripta-settings-panel .form-input { width: 100%; min-width: 0; box-sizing: border-box; }
+.scripta-publication-status { display: inline-flex; align-items: center; gap: 6px; font-size: 12px; font-weight: 700; }
+.scripta-publication-status[data-state="configured"] { color: var(--success); }
+.scripta-publication-status[data-state="unconfigured"] { color: var(--danger); }
+.scripta-publication-status[data-state]::before { font-size: 16px; line-height: 1; }
+.scripta-publication-status[data-state="configured"]::before { content: "✓"; }
+.scripta-publication-status[data-state="unconfigured"]::before { content: "✕"; }
+.scriptahub-settings-actions { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 12px; padding-top: 16px; border-top: 1px solid var(--border-color, #d6d9de); }
+#scriptaSettingsStatus:empty { display: none; }
+@media (max-width: 560px) {
+  .scriptahub-settings-modal { width: 100%; }
+  .scripta-settings-fields { grid-template-columns: minmax(0, 1fr); }
+  .scriptahub-settings-actions { justify-content: flex-end; }
+  .scriptahub-settings-actions p { margin-right: auto; }
+}
+
+/* Authentication layout follows GitAgent git-credentials-prompt; no cross-agent asset dependency. */
+.scripta-publication-settings.git-credentials-card {
+    --git-credentials-title-size: 16px;
+    --git-credentials-body-size: 13px;
+    --git-credentials-label-size: 12px;
+    --git-credentials-meta-size: 11px;
+    --git-credentials-section-size: 11px;
+    --git-credentials-section-secondary-size: 10px;
+    --git-credentials-line-height: 1.4;
+}
+
+.scripta-publication-settings.git-credentials-card {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    font-size: var(--git-credentials-body-size);
+    line-height: var(--git-credentials-line-height);
+}
+
+.scripta-publication-settings .git-credentials-group {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    padding: 10px 12px;
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    background: var(--surface-soft);
+}
+
+.scripta-publication-settings .git-credentials-group + .git-credentials-group {
+    position: relative;
+}
+
+.scripta-publication-settings .git-credentials-group + .git-credentials-group::before {
+    content: "";
+    position: absolute;
+    top: -6px;
+    left: 12px;
+    right: 12px;
+    height: 1px;
+    background-color: var(--border);
+    pointer-events: none;
+}
+
+.scripta-publication-settings .git-credentials-group-title {
+    font-size: var(--git-credentials-section-size);
+    line-height: 1.2;
+    font-weight: 700;
+    letter-spacing: 0.05em;
+    text-transform: uppercase;
+    color: color-mix(in srgb, var(--text-color, inherit) 72%, transparent);
+}
+
+.scripta-publication-settings .git-credentials-label {
+    font-size: var(--git-credentials-label-size);
+    line-height: 1.25;
+    font-weight: 700;
+}
+
+.scripta-publication-settings .git-auth-methods {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px;
+    flex: 1 1 auto;
+    min-width: 0;
+    align-items: center;
+}
+
+.scripta-publication-settings .git-auth-method-option {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    min-height: 34px;
+    padding: 6px 10px;
+    font-size: var(--git-credentials-body-size);
+    line-height: 1.2;
+    font-weight: 600;
+    border: 1px solid var(--border);
+    border-radius: 999px;
+    background: var(--surface-soft);
+    cursor: pointer;
+}
+
+.scripta-publication-settings .git-auth-method-option input {
+    margin: 0;
+}
+
+.scripta-publication-settings .git-auth-methods .git-auth-clear-button {
+    margin-left: auto;
+}
+
+.scripta-publication-settings .git-auth-methods .git-auth-clear-button[hidden] {
+    display: none;
+}
+
+.scripta-publication-settings .git-credentials-auth-panel[hidden] {
+    display: none;
+}
+
+.scripta-publication-settings .git-token-stored {
+    display: flex;
+    align-items: baseline;
+    gap: 5px;
+    margin-bottom: 10px;
+    flex-direction: column;
+}
+
+.scripta-publication-settings .git-token-stored[hidden] {
+    display: none;
+}
+
+.scripta-publication-settings .git-token-stored-status {
+    color: color-mix(in srgb, var(--text-color, inherit) 84%, transparent);
+}
+
+.scripta-publication-settings .git-credentials-row-auth-method,
+.scripta-publication-settings .git-credentials-row-github {
+    align-items: flex-start;
+}
+
+.scripta-publication-settings .git-credentials-row-auth-method .git-credentials-label,
+.scripta-publication-settings .git-credentials-row-github .git-credentials-label {
+    padding-top: 8px;
+}
+
+.scripta-publication-settings .git-github-auth {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    width: 100%;
+    padding: 6px 14px;
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    background: var(--surface-soft);
+    box-shadow: var(--shadow-sm);
+}
+
+.scripta-publication-settings .git-github-status {
+    color: color-mix(in srgb, var(--text-color, inherit) 84%, transparent);
+}
+
+.scripta-publication-settings .git-github-status-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    min-height: 20px;
+}
+
+.scripta-publication-settings .git-github-scope,
+.scripta-publication-settings .git-github-warning {
+    line-height: 1.4;
+}
+
+.scripta-publication-settings .git-github-scope {
+    color: color-mix(in srgb, var(--text-color, inherit) 72%, transparent);
+}
+
+.scripta-publication-settings .git-github-warning {
+    color: var(--warning);
+}
+
+.scripta-publication-settings .git-github-pending {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    padding: 8px 10px;
+    border-radius: 10px;
+    background: rgba(211, 157, 54, 0.09);
+    border: 1px solid rgba(211, 157, 54, 0.22);
+    font-size: var(--git-credentials-meta-size);
+    line-height: 1.45;
+}
+
+.scripta-publication-settings .git-github-code-row {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 8px;
+}
+
+.scripta-publication-settings .git-github-code-card {
+    display: inline-flex;
+    align-items: center;
+    min-width: 120px;
+    padding: 8px 12px;
+    border-radius: 10px;
+    background: rgba(255, 255, 255, 0.06);
+    border: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.scripta-publication-settings .git-github-code-value {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-height: 20px;
+    color: var(--text-color, inherit);
+    font-size: 13px;
+    font-weight: 700;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+}
+
+.scripta-publication-settings .git-github-pending-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+}
+
+.scripta-publication-settings .git-github-pending-actions button {
+    min-height: 34px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+}
+
+.scripta-publication-settings .git-github-continue-spinner,
+.scripta-publication-settings .git-github-loading-spinner {
+    width: 14px;
+    height: 14px;
+    flex: 0 0 auto;
+    border: 2px solid color-mix(in srgb, var(--text-soft) 28%, transparent);
+    border-top-color: var(--accent);
+    border-radius: 50%;
+    animation: git-github-spin 0.8s linear infinite;
+}
+
+.scripta-publication-settings .git-github-continue-spinner[hidden],
+.scripta-publication-settings .git-github-loading-spinner[hidden] {
+    display: none;
+}
+
+@keyframes git-github-spin {
+    to { transform: rotate(360deg); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .git-github-continue-spinner,
+    .git-github-loading-spinner {
+        animation: none;
+    }
+}
+
+.scripta-publication-settings .git-github-actions {
+    display: flex;
+    flex-wrap: nowrap;
+    gap: 8px;
+    align-items: center;
+    min-height: 34px;
+}
+
+.scripta-publication-settings .git-github-actions button {
+    min-height: 34px;
+    white-space: nowrap;
+}
+
+.scripta-publication-settings .git-github-auth[data-state="connected"] .git-github-actions {
+    justify-content: flex-start;
+}
+
+.scripta-publication-settings .git-credentials-hint-offset {
+    margin-left: 70px;
+}
+
+.scripta-publication-settings .git-credentials-close {
+    margin-left: auto;
+}
+
+.scripta-publication-settings .git-credentials-close[hidden] {
+    display: none;
+}
+
+.scripta-publication-settings .git-github-actions button[hidden],
+.scripta-publication-settings .git-github-actions[hidden],
+.scripta-publication-settings .git-github-pending[hidden],
+.scripta-publication-settings .git-github-pending-actions button[hidden] {
+    display: none;
+}
+.scripta-publication-settings .git-credentials-row { display: flex; gap: 10px; }
+.scripta-publication-settings .git-credentials-label { min-width: 60px; color: var(--text-soft); }
+.scripta-publication-settings .git-credentials-row > .form-input { flex: 1 1 auto; width: 0; min-width: 0; }
+.scriptahub-settings-modal [hidden] { display: none; }
+@media (max-width: 720px) {
+  .scripta-publication-settings .git-credentials-row { flex-direction: column; gap: 6px; }
+  .scripta-publication-settings .git-credentials-row > .form-input { width: 100%; font-size: 16px; }
+  .scripta-publication-settings .git-credentials-group { padding: 8px; border-radius: 0; }
+  .scripta-publication-settings .git-github-auth { padding: 8px; border-radius: 0; box-sizing: border-box; }
+  .scripta-publication-settings .git-auth-methods { width: 100%; }
+}

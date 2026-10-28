@@ -2,8 +2,8 @@
   "tools": [
     {
       "name": "scriptahub_config_get",
-      "title": "Get ScriptaHub content sources",
-      "description": "Administrator configuration for content catalogue URLs and refresh interval.",
+      "title": "Get ScriptaHub settings",
+      "description": "Administrator configuration for content catalogue URLs, refresh interval and publication access.",
       "command": "node",
       "args": [
         "tools/settings-tool.mjs"
@@ -24,8 +24,8 @@
     },
     {
       "name": "scriptahub_config_set",
-      "title": "Save ScriptaHub content sources",
-      "description": "Administrator configuration for content catalogue URLs and refresh interval.",
+      "title": "Save ScriptaHub settings",
+      "description": "Administrator configuration for content catalogue URLs, refresh interval and publication access.",
       "command": "node",
       "args": [
         "tools/settings-tool.mjs"
@@ -47,6 +47,24 @@
             "type": "integer",
             "minimum": 1,
             "maximum": 2147483
+          },
+          "publication": {
+            "type": "object",
+            "properties": {
+              "authorName": {
+                "type": "string",
+                "maxLength": 120
+              },
+              "authorEmail": {
+                "type": "string",
+                "maxLength": 254
+              }
+            },
+            "required": [
+              "authorName",
+              "authorEmail"
+            ],
+            "additionalProperties": false
           }
         },
         "additionalProperties": false,
@@ -60,6 +78,368 @@
       ],
       "env": {
         "TOOL_NAME": "scriptahub_config_set"
+      }
+    },
+    {
+      "name": "scriptahub_task_claim",
+      "title": "Claim one approved manuscript task",
+      "description": "Claim one approved manuscript task. Restricted to configured executor service identities; no browser account or private storage access is required. Returns application processingSettings separately from task-authored values; summaryReadingMinutes is fixed by ScriptaHub at 10 minutes.",
+      "command": "node",
+      "args": [
+        "tools/task-tool.mjs"
+      ],
+      "cwd": "/code",
+      "timeoutMs": 90000,
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "runId": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128
+          },
+          "taskId": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128
+          }
+        },
+        "required": [
+          "runId"
+        ],
+        "additionalProperties": false
+      },
+      "tags": [
+        "internal"
+      ],
+      "env": {
+        "TOOL_NAME": "scriptahub_task_claim"
+      }
+    },
+    {
+      "name": "scriptahub_task_status",
+      "title": "Read the state of a claimed task",
+      "description": "Read the state of a claimed task. Restricted to configured executor service identities; no browser account or private storage access is required.",
+      "command": "node",
+      "args": [
+        "tools/task-tool.mjs"
+      ],
+      "cwd": "/code",
+      "timeoutMs": 90000,
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "executionId": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128
+          }
+        },
+        "required": [
+          "executionId"
+        ],
+        "additionalProperties": false
+      },
+      "tags": [
+        "internal"
+      ],
+      "env": {
+        "TOOL_NAME": "scriptahub_task_status"
+      }
+    },
+    {
+      "name": "scriptahub_task_document_read",
+      "title": "Read a verified source document chunk",
+      "description": "Read a verified source document chunk. Restricted to configured executor service identities; no browser account or private storage access is required.",
+      "command": "node",
+      "args": [
+        "tools/task-tool.mjs"
+      ],
+      "cwd": "/code",
+      "timeoutMs": 90000,
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "executionId": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128
+          },
+          "index": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "offset": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "length": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 196608
+          }
+        },
+        "required": [
+          "executionId",
+          "index"
+        ],
+        "additionalProperties": false
+      },
+      "tags": [
+        "internal"
+      ],
+      "env": {
+        "TOOL_NAME": "scriptahub_task_document_read"
+      }
+    },
+    {
+      "name": "scriptahub_task_finish",
+      "title": "Record the result of a claimed task",
+      "description": "Report a processing failure or acknowledge a stop request. Completed is reserved for confirmed publication performed by ScriptaHub.",
+      "command": "node",
+      "args": [
+        "tools/task-tool.mjs"
+      ],
+      "cwd": "/code",
+      "timeoutMs": 90000,
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "executionId": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128
+          },
+          "state": {
+            "type": "string",
+            "enum": [
+              "failed",
+              "cancelled"
+            ]
+          },
+          "result": {
+            "type": "string",
+            "maxLength": 32768
+          },
+          "error": {
+            "type": "string",
+            "maxLength": 16000
+          }
+        },
+        "required": [
+          "executionId",
+          "state"
+        ],
+        "additionalProperties": false
+      },
+      "tags": [
+        "internal"
+      ],
+      "env": {
+        "TOOL_NAME": "scriptahub_task_finish"
+      }
+    },
+    {
+      "name": "scriptahub_task_package_prepare",
+      "title": "Register a validated manuscript package",
+      "description": "Register a validated manuscript package. Restricted to configured executor service identities. No credentials or local server paths are returned.",
+      "command": "node",
+      "args": [
+        "tools/task-tool.mjs"
+      ],
+      "cwd": "/code",
+      "timeoutMs": 90000,
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "executionId": {
+            "type": "string",
+            "maxLength": 128
+          },
+          "catalogue": {
+            "type": "string",
+            "maxLength": 4096
+          },
+          "branch": {
+            "type": "string",
+            "maxLength": 200
+          },
+          "baseCommit": {
+            "type": "string",
+            "maxLength": 40,
+            "description": "Verified base commit. Omit only for an independently verified empty repository."
+          },
+          "files": {
+            "type": "array",
+            "minItems": 2,
+            "maxItems": 500,
+            "items": {
+              "type": "object",
+              "properties": {
+                "path": {
+                  "type": "string",
+                  "maxLength": 1024
+                },
+                "sha256": {
+                  "type": "string",
+                  "pattern": "^[a-f0-9]{64}$"
+                },
+                "size": {
+                  "type": "integer",
+                  "minimum": 0,
+                  "maximum": 50000000
+                }
+              },
+              "required": [
+                "path",
+                "sha256",
+                "size"
+              ],
+              "additionalProperties": false
+            }
+          },
+          "validation": {
+            "type": "object"
+          }
+        },
+        "required": [
+          "executionId",
+          "catalogue",
+          "branch",
+          "files",
+          "validation"
+        ],
+        "additionalProperties": false
+      },
+      "env": {
+        "TOOL_NAME": "scriptahub_task_package_prepare"
+      },
+      "tags": [
+        "internal"
+      ]
+    },
+    {
+      "name": "scriptahub_task_package_upload",
+      "title": "Upload a verified package file chunk",
+      "description": "Upload a verified package file chunk. Restricted to configured executor service identities. No credentials or local server paths are returned.",
+      "command": "node",
+      "args": [
+        "tools/task-tool.mjs"
+      ],
+      "cwd": "/code",
+      "timeoutMs": 90000,
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "executionId": {
+            "type": "string",
+            "maxLength": 128
+          },
+          "file": {
+            "type": "string",
+            "maxLength": 1024
+          },
+          "offset": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "data": {
+            "type": "string",
+            "maxLength": 87384
+          }
+        },
+        "required": [
+          "executionId",
+          "file",
+          "offset",
+          "data"
+        ],
+        "additionalProperties": false
+      },
+      "env": {
+        "TOOL_NAME": "scriptahub_task_package_upload"
+      },
+      "tags": [
+        "internal"
+      ]
+    },
+    {
+      "name": "scriptahub_task_publish",
+      "title": "Publish the registered package through ScriptaHub",
+      "description": "Publish the registered package through ScriptaHub. Restricted to configured executor service identities. No credentials or local server paths are returned.",
+      "command": "node",
+      "args": [
+        "tools/task-tool.mjs"
+      ],
+      "cwd": "/code",
+      "timeoutMs": 600000,
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "executionId": {
+            "type": "string",
+            "maxLength": 128
+          }
+        },
+        "required": [
+          "executionId"
+        ],
+        "additionalProperties": false
+      },
+      "env": {
+        "TOOL_NAME": "scriptahub_task_publish"
+      },
+      "tags": [
+        "internal"
+      ]
+    },
+    {
+      "name": "scriptahub_publication_auth",
+      "title": "ScriptaHub Git authentication",
+      "description": "Administrator-only GitHub device authorization or token storage owned by ScriptaHub. Credentials are never returned.",
+      "command": "node",
+      "args": [
+        "tools/settings-tool.mjs"
+      ],
+      "cwd": "/code",
+      "timeoutMs": 180000,
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "action": {
+            "type": "string",
+            "enum": [
+              "status",
+              "begin",
+              "poll",
+              "token",
+              "connect",
+              "disconnect"
+            ]
+          },
+          "authorName": {
+            "type": "string",
+            "maxLength": 120
+          },
+          "authorEmail": {
+            "type": "string",
+            "maxLength": 254
+          },
+          "token": {
+            "type": "string",
+            "maxLength": 4096
+          }
+        },
+        "required": [
+          "action"
+        ],
+        "additionalProperties": false
+      },
+      "tags": [
+        "admin"
+      ],
+      "env": {
+        "TOOL_NAME": "scriptahub_publication_auth"
       }
     }
   ]

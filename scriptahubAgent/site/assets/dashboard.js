@@ -126,18 +126,21 @@ function changeCard(change) {
 function taskCard(task) {
   const kinds = { 'book-proposal': 'Book proposal', manuscript: 'Manuscript', edit: 'Edit', fork: 'Derived book', animation: 'Animation', translation: 'Translation', 'librarian-feedback': 'Library feedback' };
   const node = card(task.title, states[task.state], `${t(kinds[task.kind] || task.kind)} · ${date(task.created_at)}`);
-  if (task.state === 'queued') node.append(element('p', t('Waiting for processing. RoboTeam execution is not connected yet.'), 'dashboard-meta'));
+  if (task.state === 'queued') node.append(element('p', t('Waiting for a scheduled or manual processing run.'), 'dashboard-meta'));
   if (task.error) node.append(element('p', task.error));
   if (task.result) node.append(element('p', task.result));
   if (task.state === 'queued' && task.owner === data.user.id) node.append(button('Cancel task', () => {
     if (confirm(t('Cancel this queued task? The accepted change remains in history.'))) void mutate('/cancel', { taskId: task.id });
+  }));
+  if (task.state === 'running' && task.owner === data.user.id) node.append(button('Stop task', () => {
+    if (confirm(t('Request stopping this task? Work already published cannot be undone.'))) void mutate('/cancel', { taskId: task.id });
   }));
   return node;
 }
 function historyCard(event) {
   const title = data.books.find(book => book.id === event.book_id)?.title || t('Book');
   const [label, explanation] = activities[event.action] || ['Activity recorded', 'An activity was recorded for this book workspace.'];
-  const actor = event.actor_name || t('Account unavailable');
+  const actor = event.actor_name || t(event.actor?.startsWith('agent:') ? 'Processing service' : 'Account unavailable');
   const node = card(title, label, `${date(event.created_at)} · ${actor}`);
   const heading = node.querySelector('h2');
   heading.classList.add('dashboard-activity-title');

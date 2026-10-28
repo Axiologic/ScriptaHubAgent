@@ -27,7 +27,7 @@ async function hashSiteFiles(root, relative, hash) {
 
 export async function snapshotFingerprint(config) {
   const hash = crypto.createHash('sha256');
-  const { syncIntervalSeconds, ...contentConfig } = config;
+  const { syncIntervalSeconds, summaryReadingMinutes, publication, ...contentConfig } = config;
   hash.update('http-content-v2\0').update(JSON.stringify(contentConfig)).update('\0');
   await hashSiteFiles(path.join(codeDir, 'site'), '', hash);
   return hash.digest('hex');

@@ -145,10 +145,11 @@ export class DashboardStore {
     return this.transaction(() => {
       const row = this.db.prepare('SELECT t.*,c.book_id,c.author FROM tasks t JOIN changes c ON c.id=t.change_id WHERE t.id=?').get(taskId) || fail('Task not found', 404);
       this.owner(this.book(row.book_id), user);
-      if (row.state === 'cancelled') return;
-      if (row.state !== 'queued') fail('Stopping an executing task requires the RoboTeam integration, which is not available yet.', 409);
-      this.db.prepare("UPDATE tasks SET state='cancelled',updated_at=? WHERE id=?").run(now(), taskId);
-      this.event(user.id, 'task.cancelled', row.book_id, row.change_id, taskId);
+      if (['cancelled', 'stop_requested'].includes(row.state)) return;
+      if (!['queued', 'running'].includes(row.state)) fail('This task has already finished.', 409);
+      const state = row.state === 'queued' ? 'cancelled' : 'stop_requested';
+      this.db.prepare('UPDATE tasks SET state=?,updated_at=? WHERE id=?').run(state, now(), taskId);
+      this.event(user.id, `task.${state}`, row.book_id, row.change_id, taskId);
     });
   }
   access(user, bookId, email, remove = false) {

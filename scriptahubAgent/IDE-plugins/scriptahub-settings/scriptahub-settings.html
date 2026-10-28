@@ -2,14 +2,79 @@
   <div class="modal-header"><div class="modal-title">ScriptaHub Settings</div><button type="button" class="close" data-local-action="closeModal" aria-label="Close">×</button></div>
   <div class="modal-body scriptahub-settings-body">
     <fieldset id="scriptaSettingsControls" disabled>
-      <section aria-labelledby="scriptaSourcesTitle">
-        <div class="scripta-sources-heading"><h3 id="scriptaSourcesTitle">Content repositories</h3><button type="button" class="gray-button" data-local-action="addRepository">+ Add repository</button></div>
-        <p id="scriptaSourcesHelp">Use a collection.json URL from your repository. Raw HTTPS URLs and GitHub blob links are accepted.</p>
-        <ul id="scriptaRepositories" aria-label="Content repositories"></ul>
-      </section>
-      <label class="form-item"><span class="form-label">Refresh interval (seconds)</span><input id="scriptaSyncInterval" class="form-input" type="number" min="1" max="2147483" step="1" required></label>
-      <p>Additions, edits and deletions apply when you save. Sources are validated before saving; no restart is needed.</p>
-      <div class="scriptahub-settings-actions"><button type="button" class="general-button" data-local-action="saveSettings">Save changes</button></div>
+      <nav class="settings-tabs scripta-settings-tabs" role="tablist" aria-label="ScriptaHub settings">
+        <button id="scriptaRepositoriesTab" class="settings-tab active" type="button" role="tab" aria-selected="true" aria-controls="scriptaRepositoriesPanel" data-scripta-tab="repositories">Repositories</button>
+        <button id="scriptaPublicationTab" class="settings-tab" type="button" role="tab" aria-selected="false" aria-controls="scriptaPublicationPanel" tabindex="-1" data-scripta-tab="publication">Publication</button>
+      </nav>
+      <div id="scriptaRepositoriesPanel" class="scripta-settings-panel" role="tabpanel" aria-labelledby="scriptaRepositoriesTab">
+        <section aria-labelledby="scriptaSourcesTitle">
+          <div class="scripta-sources-heading"><h3 id="scriptaSourcesTitle">Content repositories</h3><button type="button" class="gray-button" data-local-action="addRepository">+ Add repository</button></div>
+          <p id="scriptaSourcesHelp">Add a collection.json URL. HTTPS URLs and GitHub blob links are accepted.</p>
+          <div class="scripta-repositories-caption"><span>Configured repositories</span><span id="scriptaRepositoryCount"></span></div>
+          <ul id="scriptaRepositories" aria-label="Configured repositories" aria-busy="true"><li class="scripta-repository-empty">Loading configured repositories…</li></ul>
+        </section>
+        <section class="scripta-processing-settings" aria-label="Catalogue refresh">
+          <div class="scripta-settings-fields">
+            <label class="form-item"><span class="form-label">Refresh interval (seconds)</span><input id="scriptaSyncInterval" class="form-input" type="number" min="1" max="2147483" step="1" required aria-describedby="scriptaSyncIntervalHelp"></label>
+          </div>
+          <p id="scriptaSyncIntervalHelp">How often ScriptaHub checks your configured repositories for catalogue changes and updates the available books. For example, 60 means once per minute. Shorter intervals send more requests to the repositories.</p>
+        </section>
+        <div class="scriptahub-settings-actions"><p>Changes apply after saving.</p><button type="button" class="general-button" data-local-action="saveSettings">Save changes</button></div>
+      </div>
+      <div id="scriptaPublicationPanel" class="scripta-settings-panel" role="tabpanel" aria-labelledby="scriptaPublicationTab" hidden>
+        <section class="scripta-publication-settings git-credentials-card" aria-labelledby="scriptaPublicationTitle">
+          <div class="scripta-sources-heading"><h3 id="scriptaPublicationTitle">Git access</h3><span id="scriptaPublicationStatus" class="scripta-publication-status" role="status" aria-live="polite"></span></div>
+          <section class="git-credentials-group" aria-labelledby="scriptaIdentityTitle">
+            <div id="scriptaIdentityTitle" class="git-credentials-group-title">Identity</div>
+            <div class="git-credentials-row">
+              <label class="git-credentials-label" for="scriptaGitName">Name:</label>
+              <input id="scriptaGitName" class="form-input" type="text" maxlength="120" autocomplete="new-password" autocapitalize="none" autocorrect="off" spellcheck="false">
+            </div>
+            <div class="git-credentials-row">
+              <label class="git-credentials-label" for="scriptaGitEmail">Email:</label>
+              <input id="scriptaGitEmail" class="form-input" type="email" maxlength="254" autocomplete="new-password" autocapitalize="none" autocorrect="off" spellcheck="false">
+            </div>
+            <div class="git-credentials-hint">ScriptaHub uses this name and email for publication commits.</div>
+          </section>
+          <section class="git-credentials-group" aria-labelledby="scriptaAuthenticationTitle">
+            <div id="scriptaAuthenticationTitle" class="git-credentials-group-title">Authentication</div>
+            <div class="git-credentials-row git-credentials-row-auth-method">
+              <span class="git-credentials-label">Method:</span>
+              <div class="git-auth-methods" role="radiogroup" aria-label="Git authentication method">
+                <label class="git-auth-method-option"><input type="radio" name="scriptaGitMethod" value="github"><span>GitHub</span></label>
+                <label class="git-auth-method-option"><input type="radio" name="scriptaGitMethod" value="token" checked><span>Token</span></label>
+                <button id="scriptaDisconnectGit" type="button" class="gray-button git-auth-clear-button" data-local-action="disconnectGit" hidden>Clear stored credentials</button>
+              </div>
+            </div>
+            <div id="scriptaGithubPanel" class="git-credentials-auth-panel" hidden>
+              <div class="git-credentials-row git-credentials-row-github">
+                <span class="git-credentials-label">GitHub:</span>
+                <div id="scriptaGithubAuth" class="git-github-auth">
+                  <div class="git-credentials-hint">Use your logged-in GitHub session for GitHub HTTPS remotes. ScriptaHub publishes using this connection.</div>
+                  <div class="git-github-status-row" role="status" aria-live="polite" aria-atomic="true">
+                    <span id="scriptaGithubSpinner" class="git-github-loading-spinner" aria-hidden="true" hidden></span>
+                    <span id="scriptaGithubStatus" class="git-github-status">Not connected.</span>
+                  </div>
+                  <div id="scriptaGithubPending" class="git-github-pending" hidden>
+                    <div class="git-github-code-row"><div class="git-github-code-card"><strong id="scriptaGithubCode" class="git-github-code-value"></strong></div></div>
+                    <div class="git-github-pending-actions"><button id="scriptaGithubContinue" type="button" class="gray-button" data-local-action="continueGithubAuth"><span id="scriptaGithubContinueSpinner" class="git-github-continue-spinner" aria-hidden="true" hidden></span><span>Copy code and open GitHub</span></button></div>
+                  </div>
+                  <div class="git-github-actions"><button id="scriptaGithubDisconnect" type="button" class="gray-button" data-local-action="disconnectGit" hidden>Disconnect</button></div>
+                </div>
+              </div>
+            </div>
+            <div id="scriptaTokenPanel" class="git-credentials-auth-panel">
+              <div id="scriptaTokenStoredNotice" class="git-token-stored" hidden><div class="git-token-stored-status">A token is already stored securely for ScriptaHub.</div></div>
+              <div class="git-credentials-row">
+                <label class="git-credentials-label" for="scriptaGitToken">Token:</label>
+                <input id="scriptaGitToken" class="form-input" type="password" maxlength="4096" autocomplete="new-password" autocapitalize="none" autocorrect="off" spellcheck="false" placeholder="Enter a new token to be stored" aria-describedby="scriptaGitTokenHelp scriptaPublicationSaveHelp">
+              </div>
+              <div id="scriptaGitTokenHelp" class="git-credentials-hint">Use a personal access token for HTTPS remotes when you do not want to use GitHub sign-in.</div>
+            </div>
+          </section>
+          <p id="scriptaPublicationSaveHelp">Changes are saved automatically after validation when you leave a field or press Enter.</p>
+        </section>
+      </div>
     </fieldset>
     <p id="scriptaSettingsStatus" role="status" aria-live="polite"></p>
   </div>
