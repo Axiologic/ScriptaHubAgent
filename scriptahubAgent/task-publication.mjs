@@ -1,7 +1,7 @@
 import fs from 'node:fs/promises';
 import path from 'node:path';
 import crypto from 'node:crypto';
-import { PublicationTransfer, publicationError as fail } from './publication-transfer.mjs';
+import { PublicationTransfer, packagePath, publicationError as fail } from './publication-transfer.mjs';
 import { publicationTarget, checkPublicationPackage, verifyCatalogueBranch } from './publication-policy.mjs';
 import { publicationGit, writePackageFile } from './publication-git.mjs';
 import { readPublicationToken } from './publication-access.mjs';
@@ -61,11 +61,24 @@ export class TaskPublication extends PublicationTransfer {
           // Read through Git to avoid following symlinks in a remote checkout.
           oldCollection = JSON.parse(await git('show', head + ':' + target.collection));
         }
-        checkPublicationPackage(manifest,target,packageBytes,oldCollection);
+        let previousDocument;
+        if (manifest.taskType === 'scriptahub.edit') {
+          const previousBook=oldCollection?.books?.find(book=>book.id===manifest.bookId);
+          if (!previousBook) fail('The edited book must already exist at this destination',409);
+          const readBaseline = async name => JSON.parse(await git('show',head+':'+target.root+packagePath(name)));
+          previousDocument = oldCollection.schemaVersion === 1
+            ? {metadata:await readBaseline(previousBook.directory+'/manifest.json'),history:await readBaseline(previousBook.directory+'/editions.json')}
+            : await readBaseline(previousBook.path);
+        }
+        checkPublicationPackage(manifest,target,packageBytes,oldCollection,previousDocument);
         for (const [name,bytes] of packageBytes) {
           this.running(executor,executionId);
           // Existing files may only be retained byte-for-byte, except collection.json.
-          if (name !== target.collection) {
+          const editableMetadata = manifest.taskType === 'scriptahub.edit' && (
+            oldCollection.schemaVersion === 1
+              ? ['manifest.json','editions.json'].some(file => name === target.root + oldCollection.books.find(book=>book.id===manifest.bookId).directory + '/' + file)
+              : name === target.root + oldCollection.books.find(book=>book.id===manifest.bookId).path);
+          if (name !== target.collection && !editableMetadata) {
             const existing = await fs.lstat(path.join(directory,name)).catch(error => { if (error.code === 'ENOENT') return null; throw error; });
             if (existing && (!existing.isFile() || !(await fs.readFile(path.join(directory,name))).equals(bytes))) fail('Publication would overwrite an existing resource: ' + name,409);
           }

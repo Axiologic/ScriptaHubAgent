@@ -1065,22 +1065,21 @@ html[lang] [data-workflow-page="create"] .workflow-hero h1 {
 .create-form-grid .form-field input::placeholder,
 .create-form-grid .form-field textarea::placeholder { color: var(--muted); opacity: 1; }
 .create-instructions-field textarea { min-height: 200px; line-height: 1.6; }
-.form-file-field { position: relative; display: block; min-width: 0; align-self: stretch; grid-area: files; color: var(--content); cursor: pointer; }
+.form-file-field { position: relative; display: grid; grid-template-rows: auto minmax(0,1fr); gap: 10px; min-width: 0; align-self: stretch; grid-area: files; color: var(--content); font-size: .8rem; font-weight: 680; cursor: pointer; }
 .form-file-input {
   position: absolute !important; width: 1px !important; height: 1px !important;
   padding: 0 !important; overflow: hidden; clip: rect(0 0 0 0);
   clip-path: inset(50%); opacity: 0; white-space: nowrap; border: 0 !important; appearance: none;
 }
 .form-file-picker {
-  display: flex; width: 100%; height: 100%; min-height: 240px;
+  display: flex; width: 100%; min-height: 240px;
   padding: clamp(18px, 2vw, 28px); align-items: flex-start;
   border: 1px dashed color-mix(in srgb, var(--green) 45%, var(--line));
   border-radius: 12px; background: color-mix(in srgb, var(--green) 4%, var(--surface));
   flex-direction: column; gap: 14px;
   transition: border-color .16s ease, background-color .16s ease, box-shadow .16s ease;
 }
-.form-file-picker strong { color: var(--ink); font-size: .85rem; line-height: 1.4; }
-.form-file-hint { color: var(--muted); font-size: .76rem; line-height: 1.6; }
+.form-file-hint { color: var(--muted); font-size: .76rem; font-weight: 400; line-height: 1.6; }
 .form-file-button {
   display: inline-flex; max-width: 100%; min-height: 42px; padding: 10px 14px;
   align-items: center; gap: 8px; border: 1px solid var(--line); border-radius: 8px;
@@ -1651,3 +1650,69 @@ body[data-book-workflow] .animation-contribution>.workflow-hero{padding-bottom:8
   :root .site-header.header-unified .header-preferences .theme-switcher { height: 34px; }
   :root .site-header.header-unified .header-preferences .language-picker select { width: 68px; max-width: 68px; height: 34px; font-size: 11px; }
 }
+
+/* Contextual book suggestions use the existing reader and form controls. */
+.suggest-reader { display:block; width:100%; height:65dvh; min-height:320px; border:1px solid var(--line); border-radius:8px; margin:16px 0; background:var(--surface); }
+.suggest-dialog { width:min(640px,calc(100vw - 32px)); max-height:calc(100dvh - 32px); overflow:auto; margin:auto; padding:0 24px; border:1px solid var(--line); border-radius:8px; color:var(--ink); background:var(--surface); }
+.suggest-dialog::backdrop { background:rgba(0,0,0,.35); }
+.suggest-dialog-header { position:sticky; top:0; z-index:1; display:flex; align-items:center; justify-content:space-between; gap:16px; padding:18px 0; background:var(--surface); border-bottom:1px solid var(--line); }
+.suggest-dialog-header h2 { margin:0; font-size:1.25rem; line-height:1.3; }
+:root .suggest-dialog-close { color:var(--ink); }
+.suggest-dialog .workflow-form { display:grid; gap:18px; margin:0; padding:20px 0 0; border:0; border-radius:0; background:transparent; }
+.suggest-dialog .form-field { min-width:0; margin:0; }
+.suggest-dialog textarea { min-height:96px; }
+.suggest-field-label { color:var(--muted); font-size:.75rem; font-weight:650; }
+.suggest-dialog blockquote { overflow-wrap:anywhere; max-height:144px; overflow:auto; margin:8px 0 0; padding:12px 14px; border-left:3px solid var(--green); background:var(--field); color:var(--content); font-size:.875rem; line-height:1.5; }
+.suggest-dialog-actions { position:sticky; bottom:0; display:flex; justify-content:flex-end; padding:16px 0; background:var(--surface); border-top:1px solid var(--line); }
+.suggest-dialog-actions .workflow-submit { margin:0; }
+.suggest-annotations { margin:20px 0; border-top:1px solid var(--line); border-bottom:1px solid var(--line); }
+.suggest-annotations > summary { display:flex; align-items:center; gap:10px; min-height:48px; padding:12px 0; color:var(--ink); font-weight:650; cursor:pointer; list-style:none; }
+.suggest-annotations > summary::-webkit-details-marker { display:none; }
+.suggest-annotations > summary:hover { color:var(--green); }
+.suggest-annotations > summary:focus-visible { outline:2px solid var(--green); outline-offset:4px; }
+.suggest-annotations > summary > svg { width:18px; height:18px; margin-left:auto; transition:transform .15s ease; }
+.suggest-annotations[open] > summary > svg { transform:rotate(180deg); }
+.suggest-annotation-count { color:var(--muted); font-size:.8rem; font-variant-numeric:tabular-nums; }
+.suggest-annotation-list { display:grid; gap:12px; padding:0 0 16px; }
+.suggest-annotations:not([open]) > .suggest-annotation-list { display:none; }
+.suggest-annotation-list .dashboard-card { margin:0; padding:16px; border:1px solid var(--line); border-radius:10px; background:var(--surface); overflow-wrap:anywhere; }
+.suggest-annotation-list .dashboard-card > blockquote { margin:0; padding:8px 12px; border-left:2px solid var(--line); color:var(--muted); font-size:.875rem; }
+.suggest-annotation-list .dashboard-card > p { white-space:pre-wrap; }
+.suggest-annotation-list .dashboard-actions { display:flex; flex-wrap:wrap; gap:8px; justify-content:flex-end; margin-top:12px; }
+.workflow-form.suggest-submit-bar { position:sticky; bottom:0; z-index:20; display:flex; align-items:center; justify-content:space-between; gap:16px; margin:0; padding:12px 0 calc(12px + env(safe-area-inset-bottom,0px)); border:0; border-top:1px solid var(--line); border-radius:0; background:var(--surface); box-shadow:0 -6px 14px #0001; }
+.suggest-submit-info { min-width:0; color:var(--muted); font-size:.8rem; line-height:1.4; }
+.suggest-submit-bar .workflow-submit { flex:none; min-width:112px; min-height:44px; margin:0; }
+:root .suggest-submit-bar .workflow-submit::before { content:none; }
+
+:root .suggest-selection-action { position:fixed; z-index:30; min-height:40px; padding:9px 12px; gap:8px; box-shadow:0 3px 12px #0002; white-space:nowrap; }
+:root .suggest-selection-action::before { content:none; }
+.suggest-selection-action > svg { flex:none; width:18px; height:18px; }
+.suggest-selection-action[hidden] { display:none; }
+@media (max-width:600px) {
+  .suggest-dialog { width:calc(100vw - 20px); max-height:calc(100dvh - 20px); padding-inline:16px; }
+  .suggest-dialog-header { padding-block:12px; }
+  :root .suggest-selection-action { width:44px; height:44px; padding:10px; }
+  .suggest-selection-action > span { display:none; }
+}
+
+/* Contribution consent stays in the form, outside the collapsed terms. */
+.inline-contribution-agreement { margin-top:20px; padding-top:16px; border-top:1px solid var(--line); min-width:0; }
+.inline-contribution-agreement > details > summary { padding:8px 0; color:var(--green); font-size:.85rem; font-weight:650; cursor:pointer; }
+.inline-contribution-agreement > details > summary:focus-visible { outline:2px solid var(--green); outline-offset:3px; }
+.inline-contribution-agreement .contribution-agreement { padding:12px 0; }
+.inline-contribution-agreement .contribution-agreement p, .inline-contribution-agreement .contribution-agreement li { text-align:left; }
+.inline-contribution-agreement .contract-accept { padding-top:0; border:0; margin:12px 0 4px; }
+.inline-contribution-agreement .contract-accept input { min-height:20px; width:20px; height:20px; }
+.workflow-form.suggest-proposal-form { border:0; background:transparent; padding:0; }
+.suggest-proposal-form > .inline-contribution-agreement { margin:16px 0; }
+
+/* Shared transient feedback; native popover keeps it above dialogs and fixed to the viewport. */
+:root .site-toast { position: fixed; inset: max(16px, env(safe-area-inset-top)) max(16px, env(safe-area-inset-right)) auto auto; box-sizing: border-box; margin: 0; width: min(440px, calc(100vw - 32px)); max-height: calc(100dvh - 32px); overflow: auto; padding: 14px; border: 1px solid var(--line); border-inline-start: 3px solid var(--green); border-radius: 10px; background: var(--surface); color: var(--ink); box-shadow: 0 6px 24px #0003; font: inherit; }
+:root .site-toast:popover-open { display: grid; grid-template-columns: 22px minmax(0, 1fr) 36px; gap: 10px; align-items: start; }
+:root .site-toast > svg { width: 22px; height: 22px; margin-top: 5px; color: var(--green); }
+:root .site-toast p { margin: 5px 0; font-size: var(--action-font-size); line-height: 1.5; overflow-wrap: anywhere; white-space: pre-wrap; }
+:root .site-toast-close { width: 36px; height: 36px; min-height: 36px; padding: 8px; }
+:root .site-toast-close::before { content: none; }
+@media (max-width: 600px) { :root .site-toast:popover-open { grid-template-columns: 22px minmax(0, 1fr) 44px; } :root .site-toast-close { width: 44px; height: 44px; min-height: 44px; } }
+:root .site-toast[data-state="error"] { border-inline-start-color: var(--ink); }
+:root .site-toast[data-state="error"] > svg { color: var(--ink); }

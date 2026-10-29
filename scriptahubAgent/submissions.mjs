@@ -1,3 +1,4 @@
+import { annotations } from './annotations.mjs';
 import fs from 'node:fs/promises';
 import path from 'node:path';
 import crypto from 'node:crypto';
@@ -29,6 +30,7 @@ function validateMeta(meta) {
     if (!/^[a-zA-Z][a-zA-Z0-9_-]{0,50}$/.test(key) || typeof value !== 'string' || value.length > 16000) throw new Error('Invalid form field');
     if (key === 'name' || key === 'email') throw new Error('Contact details come from the signed-in account');
   }
+  annotations(meta);
   if (meta.bookId !== undefined && !/^bk-[a-z0-9]+$/.test(meta.bookId)) throw new Error('Invalid book ID');
   if (meta.targetBookId !== undefined && !/^bk-[a-z0-9]+$/.test(meta.targetBookId)) throw new Error('Invalid target book ID');
   if (meta.language !== undefined && !/^(en|fr|de|es|pt|it|ro|pl)$/.test(meta.language)) throw new Error('Invalid language');

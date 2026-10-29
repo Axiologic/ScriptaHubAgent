@@ -22,17 +22,6 @@
       request.onerror = () => reject(request.error);
     });
   }
-  async function store(key, value) {
-    const db = await database();
-    try {
-      await new Promise((resolve, reject) => {
-        const tx = db.transaction('files', 'readwrite');
-        tx.objectStore('files').put(value, key);
-        tx.oncomplete = resolve;
-        tx.onerror = () => reject(tx.error);
-      });
-    } finally { db.close(); }
-  }
   async function retrieve(key) {
     const db = await database();
     try {
@@ -56,13 +45,11 @@
     } finally { db.close(); }
   }
   const root = new URL('../', document.currentScript.src);
-  async function saveDraftFiles(key, selected, previousKey, expectedNames) {
-    const files = selected.length || !expectedNames.length ? selected : await retrieve(previousKey);
-    if (!Array.isArray(files) || files.length !== expectedNames.length || files.some((file, index) => file.name !== expectedNames[index])) {
-      throw new Error('The draft documents are no longer available. Select them again before continuing.');
-    }
+  async function loadDraftFiles(key, expectedNames) {
+    const files=await retrieve(key);
+    if(!Array.isArray(files)||files.length!==expectedNames.length||files.some((file,index)=>file.name!==expectedNames[index])) throw new Error('The draft documents are no longer available. Select them again before submitting.');
     (await policy).validateDocuments(files);
-    await store(key, files);
+    return files;
   }
   function contributionKind(draft, count) {
     const source = new URL(draft.returnUrl).pathname;
@@ -77,6 +64,23 @@
     return line?.split(':').slice(1).join(':').trim() || undefined;
   }
   const sending = new WeakSet();
+  function bindFormValidity(form) {
+    for(const field of form.querySelectorAll('[required]')) {
+      const label=field.closest('label')?.querySelector('span');
+      if(label&&!label.querySelector('.required-indicator')) {
+        const marker=document.createElement('span');marker.className='required-indicator';marker.textContent=' *';marker.setAttribute('aria-hidden','true');label.append(marker);
+      }
+    }
+    const button=form.querySelector('button[type="submit"]');
+    const update=()=>{
+      const valid=[...form.elements].every(field=>!field.willValidate||(field.validity.valid&&(!field.required||typeof field.value!=='string'||field.value.trim().length>0)));
+      button.disabled=!valid||form.dataset.contributionReady==='false'||sending.has(button)||button.dataset.submissionComplete==='true';
+    };
+    form.updateContributionState=update;
+    form.addEventListener('input',update);form.addEventListener('change',update);
+    form.addEventListener('reset',()=>queueMicrotask(update));
+    update();return update;
+  }
   async function submitDirect(metadata, files, status, button) {
     if (sending.has(button) || button.dataset.submissionComplete === 'true') return false;
     sending.add(button);
@@ -93,45 +97,29 @@
       if (!response.ok) throw new Error(received.error || `Upload failed (${response.status})`);
       status.textContent = `${words()[1]} ${received.submissionId}`;
       button.dataset.submissionComplete = 'true';
+      try { if (metadata.values?.annotationDraftKey?.startsWith('scriptahub:suggest:')) sessionStorage.removeItem(metadata.values.annotationDraftKey); } catch { /* A confirmed submission stays successful even if local draft cleanup is unavailable. */ }
       return true;
     } catch (error) {
       status.textContent = error.message;
       button.disabled = false;
       return false;
-    } finally { sending.delete(button); }
+    } finally { sending.delete(button);button.form?.updateContributionState?.(); }
   }
-  globalThis.ScriptaContributionBridge = { saveDraftFiles, submitDirect,
-    newSubmissionId: async () => (await policy).newSubmissionId(),
-    note: language => (translations[language] || translations.en)[2] };
-  async function submit(detail) {
-    const draftId = new URL(location.href).searchParams.get('draft');
-    const status = document.querySelector('[data-workflow-status]');
-    const button = document.querySelector('[data-agreement-form] button[type=submit]');
-    if (!draftId || !status || !button) return;
-    try {
-      const files = await retrieve(draftId);
-      if (!Array.isArray(files) || files.length !== detail.draft.files.length || files.some((file, index) => file.name !== detail.draft.files[index])) {
-        throw new Error('The draft documents are no longer available. Return to the form and select them again.');
-      }
-      const kind = contributionKind(detail.draft, files.length);
-      const metadata = { submissionId: draftId, kind, agreementVersion: detail.agreementVersion, agreementAccepted: true,
-        values: detail.draft.values, language: lang(), ...(bookId(detail.draft) ? { bookId: bookId(detail.draft) } : {}) };
-      if (await submitDirect(metadata, files, status, button)) await remove(draftId);
-    } catch (error) {
-      status.textContent = error.message;
-      button.disabled = false;
-    }
+  async function submitContribution(draft,files,status,button) {
+    if(draft.agreementAccepted!==true)throw new Error('Contribution agreement is required');
+    const submissionPolicy=await policy;
+    button.dataset.submissionId ||= submissionPolicy.newSubmissionId();
+    const metadata={submissionId:button.dataset.submissionId,kind:contributionKind(draft,files.length),agreementVersion:'2026-09-10',agreementAccepted:true,values:draft.values,language:draft.language ?? lang(),...(bookId(draft)?{bookId:bookId(draft)}:{})};
+    return submitDirect(metadata,files,status,button);
   }
-  document.addEventListener('scriptahub:contribution-submit', event => {
-    event.preventDefault();
-    void submit(event.detail);
-  });
-  const accountLabel = { en: 'Signed in as', ro: 'Conectat ca', fr: 'Connecté en tant que', de: 'Angemeldet als', es: 'Sesión iniciada como', pt: 'Sessão iniciada como', it: 'Accesso come', pl: 'Zalogowano jako' };
+  globalThis.ScriptaContributionBridge = {bindFormValidity,loadDraftFiles,deleteDraftFiles:remove,submitContribution,submitDirect,
+    newSubmissionId:async()=>(await policy).newSubmissionId(),
+    note:language=>(translations[language]||translations.en)[2]};
   let account;
   let accountRequired = false;
   fetch(new URL('api/session', root), { credentials: 'same-origin' })
     .then(response => response.ok ? response.json() : null)
-    .then(result => { account = result?.user; if (account) showAccount(); else requireLogin(); })
+    .then(result => { account = result?.user; if (!account) requireLogin(); })
     .catch(() => requireLogin());
   function requireLogin() {
     if (!location.pathname.includes('/books/')) return;
@@ -149,19 +137,9 @@
       form.prepend(notice);
     }
   }
-  function showAccount() {
-    for (const form of document.querySelectorAll('.workflow-form, [data-agreement-form]')) {
-      if (form.querySelector('.workflow-account')) continue;
-      const notice = document.createElement('p');
-      notice.className = 'workflow-account';
-      notice.textContent = `${accountLabel[lang()] || accountLabel.en}: ${account.displayName || account.email}`;
-      form.prepend(notice);
-    }
-  }
   // The source shell still contains email wording. The agent shows its actual delivery method.
   const observer = new MutationObserver(() => {
-    if (account) showAccount();
-    else if (accountRequired) requireLogin();
+    if (!account && accountRequired) requireLogin();
     for (const note of document.querySelectorAll('.workflow-form > .workflow-note, .create-form-footer .workflow-note, .agreement-page .workflow-note')) {
       if (note.dataset.agentCopy) continue;
       note.textContent = words()[2];

@@ -169,7 +169,7 @@ export function createSiteServer(siteRoot, { dataDir: submissionDataDir = dataDi
         res.end(payload);
         return;
       }
-      if (/^\/(?:create|fork|feedback|translate|animation-request|agreement|account)\//.test(pathname) || pathname === '/librarian/feedback.html') {
+      if (/^\/(?:create|fork|translate|animation-request|agreement|account)\//.test(pathname) || pathname === '/librarian/feedback.html') {
         if (!await verifyUser(req, url, Buffer.alloc(0))) { res.writeHead(401); res.end(); return; }
       }
       const decoded = decodeURIComponent(pathname);
@@ -211,7 +211,7 @@ export function createSiteServer(siteRoot, { dataDir: submissionDataDir = dataDi
   return server;
 }
 
-async function main() {
+export async function main() {
   const refresh = new AbortController();
   const configPath = process.env.SCRIPTA_CONFIG || path.join(import.meta.dirname, 'sources.json');
   let interval = syncIntervalMs(await loadSourceConfig({ configPath, dataDir }));

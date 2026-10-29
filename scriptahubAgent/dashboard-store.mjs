@@ -1,3 +1,5 @@
+import { prepareTaskSchema } from './task-schema.mjs';
+import { annotations } from './annotations.mjs';
 import { DatabaseSync } from 'node:sqlite';
 import { mkdirSync, chmodSync } from 'node:fs';
 import path from 'node:path';
@@ -22,13 +24,14 @@ export class DashboardStore {
       CREATE TABLE IF NOT EXISTS changes (id TEXT PRIMARY KEY, book_id TEXT REFERENCES books(id), author TEXT NOT NULL,
         kind TEXT NOT NULL, state TEXT NOT NULL, base_revision INTEGER NOT NULL, payload TEXT NOT NULL,
         created_at TEXT NOT NULL, decided_at TEXT, decided_by TEXT, decision_note TEXT);
-      CREATE TABLE IF NOT EXISTS tasks (id TEXT PRIMARY KEY, change_id TEXT NOT NULL UNIQUE REFERENCES changes(id),
+      CREATE TABLE IF NOT EXISTS tasks (id TEXT PRIMARY KEY, change_id TEXT NOT NULL REFERENCES changes(id), kind TEXT NOT NULL, base_revision INTEGER,
         state TEXT NOT NULL CHECK(state IN ('queued','running','stop_requested','cancelled','completed','failed')),
         created_at TEXT NOT NULL, updated_at TEXT NOT NULL, result TEXT, error TEXT);
       CREATE TABLE IF NOT EXISTS events (id INTEGER PRIMARY KEY, book_id TEXT, change_id TEXT, task_id TEXT,
         actor TEXT NOT NULL, action TEXT NOT NULL, created_at TEXT NOT NULL, subject_user TEXT);
       CREATE INDEX IF NOT EXISTS changes_book ON changes(book_id,created_at);
       CREATE INDEX IF NOT EXISTS tasks_state ON tasks(state,created_at);`);
+    prepareTaskSchema(this);
     // Preserve existing activity. Unknown past recipients cannot be reconstructed.
     this.transaction(() => {
       if (!this.db.prepare('PRAGMA table_info(events)').all().some(column => column.name === 'subject_user')) {
@@ -74,14 +77,17 @@ export class DashboardStore {
     const bookId = meta.targetBookId || meta.bookId;
     if (!bookId) { if (meta.kind !== 'librarian-feedback') fail('A book is required'); return; }
     const book = this.book(bookId);
+    if (annotations(meta) && Number(meta.values.baseRevision) !== book.revision) fail('The book has changed. Reload it before submitting annotations.', 409);
     if (book.origin !== 'catalogue' && !this.canRead(book, user)) fail('Book access required', 403);
   }
   task(change, actor) {
-    const existing = this.db.prepare('SELECT * FROM tasks WHERE change_id=?').get(change.id);
+    const existing = this.db.prepare('SELECT t.* FROM tasks t JOIN task_changes tc ON tc.task_id=t.id WHERE tc.change_id=? ORDER BY t.rowid DESC LIMIT 1').get(change.id);
     if (existing) return existing;
     const timestamp = now();
-    this.db.prepare('INSERT INTO tasks(id,change_id,state,created_at,updated_at) VALUES(?,?,?,?,?)')
-      .run(change.id, change.id, 'queued', timestamp, timestamp);
+    this.db.prepare('INSERT INTO tasks(id,change_id,kind,state,created_at,updated_at) VALUES(?,?,?,?,?,?)')
+      .run(change.id, change.id, change.kind, 'queued', timestamp, timestamp);
+    const stored = this.db.prepare('SELECT * FROM changes WHERE id=?').get(change.id);
+    this.db.prepare('INSERT INTO task_changes VALUES(?,?,0,?)').run(change.id,change.id,JSON.stringify(stored));
     this.event(actor, 'task.queued', change.book_id, change.id, change.id);
     return this.db.prepare('SELECT * FROM tasks WHERE id=?').get(change.id);
   }
@@ -108,38 +114,73 @@ export class DashboardStore {
         state, base_revision: book?.revision || 0 };
       this.db.prepare('INSERT INTO changes(id,book_id,author,kind,state,base_revision,payload,created_at,decided_at,decided_by) VALUES(?,?,?,?,?,?,?,?,?,?)')
         .run(change.id, change.book_id, change.author, change.kind, state, change.base_revision,
-          JSON.stringify({ metadata: meta, files: record.files }), record.createdAt,
+          JSON.stringify({ metadata: meta, files: record.files, ...(annotations(meta) && state === 'accepted' ? {annotationDecisions:Object.fromEntries(annotations(meta).map(item=>[item.id,'accept']))} : {}) }), record.createdAt,
           state === 'accepted' ? now() : null, state === 'accepted' ? record.owner : null);
       this.event(record.owner, state === 'accepted' ? 'change.accepted' : 'change.proposed', change.book_id, change.id);
-      if (state === 'accepted') {
-        this.db.prepare('UPDATE books SET revision=revision+1 WHERE id=?').run(book.id);
-        this.task(change, record.owner);
-      }
+      if (state === 'accepted' && ['manuscript','book-proposal','fork'].includes(meta.kind) && !meta.targetBookId) this.task(change, record.owner);
       return this.receipt(this.db.prepare('SELECT * FROM changes WHERE id=?').get(record.id));
     });
   }
   receipt(change) {
-    const task = this.db.prepare('SELECT * FROM tasks WHERE change_id=?').get(change.id);
+    const task = this.db.prepare('SELECT t.* FROM tasks t JOIN task_changes tc ON tc.task_id=t.id WHERE tc.change_id=? ORDER BY t.rowid DESC LIMIT 1').get(change.id);
     return { submissionId: change.id, bookId: change.book_id, state: change.state, createdAt: change.created_at,
-      task: task ? { schemaVersion: 1, id: task.id, type: `scriptahub.${change.kind}`, state: task.state } : null };
+      task: task ? { schemaVersion: 1, id: task.id, type: `scriptahub.${task.kind}`, state: task.state } : null };
   }
-  decide(user, changeId, decision, note = '') {
+  decide(user, changeId, decision, note = '', annotationDecisions) {
     if (!['accept', 'reject'].includes(decision)) fail('Invalid decision');
     return this.transaction(() => {
       const change = this.db.prepare('SELECT * FROM changes WHERE id=?').get(changeId) || fail('Change not found', 404);
       const book = this.book(change.book_id);
       this.owner(book, user);
       if (change.author === user.id) fail('You cannot review your own proposal', 403);
+      const payload = JSON.parse(change.payload), items = annotations(payload.metadata);
+      if (items) {
+        if (!annotationDecisions || typeof annotationDecisions !== 'object' || Array.isArray(annotationDecisions)
+          || Object.keys(annotationDecisions).length !== items.length
+          || items.some(item => !['accept','reject'].includes(annotationDecisions[item.id]))) fail('Decide every annotation before finishing the review');
+        decision = items.some(item => annotationDecisions[item.id] === 'accept') ? 'accept' : 'reject';
+        if (change.state !== 'open' && items.some(item => payload.annotationDecisions?.[item.id] !== annotationDecisions[item.id])) fail('This proposal has already been decided',409);
+        payload.annotationDecisions = annotationDecisions;
+      }
       const state = decision === 'accept' ? 'accepted' : 'rejected';
       if (change.state === state) return this.receipt(change);
       if (change.state !== 'open') fail('This proposal has already been decided', 409);
       if (decision === 'accept' && change.base_revision !== book.revision) fail('The book has changed. Ask the author to submit an updated proposal.', 409);
+      if (items) this.db.prepare('UPDATE changes SET payload=? WHERE id=?').run(JSON.stringify(payload),changeId);
       this.db.prepare('UPDATE changes SET state=?,decided_at=?,decided_by=?,decision_note=? WHERE id=?')
         .run(state, now(), user.id, text(note), changeId);
       this.event(user.id, `change.${state}`, book.id, changeId);
-      if (state === 'accepted') { this.db.prepare('UPDATE books SET revision=revision+1 WHERE id=?').run(book.id); this.task(change, user.id); }
       return this.receipt(this.db.prepare('SELECT * FROM changes WHERE id=?').get(changeId));
     });
+  }
+  submitEdition(user, bookId, submissionId) {
+    if (typeof bookId !== 'string' || !bookId || bookId.length > 128) fail('Invalid book ID');
+    if (typeof submissionId !== 'string' || !/^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/.test(submissionId)) fail('Invalid edition submission ID');
+    return this.transaction(() => {
+      const book = this.book(bookId);this.owner(book,user);
+      const taskId = `edition-${submissionId}`;
+      const previous = this.db.prepare('SELECT t.*,c.book_id FROM tasks t JOIN changes c ON c.id=t.change_id WHERE t.id=?').get(taskId);
+      if (previous) {
+        if (previous.book_id !== bookId || previous.base_revision === null) fail('Edition submission ID already belongs to another task',409);
+        return {taskId,state:previous.state,changeCount:this.db.prepare('SELECT count(*) AS n FROM task_changes WHERE task_id=?').get(taskId).n};
+      }
+      if (this.db.prepare(`SELECT 1 FROM tasks t JOIN changes c ON c.id=t.change_id
+        WHERE c.book_id=? AND t.state IN ('queued','running','stop_requested')`).get(bookId)) fail('This book already has a pending or running edition task.',409);
+      const requests = this.db.prepare(`SELECT c.* FROM changes c WHERE c.book_id=? AND c.state='accepted' AND (c.kind NOT IN ('manuscript','book-proposal','fork') OR json_extract(c.payload,'$.metadata.targetBookId') IS NOT NULL) AND NOT EXISTS
+        (SELECT 1 FROM task_changes tc JOIN tasks t ON t.id=tc.task_id WHERE tc.change_id=c.id AND t.state NOT IN ('failed','cancelled'))
+        ORDER BY c.created_at,c.rowid`).all(bookId);
+      if (!requests.length) fail('There are no approved changes waiting for a new edition.',409);
+      const time=now();
+      this.db.prepare("INSERT INTO tasks(id,change_id,kind,base_revision,state,created_at,updated_at) VALUES(?,?,'edit',?,'queued',?,?)")
+        .run(taskId,requests[0].id,book.revision,time,time);
+      const insert=this.db.prepare('INSERT INTO task_changes VALUES(?,?,?,?)');
+      requests.forEach((change,index)=>insert.run(taskId,change.id,index,JSON.stringify(change)));
+      this.event(user.id,'edition.submitted',bookId,null,taskId);
+      return {taskId,state:'queued',changeCount:requests.length};
+    });
+  }
+  editionRequests(taskId) {
+    return this.db.prepare('SELECT snapshot FROM task_changes WHERE task_id=? ORDER BY position').all(taskId).map(row=>JSON.parse(row.snapshot));
   }
   cancel(user, taskId) {
     return this.transaction(() => {
@@ -165,17 +206,25 @@ export class DashboardStore {
     });
   }
   overview(user) {
+    const canManageTasks = Array.isArray(user.roles) && user.roles.includes('admin');
     const books = this.db.prepare(`SELECT b.* FROM books b WHERE owner=? OR EXISTS
       (SELECT 1 FROM collaborators c WHERE c.book_id=b.id AND c.user_id=?) ORDER BY created_at DESC`).all(user.id, user.id);
-    const changes = this.db.prepare(`SELECT c.*,b.title,b.owner,
+    const changes = this.db.prepare(`SELECT c.*,b.title,b.owner,t.state AS processing_state,t.updated_at AS processing_updated_at,
       COALESCE(NULLIF(trim(p.name),''),p.email) AS author_name FROM changes c LEFT JOIN books b ON b.id=c.book_id
-      LEFT JOIN people p ON p.id=c.author WHERE c.author=? OR b.owner=? OR EXISTS
+      LEFT JOIN people p ON p.id=c.author LEFT JOIN tasks t ON t.id=(SELECT latest.id FROM tasks latest JOIN task_changes tc ON tc.task_id=latest.id WHERE tc.change_id=c.id ORDER BY latest.rowid DESC LIMIT 1) WHERE c.author=? OR b.owner=? OR EXISTS
       (SELECT 1 FROM collaborators a WHERE a.book_id=b.id AND a.user_id=?) ORDER BY c.created_at DESC`).all(user.id, user.id, user.id);
-    const tasks = this.db.prepare(`SELECT t.*,c.book_id,c.author,c.kind,b.title,b.owner FROM tasks t JOIN changes c ON c.id=t.change_id
+    const tasks = canManageTasks ? this.db.prepare(`SELECT t.*,c.book_id,c.author,b.title,b.owner FROM tasks t JOIN changes c ON c.id=t.change_id
       JOIN books b ON b.id=c.book_id WHERE c.author=? OR b.owner=? OR EXISTS
-      (SELECT 1 FROM collaborators a WHERE a.book_id=b.id AND a.user_id=?) ORDER BY t.created_at DESC`).all(user.id, user.id, user.id);
-    return { user: { id: user.id, name: user.displayName || user.email }, books,
-      changes: changes.map(change => ({ ...change, payload: JSON.parse(change.payload) })), tasks,
+      (SELECT 1 FROM collaborators a WHERE a.book_id=b.id AND a.user_id=?) ORDER BY t.created_at DESC`).all(user.id, user.id, user.id) : [];
+    const editions = books.map(book => ({bookId:book.id,
+      pendingCount:this.db.prepare(`SELECT count(*) AS n FROM changes c WHERE c.book_id=? AND c.state='accepted' AND (c.kind NOT IN ('manuscript','book-proposal','fork') OR json_extract(c.payload,'$.metadata.targetBookId') IS NOT NULL) AND NOT EXISTS
+        (SELECT 1 FROM task_changes tc JOIN tasks t ON t.id=tc.task_id WHERE tc.change_id=c.id AND t.state NOT IN ('failed','cancelled'))`).get(book.id).n,
+      activeTask:this.db.prepare(`SELECT t.id,t.state FROM tasks t JOIN changes c ON c.id=t.change_id WHERE c.book_id=?
+        AND t.state IN ('queued','running','stop_requested') ORDER BY t.rowid DESC LIMIT 1`).get(book.id) || null}));
+    return { user: { id: user.id, name: user.displayName || user.email }, books, editions,
+      changes: changes.map(({processing_state, processing_updated_at, ...change}) => ({ ...change,
+        processing: processing_state ? { state: processing_state, updatedAt: processing_updated_at } : null,
+        payload: JSON.parse(change.payload) })), tasks, canManageTasks,
       collaborators: this.db.prepare(`SELECT c.book_id,p.id,p.email,p.name FROM collaborators c JOIN people p ON p.id=c.user_id
         JOIN books b ON b.id=c.book_id WHERE b.owner=?`).all(user.id),
       events: this.db.prepare(`SELECT e.*,COALESCE(NULLIF(trim(p.name),''),p.email) AS actor_name,

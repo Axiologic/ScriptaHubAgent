@@ -51,23 +51,25 @@ test('import ownership, transactional approval, conflicts, access, cancellation 
   const proposal = record(bob, 'bk-imported');
   assert.equal(store.submit(proposal).task, null);
   assert.equal(store.overview(system).changes[0].state, 'open');
-  store.db.exec("CREATE TEMP TRIGGER fail_task BEFORE INSERT ON tasks BEGIN SELECT RAISE(ABORT, 'test interrupted write'); END");
-  assert.throws(() => store.decide(system, proposal.id, 'accept'), /test interrupted write/);
-  assert.equal(store.book('bk-imported').revision, 0);
-  assert.equal(store.db.prepare('SELECT state FROM changes WHERE id=?').get(proposal.id).state, 'open');
-  store.db.exec('DROP TRIGGER fail_task');
   assert.throws(() => store.decide(bob, proposal.id, 'accept'), /Only the book owner/);
-  const accepted = store.decide(system, proposal.id, 'accept');
-  assert.equal(accepted.task.state, 'queued');
-  const queuedEvent = store.overview(system).events.find(event => event.action === 'task.queued' && event.change_id === proposal.id);
-  assert.equal(queuedEvent.actor, system.id, 'the approver queues the task, not the proposal author');
-  assert.deepEqual(store.decide(system, proposal.id, 'accept'), accepted);
+  const approved = store.decide(system, proposal.id, 'accept');
+  assert.equal(approved.task, null);
+  assert.equal(store.book('bk-imported').revision, 0);
+  assert.deepEqual(store.decide(system, proposal.id, 'accept'), approved);
+  store.db.exec("CREATE TEMP TRIGGER fail_task BEFORE INSERT ON tasks BEGIN SELECT RAISE(ABORT, 'test interrupted write'); END");
+  assert.throws(() => store.submitEdition(system,'bk-imported',crypto.randomUUID()), /test interrupted write/);
+  assert.equal(store.overview(system).editions[0].pendingCount, 1);
+  store.db.exec('DROP TRIGGER fail_task');
+  const accepted = store.submitEdition(system,'bk-imported',crypto.randomUUID());
+  assert.equal(accepted.state, 'queued');
+  const queuedEvent = store.overview(system).events.find(event => event.action === 'edition.submitted');
+  assert.equal(queuedEvent.actor, system.id);
   assert.equal(store.db.prepare('SELECT count(*) AS n FROM tasks').get().n, 1);
-  assert.throws(() => store.cancel(bob, accepted.task.id), /Only the book owner/);
-  store.cancel(system, accepted.task.id);
-  assert.equal(store.overview(system).tasks[0].state, 'cancelled');
+  assert.throws(() => store.cancel(bob, accepted.taskId), /Only the book owner/);
+  store.cancel(system, accepted.taskId);
+  assert.equal(store.overview({ ...system, roles: ['admin'] }).tasks[0].state, 'cancelled');
   const stale = record(bob, 'bk-imported'); store.submit(stale);
-  store.submit(record(system, 'bk-imported'));
+  store.db.prepare('UPDATE books SET revision=revision+1 WHERE id=?').run('bk-imported'); // a published edition changed the baseline
   assert.throws(() => store.decide(system, stale.id, 'accept'), /book has changed/);
   assert.equal(store.db.prepare('SELECT state FROM changes WHERE id=?').get(stale.id).state, 'open');
   store.decide(system, stale.id, 'reject', 'Needs updating');
@@ -95,7 +97,7 @@ test('import ownership, transactional approval, conflicts, access, cancellation 
   assert.equal(store.book(fork.bookId).owner, bob.id);
   store.close(); store = new DashboardStore(directory);
   assert.equal(store.book('bk-imported').owner, system.id);
-  assert.equal(store.db.prepare('SELECT state FROM tasks WHERE id=?').get(accepted.task.id).state, 'cancelled');
+  assert.equal(store.db.prepare('SELECT state FROM tasks WHERE id=?').get(accepted.taskId).state, 'cancelled');
   store.remember(alice, [{ id: 'bk-imported', title: 'Changed source title' }]);
   assert.equal(store.book('bk-imported').owner, system.id);
 });
@@ -113,7 +115,7 @@ test('adding access recipients preserves existing activity without inventing his
   assert.equal(event.subject_user, null);
   assert.equal(event.subject_name, null);
   assert.equal(event.actor_name, 'alice');
-  assert.equal(store.book(creation.bookId).revision, 1);
+  assert.equal(store.book(creation.bookId).revision, 0);
 });
 
 test('HTTP dashboard connects existing forms to owner and collaborator workflows without leaking private files', async t => {
@@ -140,6 +142,10 @@ test('HTTP dashboard connects existing forms to owner and collaborator workflows
   assert.equal((await request(null, '/api/dashboard')).status, 401);
   const creation = await submit('alice', 'manuscript'); assert.equal(creation.status, 202);
   const bookId = creation.value.bookId;
+  assert.equal((await request(null, '/api/dashboard/book-context?bookId='+bookId)).status,401);
+  assert.equal((await request('charlie', '/api/dashboard/book-context?bookId='+bookId)).status,404);
+  const context=await request('alice','/api/dashboard/book-context?bookId='+bookId);
+  assert.equal(context.value.owner,true);assert.equal(context.value.revision,0);
   await request('bob', '/api/session');
   assert.equal((await request('alice', '/api/dashboard/access', { bookId, email: user('bob').email })).status, 200);
   const proposal = await submit('bob', 'edit', bookId); assert.equal(proposal.value.task, null);
@@ -151,10 +157,72 @@ test('HTTP dashboard connects existing forms to owner and collaborator workflows
   assert.equal(await document.text(), '%PDF-1.7\nexample');
   assert.equal((await request('bob', '/api/dashboard/review', { changeId: proposal.value.submissionId, decision: 'accept' })).status, 403);
   const review = await request('alice', '/api/dashboard/review', { changeId: proposal.value.submissionId, decision: 'accept' });
-  assert.equal(review.value.task.state, 'queued');
+  assert.equal(review.value.task, null);
   const repeated = await request('alice', '/api/dashboard/review', { changeId: proposal.value.submissionId, decision: 'accept' });
-  assert.equal(repeated.value.task.id, review.value.task.id);
-  assert.equal((await request('alice', '/api/dashboard/cancel', { taskId: review.value.task.id })).status, 200);
+  assert.equal(repeated.value.task, null);
+  await request('alice','/api/dashboard/cancel',{taskId:creation.value.task.id});
+  assert.equal((await request('bob','/api/dashboard/editions',{bookId,submissionId:crypto.randomUUID()})).status,403);
+  const edition = await request('alice','/api/dashboard/editions',{bookId,submissionId:crypto.randomUUID()});
+  assert.equal(edition.status,200);assert.equal(edition.value.changeCount,1);
+  assert.equal((await request('alice', '/api/dashboard/cancel', { taskId: edition.value.taskId })).status, 200);
   const state = (await request('bob', '/api/dashboard')).value;
-  assert.equal(state.tasks.find(task => task.id === review.value.task.id).state, 'cancelled');
+  assert.deepEqual(state.tasks, []);
+  assert.equal(state.canManageTasks, false);
+  assert.equal(state.changes.find(change => change.id === proposal.value.submissionId).processing.state, 'cancelled');
+});
+
+test('annotations are reviewed individually, owner edits auto-accept, and typed claims exclude rejected text',async t=>{
+  const directory=await fs.mkdtemp(path.join(os.tmpdir(),'scripta-annotations-'));
+  const store=new DashboardStore(directory);t.after(async()=>{store.close();await fs.rm(directory,{recursive:true,force:true});});
+  const owner=user('system'),author=user('writer');store.remember(owner,[{id:'bk-annotated',title:'Annotated book'}]);store.remember(author);
+  const make=(who,revision=store.book('bk-annotated').revision)=>{
+    const result=record(who,'bk-annotated');result.metadata.language='en';result.metadata.values={baseRevision:String(revision),annotations:JSON.stringify(['one','two'].map(id=>({id,quote:'Text',start:0,end:4,kind:'Editorial structure',feedback:id,sources:'',edition:'edition-1',language:'en'})))};return result;
+  };
+  const change=make(author);store.submit(change);
+  assert.throws(()=>store.decide(author,change.id,'accept','',{one:'accept',two:'reject'}),/Only the book owner/);
+  assert.throws(()=>store.decide(owner,change.id,'accept','',{one:'accept'}),/Decide every annotation/);
+  const accepted=store.decide(owner,change.id,'accept','',{one:'accept',two:'reject'});
+  assert.equal(accepted.task,null);store.submitEdition(owner,'bk-annotated',crypto.randomUUID());
+  const {TaskExecution}=await import('../task-execution.mjs');const service=new TaskExecution(store,directory);
+  assert.equal(service.claim('agent:test/robot',{runId:'manuscript-run'}).task,null);
+  const task=service.claim('agent:test/robot',{runId:'edit-run',taskType:'edit'}).task;
+  assert.equal(task.type,'scriptahub.edit');assert.deepEqual(task.annotations.map(item=>item.id),['one']);assert.equal(task.values.annotations,undefined);
+  assert.throws(()=>service.claim('agent:test/robot',{runId:'edit-run',taskType:'manuscript'}),/another task type/);
+  service.finish('agent:test/robot',{executionId:task.executionId,state:'failed',error:'Test processor failure'});
+  assert.equal(service.status('agent:test/robot',{executionId:task.executionId}).state,'failed');
+  const rejected=make(author);store.submit(rejected);assert.equal(store.decide(owner,rejected.id,'accept','',{one:'reject',two:'reject'}).state,'rejected');
+  assert.equal(store.receipt(store.db.prepare('SELECT * FROM changes WHERE id=?').get(rejected.id)).task,null);
+  const self=make(owner);assert.equal(store.submit(self).state,'accepted');
+  store.submitEdition(owner,'bk-annotated',crypto.randomUUID());
+  const own=service.claim('agent:test/robot',{runId:'next-edit',taskType:'edit'}).task;assert.equal(own.annotations.length,3);assert.equal(own.requests.length,2);
+  store.db.prepare('UPDATE books SET revision=revision+1 WHERE id=?').run('bk-annotated');
+  const stale=make(author,0);assert.throws(()=>store.submit(stale),/book has changed/);
+});
+
+test('change requests expose processing status while technical tasks require the admin role', async t => {
+  const directory = await fs.mkdtemp(path.join(os.tmpdir(), 'scripta-dashboard-status-'));
+  const store = new DashboardStore(directory);
+  t.after(async () => { store.close(); await fs.rm(directory, {recursive:true,force:true}); });
+  const owner = user('status-owner'), collaborator = user('status-collaborator');
+  store.remember(owner); store.remember(collaborator);
+  const creation = store.submit(record(owner, undefined, 'book-proposal'));
+  store.access(owner, creation.bookId, collaborator.email);
+  const proposal = record(collaborator, creation.bookId); store.submit(proposal);
+  assert.equal(store.overview(collaborator).changes.find(c => c.id === proposal.id).processing, null);
+  store.decide(owner, proposal.id, 'accept');
+  store.cancel(owner,creation.task.id);store.submitEdition(owner,creation.bookId,crypto.randomUUID());
+  for (const state of ['queued','running','stop_requested','completed','failed','cancelled']) {
+    store.db.prepare('UPDATE tasks SET state=?,error=? WHERE change_id=?').run(state,'internal diagnostic',proposal.id);
+    const regular = store.overview(collaborator);
+    assert.equal(regular.canManageTasks,false); assert.deepEqual(regular.tasks,[]);
+    const processing=regular.changes.find(c => c.id === proposal.id).processing;
+    assert.equal(processing.state,state);
+    assert.equal(processing.updatedAt,store.db.prepare('SELECT updated_at FROM tasks WHERE change_id=?').get(proposal.id).updated_at);
+    const admin = store.overview({...owner,roles:['admin']});
+    assert.equal(admin.canManageTasks,true);
+    assert.equal(admin.tasks.find(task => task.change_id === proposal.id).state,state);
+  }
+  const rejected = record(collaborator, creation.bookId); store.submit(rejected); store.decide(owner,rejected.id,'reject');
+  const change = store.overview(collaborator).changes.find(c => c.id === rejected.id);
+  assert.equal(change.state,'rejected'); assert.equal(change.processing,null);
 });

@@ -110,6 +110,7 @@ async function configureLanguageSelector() {
 
     languageSelect.addEventListener('change', () => {
       const url = reading.readingUrl(book, languageSelect.value, format, languageSelect.value, new URL('../', location.href), preferred);
+      if (url && query.get('view') === 'suggest') url.searchParams.set('view', 'suggest');
       if (url) window.location.href = url.href;
       else languageSelect.value = uiLanguage;
     });
@@ -368,6 +369,7 @@ async function renderHtml(url) {
       setStatus('Resumed where you left off.', `${Math.round(restore * 100)}% read`);
     } else setStatus('Reading position is saved on this device.', 'Beginning');
     updateHtmlProgress(Number.isFinite(restore) ? restore : 0);
+    highlightAnnotationPassage();
   });
   stage.addEventListener('scroll', scheduleHtmlSave, { passive: true });
   hideLoading();
@@ -695,4 +697,19 @@ if (readerAccount) {
   readerAccount.title = labels[language] || labels.en;
   readerAccount.setAttribute('aria-label', readerAccount.title);
   readerAccount.href = `../account/index.html?lang=${encodeURIComponent(language)}`;
+}
+
+// Review links keep passage context in the fragment, out of HTTP request logs.
+function highlightAnnotationPassage() {
+  const anchor=new URLSearchParams(location.hash.slice(1)), quote=anchor.get('quote');
+  if(!quote)return;
+  const text=stage.textContent,prefix=anchor.get('prefix')||'',suffix=anchor.get('suffix')||'';
+  const matches=[];let offset=text.indexOf(quote);
+  while(offset!==-1){if((!prefix||text.slice(Math.max(0,offset-prefix.length),offset)===prefix)&&(!suffix||text.slice(offset+quote.length,offset+quote.length+suffix.length)===suffix))matches.push(offset);offset=text.indexOf(quote,offset+1);}
+  if(matches.length!==1){setStatus('The original passage cannot be identified uniquely in this edition. Review the saved quotation.','Passage changed');return;}
+  const walker=document.createTreeWalker(stage,NodeFilter.SHOW_TEXT),range=document.createRange();let node,total=0,started=false;
+  while((node=walker.nextNode())){const end=total+node.textContent.length;
+    if(!started&&matches[0]<end){range.setStart(node,matches[0]-total);started=true;}
+    if(started&&matches[0]+quote.length<=end){range.setEnd(node,matches[0]+quote.length-total);const selection=getSelection();selection.removeAllRanges();selection.addRange(range);range.startContainer.parentElement.scrollIntoView({block:'center'});setStatus('Selected passage from the proposal.','Review');return;}total=end;
+  }
 }

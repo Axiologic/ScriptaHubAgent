@@ -10,7 +10,12 @@ export async function handleDashboard({ req, res, url, pathname, verifyUser, get
   if (!user) { res.writeHead(401); res.end(); return; }
   const store = getStore(); store.remember(user, catalogue());
   let result;
-  if (req.method === 'GET' && pathname === '/api/dashboard') result = store.overview(user);
+  if (req.method === 'GET' && pathname === '/api/dashboard/book-context') {
+    const book = store.book(url.searchParams.get('bookId'));
+    if (book.origin !== 'catalogue' && !store.canRead(book,user)) { res.writeHead(404);res.end();return; }
+    result = {bookId:book.id,revision:book.revision,owner:book.owner === user.id};
+  }
+  else if (req.method === 'GET' && pathname === '/api/dashboard') result = store.overview(user);
   else if (req.method === 'GET' && /^\/api\/dashboard\/files\/[0-9a-f-]{36}\/\d+$/.test(pathname)) {
     const [, submissionId, index] = pathname.match(/files\/([^/]+)\/(\d+)$/);
     const change = store.db.prepare('SELECT * FROM changes WHERE id=?').get(submissionId);
@@ -26,7 +31,8 @@ export async function handleDashboard({ req, res, url, pathname, verifyUser, get
     res.end(bytes); return;
   } else if (req.method === 'POST') {
     const input = JSON.parse(body.toString());
-    if (pathname === '/api/dashboard/review') result = store.decide(user, input.changeId, input.decision, input.note);
+    if (pathname === '/api/dashboard/review') result = store.decide(user, input.changeId, input.decision, input.note, input.annotationDecisions);
+    else if (pathname === '/api/dashboard/editions') result = store.submitEdition(user,input.bookId,input.submissionId);
     else if (pathname === '/api/dashboard/cancel') { store.cancel(user, input.taskId); result = { ok: true }; }
     else if (pathname === '/api/dashboard/access') { store.access(user, input.bookId, input.email, input.remove === true); result = { ok: true }; }
   }

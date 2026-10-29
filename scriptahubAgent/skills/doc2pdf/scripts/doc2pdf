@@ -1,0 +1,5 @@
+#!/bin/sh
+set -eu
+command -v node >/dev/null 2>&1 || { echo 'Node.js >=22 is required; see dependencies.md.' >&2; exit 1; }
+SCRIPT_DIR=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
+exec node "$SCRIPT_DIR/doc2pdf.mjs" "$@"

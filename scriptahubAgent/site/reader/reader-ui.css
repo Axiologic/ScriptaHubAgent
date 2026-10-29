@@ -1,4 +1,7 @@
 /* Reader controls follow the site's five palettes without changing book markup. */
+/* Suggest owns page navigation; the embedded reader keeps only reading controls. */
+:root[data-reader-view="suggest"] .reader-header { display: none; }
+:root[data-reader-view="suggest"] .reader-app { grid-template-rows: minmax(0,1fr) auto; }
 :root [data-reader-app][data-appearance] {
   --reader-bg: #efeae2; --reader-surround: #efeae2; --reader-paper: #fff;
   --reader-paper-line: rgba(17,27,33,.12); --reader-ink: #111b21;

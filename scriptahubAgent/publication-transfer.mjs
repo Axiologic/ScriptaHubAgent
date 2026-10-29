@@ -37,6 +37,8 @@ export class PublicationTransfer {
     if (!validation || validation.executionId !== executionId || validation.runId !== task.runId || validation.bookId !== task.bookId
       || validation.publicationPermitted !== true || validation.audit?.autoCorrect !== false
       || !['passed','passed_with_warnings'].includes(validation.audit?.status) || validation.audit.errorFindings !== 0) publicationError('A successful independent final validation is required');
+    if(task.type==='scriptahub.edit'&&validation.audit.scope!=='edition_layout_regression')
+      publicationError('Edited editions require a layout regression check against the original edition');
     if (!Array.isArray(files) || files.length < 2 || files.length > 500) publicationError('Provide between 2 and 500 validated files');
     const seen = new Set(); let bytes = 0;
     for (const file of files) {
@@ -46,7 +48,7 @@ export class PublicationTransfer {
       seen.add(file.path); bytes += file.size;
     }
     if (bytes > 512000000) publicationError('Publication package exceeds 512 MB');
-    const manifest = { executionId, catalogue, branch, baseCommit, bookId: task.bookId,
+    const manifest = { executionId, catalogue, branch, baseCommit, bookId: task.bookId, taskType:task.type,
       sourceHashes: task.files.map(file => file.sha256), files: [...files].sort((a,b) => a.path.localeCompare(b.path)), validation };
     const text = JSON.stringify(manifest);
     if (Buffer.byteLength(text) > 100000) publicationError('Publication inventory is too large');

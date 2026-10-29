@@ -1,0 +1,11 @@
+{
+  "schemaVersion": 1,
+  "skills": ["comprehensive-summary", "doc2pdf", "html2doc", "humanise-html", "marketing-summary", "pdf2html", "relevant-keywords", "scriptahub-tasks", "shf-presentation-creator", "short-description", "theatrical-audio", "translate-html", "validate-book"],
+  "nativeAssetSource": {
+    "repository": "https://raw.githubusercontent.com/AssistOS-AI/ScriptaSkillSet/",
+    "revision": "a4025c725ece33fee08fdd7b97ada74256963f6e",
+    "path": "skills/pdf2htmlSkill/external/native/"
+  },
+  "audioEngines": ["kokoro", "qwen", "piper"],
+  "piperVoice": "en_US-ljspeech-medium"
+}

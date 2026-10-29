@@ -53,7 +53,7 @@ async function fixture(t, { schemaVersion = 1 } = {}) {
   const files = new Map([
     ['collection.json',Buffer.from(JSON.stringify({schemaVersion:1,bookCount:1,books:[{id:task.bookId,directory,editions:{en:{pdf:directory+'/en/book.pdf',fullContent:directory+'/en/full.html'}}}]}))],
     [directory+'/manifest.json',Buffer.from(JSON.stringify({id:task.bookId}))],
-    [directory+'/editions.json',Buffer.from('{}')], [directory+'/en/book.pdf',source], [directory+'/en/full.html',Buffer.from('<p>Original manuscript</p>')]
+    [directory+'/editions.json',Buffer.from(JSON.stringify({bookId:task.bookId,currentEdition:'edition-1',editions:[{id:'edition-1'}]}))], [directory+'/en/book.pdf',source], [directory+'/en/full.html',Buffer.from('<p>Original manuscript</p>')]
   ]);
   const input = {executionId:task.executionId,catalogue,branch:'main',baseCommit,
     files:[...files].map(([path,bytes]) => ({path,size:bytes.length,sha256:sha256(bytes)})),
@@ -77,6 +77,18 @@ test('only the owning executor can register a successful validated package for a
   }
   publisher.prepare(agent,input,config);
   assert.throws(() => publisher.prepare(agent,{...input,baseCommit:'a'.repeat(40)},config),/different package/);
+});
+
+test('an edit package requires edition regression evidence, while existing findings can remain warnings',async t=>{
+  const f=await fixture(t);
+  f.store.submit(sealRecord({id:crypto.randomUUID(),owner:'user:owner',contact:{email:'owner@example.test'},createdAt:new Date().toISOString(),files:[],metadata:{kind:'edit',bookId:f.task.bookId,language:'en',values:{baseRevision:String(f.store.book(f.task.bookId).revision),annotations:JSON.stringify([{id:'table',quote:'Text',start:0,end:4,kind:'Editorial structure',feedback:'Render as a table',edition:'edition-1',language:'en'}])}}}));
+  f.store.cancel({id:'user:owner'},f.task.taskId);f.service.finish(agent,{executionId:f.task.executionId,state:'cancelled'});
+  f.store.submitEdition({id:'user:owner'},f.task.bookId,crypto.randomUUID());
+  const task=f.service.claim(agent,{runId:'edit-publication',taskType:'edit'}).task;
+  const input={...f.input,executionId:task.executionId,validation:{...f.input.validation,executionId:task.executionId,runId:task.runId,bookId:task.bookId}};
+  assert.throws(()=>f.publisher.prepare(agent,input,f.config),/layout regression/);
+  input.validation.audit={...input.validation.audit,scope:'edition_layout_regression',existingFindings:12};
+  assert.equal(f.publisher.prepare(agent,input,f.config).executionId,task.executionId);
 });
 
 test('uploads are contiguous, bounded and idempotent, and the service checks actual bytes', async t => {
@@ -190,4 +202,52 @@ test('catalogue branch resolution cannot redirect publication to a shorter match
   const refs = 'a'.repeat(40)+'\trefs/heads/content\n'+'b'.repeat(40)+'\trefs/heads/content/stable';
   assert.throws(() => verifyCatalogueBranch(url,'content',refs),/does not match/);
   verifyCatalogueBranch(url,'content/stable',refs);
+});
+
+test('edit publication changes only its existing book and keeps its content location',()=>{
+  const book={id:'bk-edited',directory:'books/example/bk-edited',editions:{}};
+  const previous={schemaVersion:1,bookCount:1,books:[book]};
+  const collection={...previous,books:[{...book,title:{en:'Edited title'}}]};
+  const target={collection:'collection.json',root:''};
+  const manifest={taskType:'scriptahub.edit',bookId:book.id,sourceHashes:[]};
+  const baseline={metadata:{id:book.id},history:{bookId:book.id,editions:[]}};
+  const bytes=new Map([['collection.json',Buffer.from(JSON.stringify(collection))],['books/example/bk-edited/manifest.json',Buffer.from(JSON.stringify({id:book.id}))],['books/example/bk-edited/editions.json',Buffer.from(JSON.stringify(baseline.history))]]);
+  assert.equal(checkPublicationPackage(manifest,target,bytes,previous,baseline).books[0].title.en,'Edited title');
+  assert.throws(()=>checkPublicationPackage({...manifest,taskType:'scriptahub.manuscript'},target,bytes,previous),/already exists/);
+  assert.throws(()=>checkPublicationPackage(manifest,target,bytes,{...previous,books:[]}),/must already exist/);
+  bytes.set('collection.json',Buffer.from(JSON.stringify({...collection,books:[{...collection.books[0],directory:'books/other/bk-edited'}]})));
+  assert.throws(()=>checkPublicationPackage(manifest,target,bytes,previous),/cannot relocate/);
+});
+
+for (const discardHistory of [true,false]) test(`real Git edition publication ${discardHistory?'rejects lost history before push':'preserves previous editions and resources'}`,async t=>{
+  const f=await fixture(t);f.upload();await f.publisher.publish(agent,{executionId:f.task.executionId},f.config);
+  const baseline=await f.git(f.remote,'rev-parse','main');
+  f.store.submit(sealRecord({id:crypto.randomUUID(),owner:'user:owner',createdAt:new Date().toISOString(),contact:{email:'owner@example.test'},metadata:{kind:'edit',bookId:f.task.bookId,language:'en',values:{instructions:'Improve the approved passage'}},files:[]}));
+  f.store.submitEdition({id:'user:owner'},f.task.bookId,crypto.randomUUID());
+  const task=f.service.claim(agent,{runId:'history-edition',taskType:'edit'}).task;
+  const files=new Map(f.files),collection=JSON.parse(files.get('collection.json'));
+  const book=collection.books[0],directory=book.directory;
+  book.currentEdition='edition-2';book.editions.en.fullContent=directory+'/en/edition-2.html';
+  files.set('collection.json',Buffer.from(JSON.stringify(collection)));
+  files.set(directory+'/manifest.json',Buffer.from(JSON.stringify({id:book.id,currentEdition:'edition-2'})));
+  files.set(directory+'/en/edition-2.html',Buffer.from('<p>Approved revised manuscript</p>'));
+  const history=JSON.parse(files.get(directory+'/editions.json'));
+  history.currentEdition='edition-2';if(discardHistory)history.editions=[];history.editions.push({id:'edition-2'});
+  files.set(directory+'/editions.json',Buffer.from(JSON.stringify(history)));
+  const input={...f.input,executionId:task.executionId,baseCommit:baseline,
+    files:[...files].map(([path,bytes])=>({path,size:bytes.length,sha256:sha256(bytes)})),
+    validation:{...f.input.validation,executionId:task.executionId,runId:task.runId,audit:{...f.input.validation.audit,scope:'edition_layout_regression'}}};
+  f.publisher.prepare(agent,input,f.config);
+  for(const [file,bytes]of files)f.publisher.upload(agent,{executionId:task.executionId,file,offset:0,data:bytes.toString('base64')});
+  if(discardHistory){
+    await assert.rejects(f.publisher.publish(agent,{executionId:task.executionId},f.config),/cannot remove or rewrite a previous edition/);
+    assert.equal(f.pushes(),1);assert.equal(await f.git(f.remote,'rev-parse','main'),baseline);
+    assert.equal(f.service.status(agent,{executionId:task.executionId}).state,'running');
+  }else{
+    await f.publisher.publish(agent,{executionId:task.executionId},f.config);assert.equal(f.pushes(),2);
+    const stored=JSON.parse(await f.git(f.remote,'show','main:'+directory+'/editions.json'));
+    assert.deepEqual(stored.editions.map(e=>e.id),['edition-1','edition-2']);
+    assert.equal(await f.git(f.remote,'show','main:'+directory+'/en/full.html'),'<p>Original manuscript</p>');
+    assert.equal(f.service.status(agent,{executionId:task.executionId}).state,'completed');
+  }
 });

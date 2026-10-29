@@ -1,0 +1,35 @@
+#!/usr/bin/env node
+import { parseArgs } from 'node:util';
+import { doctor, prepare, report } from '../src/audit.mjs';
+import { complete, planComplete, completeStatus } from '../src/complete.mjs';
+import { compareEdition } from '../src/edition-regression.mjs';
+
+const help = `validatebook doctor --chromium FILE --pdftotext FILE --pdffonts FILE --pdfimages FILE
+validatebook compare-edition BASELINE_HTML --candidate EDITED_HTML [--changes APPROVED_CHANGES_JSON]
+  [--reader-css FILE --chromium FILE --job-dir DIR]
+validatebook prepare BOOK_ROOT [--languages en,ro,...] [--filename full_content.html]
+  [--pdf FILE --english FILE --job-dir DIR] [--auto-correct]
+  [--chromium FILE --pdftotext FILE --pdffonts FILE --pdfimages FILE --pdftohtml FILE]
+  --pdf2html FILE [--word-spacing source|natural] [--paginate] [--restore-source-publisher]
+validatebook complete BOOK_ROOT [--job-dir DIR] [same native tool options as prepare]
+validatebook status JOB | report JOB
+validatebook complete-plan BOOK_ROOT [--job-dir DIR] | complete-status COMPLETE_JSON
+Local, deterministic layout/structure checks, native corrections and text-only reports.
+This executable does not translate prose; the validateBook skill agent consumes page-retranslation findings.
+No Python, external model API, screenshots, general editorial review or metadata.
+Tool paths also accept VALIDATEBOOK_CHROMIUM/PDFTOTEXT/PDFFONTS/PDFIMAGES.`;
+try {
+  const { positionals: [command, input, ...extra], values } = parseArgs({ allowPositionals: true, options: {
+    candidate: {type:'string'}, changes: {type:'string'}, 'reader-css': {type:'string'},
+    'restore-source-publisher': {type: 'boolean'}, pdf2html: { type: 'string' }, paginate: { type: 'boolean' }, help: { type: 'boolean', short: 'h' }, chromium: { type: 'string' }, pdftotext: { type: 'string' }, pdffonts: { type: 'string' }, pdfimages: { type: 'string' }, pdftohtml: { type: 'string' }, 'word-spacing': { type: 'string' }, filename: { type: 'string' }, languages: { type: 'string' }, pdf: { type: 'string' }, english: { type: 'string' }, 'job-dir': { type: 'string' }, 'auto-correct': { type: 'boolean' }, translations: { type: 'string' }, 'shared-fonts': { type: 'string' }
+  } });
+  if (values.help) console.log(help);
+  else {
+    if (extra.length || !['compare-edition', 'doctor', 'complete', 'prepare', 'status', 'report', 'complete-plan', 'complete-status'].includes(command) || (command === 'doctor' ? !!input : !input)) throw Error(help);
+    if(command==='compare-edition'&&(values['auto-correct']||values.pdf||values.languages||values.english))throw Error('compare-edition is read-only and does not accept PDF, language or repair options');
+    const result = command === 'compare-edition' ? await compareEdition(input,{...values,readerCss:values['reader-css'],jobDir:values['job-dir']}) : command === 'complete' ? await complete(input, { ...values, restoreSourcePublisher:values['restore-source-publisher'], jobDir:values['job-dir'], wordSpacing:values['word-spacing'] }) : command === 'complete-plan' ? await planComplete(input, { jobDir: values['job-dir'] }) : command === 'complete-status' ? await completeStatus(input) : command === 'doctor' ? await doctor(values) : command === 'prepare' ? await (values['auto-correct'] ? complete : prepare)(input, { ...values, restoreSourcePublisher:values['restore-source-publisher'], jobDir: values['job-dir'], autoCorrect: values['auto-correct'], wordSpacing:values['word-spacing'] }) : await report(input);
+    const output=command==='compare-edition'?{scope:result.scope,status:result.status,autoCorrect:false,errorFindings:result.errorFindings,existingFindings:result.existingFindings,baseline:result.baseline,candidate:result.candidate,checks:result.measurements,findings:result.findings.reduce((counts,f)=>({...counts,[f.category]:(counts[f.category]||0)+1}),{}),report:result.job+'/report.json'}:['prepare','complete'].includes(command)?{status:result.status,installed:result.installed??false,cleanup:result.cleanup,scope:result.scope,job:result.job,documents:result.documents.map(d=>({language:d.language,blocks:d.blocks,viewports:d.viewports})),coverage:result.coverage,corrections:result.corrections.length,findings:result.findings.length,reportText:result.reportText}:result;
+    console.log(JSON.stringify(output, null, 2));
+    process.exitCode = ['needs_attention', 'completed_with_errors', 'failed', 'incomplete'].includes(result.status) ? 3 : 0;
+  }
+} catch (error) { console.error('validatebook: ' + error.message); process.exitCode = 2; }

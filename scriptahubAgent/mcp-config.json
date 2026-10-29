@@ -82,8 +82,8 @@
     },
     {
       "name": "scriptahub_task_claim",
-      "title": "Claim one approved manuscript task",
-      "description": "Claim one approved manuscript task. Restricted to configured executor service identities; no browser account or private storage access is required. Returns application processingSettings separately from task-authored values; summaryReadingMinutes is fixed by ScriptaHub at 10 minutes.",
+      "title": "Claim one approved task by type",
+      "description": "Claim one queued task of taskType. For a reserved batch, use the batchId, taskId and durable runId returned by the local scriptahub-tasks batch helper and ScriptaHub. The workflow select-task step advances its fixed batch; processing steps must not claim additional work. An edit task contains all approved requests snapshotted by Submit new edition.",
       "command": "node",
       "args": [
         "tools/task-tool.mjs"
@@ -99,6 +99,18 @@
             "maxLength": 128
           },
           "taskId": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128
+          },
+          "taskType": {
+            "type": "string",
+            "enum": [
+              "manuscript",
+              "edit"
+            ]
+          },
+          "batchId": {
             "type": "string",
             "minLength": 1,
             "maxLength": 128
@@ -440,6 +452,109 @@
       ],
       "env": {
         "TOOL_NAME": "scriptahub_publication_auth"
+      }
+    },
+    {
+      "name": "scriptahub_task_batch_snapshot",
+      "title": "Task batch snapshot",
+      "description": "Atomically fix and reserve the queued tasks of a type for this batch. Repeated requests return the same list.",
+      "command": "node",
+      "args": [
+        "tools/task-tool.mjs"
+      ],
+      "cwd": "/code",
+      "timeoutMs": 90000,
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "batchId": {
+            "type": "string"
+          },
+          "taskType": {
+            "type": "string",
+            "enum": [
+              "manuscript",
+              "edit"
+            ]
+          }
+        },
+        "required": [
+          "batchId",
+          "taskType"
+        ],
+        "additionalProperties": false
+      },
+      "tags": [
+        "internal"
+      ],
+      "env": {
+        "TOOL_NAME": "scriptahub_task_batch_snapshot"
+      }
+    },
+    {
+      "name": "scriptahub_task_batch_settle",
+      "title": "Task batch settle",
+      "description": "Release this batch reservation only after ScriptaHub has confirmed a terminal task result. Active or uncertain executions cannot be released.",
+      "command": "node",
+      "args": [
+        "tools/task-tool.mjs"
+      ],
+      "cwd": "/code",
+      "timeoutMs": 90000,
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "batchId": {
+            "type": "string"
+          },
+          "taskId": {
+            "type": "string"
+          },
+          "runId": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "batchId",
+          "taskId",
+          "runId"
+        ],
+        "additionalProperties": false
+      },
+      "tags": [
+        "internal"
+      ],
+      "env": {
+        "TOOL_NAME": "scriptahub_task_batch_settle"
+      }
+    },
+    {
+      "name": "scriptahub_task_batch_close",
+      "title": "Task batch close",
+      "description": "Close a batch and release its unstarted tasks. Refuses to close while a reserved task is still running.",
+      "command": "node",
+      "args": [
+        "tools/task-tool.mjs"
+      ],
+      "cwd": "/code",
+      "timeoutMs": 90000,
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "batchId": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "batchId"
+        ],
+        "additionalProperties": false
+      },
+      "tags": [
+        "internal"
+      ],
+      "env": {
+        "TOOL_NAME": "scriptahub_task_batch_close"
       }
     }
   ]

@@ -7,3 +7,42 @@ __pycache__/
 *.py[cod]
 .env
 .env.*
+!.env.example
+
+# Skill runtimes are installed in the agent image, never committed.
+**/node_modules/
+**/.cache/
+**/.venv/
+**/.pytest_cache/
+**/target/
+**/output/
+**/cache/
+**/.theatrical-audio/
+**/.idea/
+**/.apikeys
+**/audio.config.json
+**/*.actual.html
+**/external/browser/
+**/external/tools/
+**/external/native/models/
+**/external/native/linux-*/
+**/external/native/darwin-*/
+**/external/native/win32-*/
+**/external/native/sources/*.zip
+/scriptahubAgent/skills/theatrical-audio/runtime/qwen/
+/scriptahubAgent/skills/theatrical-audio/runtime/kokoro/
+/scriptahubAgent/skills/theatrical-audio/runtime/piper/
+/scriptahubAgent/skills/theatrical-audio/runtime/hf-cache/
+/scriptahubAgent/skills/theatrical-audio/models/
+/scriptahubAgent/skills/theatrical-audio/runtime/*.resolved.txt
+/scriptahubAgent/skills/theatrical-audio/runtime/qwen.json
+/scriptahubAgent/skills/theatrical-audio/runtime/kokoro.json
+/scriptahubAgent/skills/theatrical-audio/runtime/piper.json
+
+# Third-party source trees and notices are build inputs, not repository source.
+**/external/docling-source/
+**/external/native/licenses/
+
+# Local agent/editor skill exports are not application build inputs.
+/.agents/
+/.claude

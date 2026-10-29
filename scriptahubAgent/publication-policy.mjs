@@ -16,7 +16,38 @@ export function publicationTarget(catalogue, branch) {
     root: collection.includes('/') ? collection.slice(0, collection.lastIndexOf('/') + 1) : '' };
 }
 
-export function checkPublicationPackage(manifest, target, bytes, oldCollection) {
+function preserveEditionHistory(previous, candidate, bookId) {
+  if (!previous || previous.metadata?.id !== bookId || candidate.metadata?.id !== bookId
+    || previous.history?.bookId !== bookId || candidate.history?.bookId !== bookId
+    || !Array.isArray(previous.history.editions) || !Array.isArray(candidate.history.editions)) fail('A verified existing edition history is required for edits',409);
+  const byId = new Map();
+  for (const edition of candidate.history.editions) {
+    if (!edition || typeof edition.id !== 'string' || !edition.id || byId.has(edition.id)) fail('Invalid or duplicate edition history entry');
+    byId.set(edition.id,edition);
+  }
+  for (const edition of previous.history.editions) {
+    if (!isDeepStrictEqual(edition,byId.get(edition.id))) fail('Publication cannot remove or rewrite a previous edition',409);
+  }
+  if (previous.history.currentEdition && !candidate.history.currentEdition) fail('Publication cannot remove the current edition reference',409);
+  if (candidate.metadata.currentEdition && candidate.metadata.currentEdition !== candidate.history.currentEdition) fail('Book metadata and history disagree on the current edition');
+  if (candidate.history.currentEdition && !byId.has(candidate.history.currentEdition)) fail('Current edition is missing from its history');
+  for (const [name,value] of Object.entries(previous.history)) {
+    if (!['editions','currentEdition'].includes(name) && !isDeepStrictEqual(value,candidate.history[name])) fail('Publication cannot rewrite edition history metadata',409);
+  }
+  // Existing resource aliases can be referenced by historical editions. New
+  // editions add aliases; they must not redirect or discard the old mappings.
+  for (const [name,value] of Object.entries(previous.resources || {})) {
+    if (candidate.resources?.[name] !== value) fail('Publication cannot remove or remap a previous edition resource',409);
+  }
+}
+function preserveEditionFormats(previous, candidate) {
+  for (const [language,formats] of Object.entries(previous || {})) {
+    for (const key of Object.keys(formats)) {
+      if (typeof candidate?.[language]?.[key] !== 'string' || !candidate[language][key]) fail('Publication cannot remove an existing edition language or format',409);
+    }
+  }
+}
+export function checkPublicationPackage(manifest, target, bytes, oldCollection, previousDocument) {
   const parse = name => {
     const value = bytes.get(name);
     if (!value) fail(`Missing package file: ${name}`);
@@ -27,10 +58,13 @@ export function checkPublicationPackage(manifest, target, bytes, oldCollection) 
     || !Array.isArray(collection.books) || collection.bookCount !== collection.books.length) fail('Invalid catalogue schema or book count');
   const ids = collection.books.map(book => book.id);
   if (ids.some(id => typeof id !== 'string') || new Set(ids).size !== ids.length || !ids.includes(manifest.bookId)) fail('Invalid catalogue identities');
+  const editing = manifest.taskType === 'scriptahub.edit';
+  const previousBook = oldCollection?.books?.find(book => book.id === manifest.bookId);
+  if (editing && !previousBook) fail('The edited book must already exist at this destination',409);
   if (oldCollection) {
-    if (!Array.isArray(oldCollection.books) || oldCollection.books.some(book => book.id === manifest.bookId)) fail('The book already exists at this destination', 409);
+    if (!Array.isArray(oldCollection.books) || (!editing && previousBook)) fail('The book already exists at this destination', 409);
     const other = collection.books.filter(book => book.id !== manifest.bookId);
-    if (!isDeepStrictEqual(other, oldCollection.books)) fail('Publication cannot alter other books');
+    if (!isDeepStrictEqual(other, oldCollection.books.filter(book => !editing || book.id !== manifest.bookId))) fail('Publication cannot alter other books');
     for (const [key,value] of Object.entries(oldCollection)) {
       if (!['books','bookCount','keywords'].includes(key) && !isDeepStrictEqual(collection[key], value)) fail('Publication cannot alter catalogue configuration');
     }
@@ -47,13 +81,19 @@ export function checkPublicationPackage(manifest, target, bytes, oldCollection) 
     }
   }
   const book = collection.books.find(book => book.id === manifest.bookId);
+  if (editing && (book.directory !== previousBook.directory || book.path !== previousBook.path)) fail('An edit cannot relocate the book');
   let allowed;
   if (collection.schemaVersion === 1) {
     const directory = packagePath(book.directory);
     if (!directory.startsWith('books/') || !directory.endsWith('/' + manifest.bookId)) fail('Book directory does not match the claimed task');
     const full = target.root + directory + '/';
-    if (parse(full + 'manifest.json').id !== manifest.bookId) fail('Book manifest identity mismatch');
-    parse(full + 'editions.json');
+    const metadata=parse(full+'manifest.json'),history=parse(full+'editions.json');
+    if (metadata.id !== manifest.bookId) fail('Book manifest identity mismatch');
+    if (editing) {
+      preserveEditionHistory(previousDocument,{metadata,history},manifest.bookId);
+      preserveEditionFormats(previousBook.editions,book.editions);
+      preserveEditionFormats(previousDocument.metadata.editions,metadata.editions);
+    }
     for (const edition of Object.values(book.editions || {})) for (const value of Object.values(edition)) {
       if (typeof value !== 'string') fail('Invalid edition resource');
       const name = target.root + packagePath(value);
@@ -67,6 +107,11 @@ export function checkPublicationPackage(manifest, target, bytes, oldCollection) 
   } else {
     const metadataPath = target.root + packagePath(book.path);
     const document = validateContentBook(parse(metadataPath));
+    if (editing) {
+      preserveEditionHistory(previousDocument,document,manifest.bookId);
+      preserveEditionFormats(previousDocument.metadata.editions,document.metadata.editions);
+    }
+    if (editing && !Object.values(document.resources).every(value => Object.values(previousDocument.resources || {}).includes(value) || (target.root + packagePath(value)).startsWith(metadataPath.slice(0,metadataPath.lastIndexOf('/')+1)))) fail('Edited resources must stay inside the book directory');
     if (document.id !== manifest.bookId || sha256(bytes.get(metadataPath)) !== book.sha256) fail('Book metadata integrity mismatch');
     if (document.contentDirectory && target.root + document.contentDirectory + '/book.json' !== metadataPath) fail('Book metadata path mismatch');
     const resources = new Set(Object.values(document.resources).map(value => target.root + packagePath(value)));
@@ -74,7 +119,7 @@ export function checkPublicationPackage(manifest, target, bytes, oldCollection) 
     allowed = name => name === metadataPath || resources.has(name);
   }
   for (const name of bytes.keys()) if (name !== target.collection && !allowed(name)) fail(`File is outside the claimed book: ${name}`, 403);
-  if (!manifest.sourceHashes.some(hash => [...bytes.values()].some(value => sha256(value) === hash))) fail('The package does not contain the verified source manuscript');
+  if (!editing && !manifest.sourceHashes.some(hash => [...bytes.values()].some(value => sha256(value) === hash))) fail('The package does not contain the verified source manuscript');
   return collection;
 }
 

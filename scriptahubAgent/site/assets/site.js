@@ -1,6 +1,8 @@
 (() => {
   "use strict";
 
+  import(new URL("notifications.js", document.currentScript.src));
+
   const collection = globalThis.SCRIPTA_COLLECTION;
   if (!collection) return;
 
