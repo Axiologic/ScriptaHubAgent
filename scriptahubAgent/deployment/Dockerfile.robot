@@ -18,12 +18,13 @@ RUN dnf install -y --setopt=install_weak_deps=False \
 
 # /usr is already available in the existing robot sandbox. No new mount or
 # RoboTeam execution capability is necessary for this prepared runtime.
-COPY scriptahubAgent/skills/ /usr/local/share/scriptahub/runtime/skills/
+COPY skills/ /usr/local/share/scriptahub/runtime/skills/
 COPY scriptahubAgent/deployment/ /usr/local/share/scriptahub/runtime/
 COPY scriptahubAgent/site/reader/reader.css /usr/local/share/scriptahub/runtime/reader/reader.css
 # Reuse the agent-owned downloaded assets, not its Debian executables or Python
 # environments. Preparation verifies native hashes and builds Fedora environments.
 COPY --from=manuscript-assets /opt/scriptahub/runtime/skills/theatrical-audio/models/ /usr/local/share/scriptahub/runtime/skills/theatrical-audio/models/
+COPY --from=manuscript-assets /opt/scriptahub/native-build/ /opt/scriptahub/native-build/
 COPY --from=manuscript-assets /opt/scriptahub/runtime/skills/pdf2html/external/native/ /usr/local/share/scriptahub/runtime/skills/pdf2html/external/native/
 RUN node /usr/local/share/scriptahub/runtime/prepare-skills.mjs /usr/local/share/scriptahub/runtime \
     && rm -rf /root/.cache /root/.npm \

@@ -80,7 +80,7 @@ test('concurrent processes reserve disjoint snapshots of the same queue',async t
 });
 
 test('the flow helper drains its fixed batch sequentially, preserving claims, evidence and new arrivals',async t=>{
-  const {runBatchOperation}=await import('../skills/scriptahub-tasks/scripts/task-batch.mjs');
+  const {runBatchOperation}=await import('../../skills/scriptahub-tasks/scripts/task-batch.mjs');
   const f=await fixture(t),one=f.add(),two=f.add();
   const methods={scriptahub_task_batch_snapshot:'snapshot',scriptahub_task_batch_close:'closeBatch',scriptahub_task_batch_settle:'settle',scriptahub_task_claim:'claim'};
   const call=async(tool,args)=>f.service[methods[tool]](executor,args);
@@ -109,7 +109,7 @@ test('the flow helper drains its fixed batch sequentially, preserving claims, ev
 });
 
 test('flow batch setup is retry safe and rejects changed task types and symlinked state',async t=>{
-  const {runBatchOperation}=await import('../skills/scriptahub-tasks/scripts/task-batch.mjs');
+  const {runBatchOperation}=await import('../../skills/scriptahub-tasks/scripts/task-batch.mjs');
   const f=await fixture(t);f.add();
   const call=async(tool,args)=>f.service.snapshot(executor,args);
   const start=()=>runBatchOperation(call,'batch-start',{taskType:'manuscript'},{root:f.root});
@@ -122,7 +122,7 @@ test('flow batch setup is retry safe and rejects changed task types and symlinke
 
 test('book workflows traverse their fixed batch using ordinary graph edges, with no RoboTeam queue extensions',async()=>{
   for (const name of ['add-book','edit-book']) {
-    const graph=JSON.parse(await fs.readFile(new URL('../flows/'+name+'.json',import.meta.url),'utf8'));
+    const graph=JSON.parse(await fs.readFile(new URL('../../flows/'+name+'.json',import.meta.url),'utf8'));
     assert.equal(graph.entryTaskId,'select-task');
     assert.equal(graph.taskQueueAgent,undefined);assert.equal(graph.taskType,undefined);
     assert.ok(graph.edges.some(edge=>edge.id==='result-to-next'&&edge.targetTaskId==='select-task'));

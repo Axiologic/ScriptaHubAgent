@@ -2,6 +2,7 @@ import fs from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { skillSource } from './skill-source.mjs';
+import { repositorySkillsSource } from './repository-source.mjs';
 
 const agent=path.resolve(fileURLToPath(new URL('../',import.meta.url)));
 const installed='/opt/scriptahub/runtime';
@@ -9,7 +10,7 @@ try {
   const receipt=JSON.parse(await fs.readFile(path.join(installed,'installed.json'),'utf8'));
   if(receipt.platform!==`${process.platform}-${process.arch}`)throw new Error('Runtime architecture differs from the deployed agent');
   const expected=JSON.parse(await fs.readFile(path.join(installed,'source.json'),'utf8'));
-  const actual=await skillSource(path.join(agent,'skills'));
+  const actual=await skillSource(await repositorySkillsSource());
   if(Object.keys(actual).length!==Object.keys(expected).length || Object.entries(actual).some(([name,hash])=>expected[name]!==hash))
     throw new Error('The skill sources differ from the prepared runtime. Build and deploy the matching ScriptaHub image');
   await fs.access('/usr/local/bin/scriptahub-skill',fs.constants.X_OK);

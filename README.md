@@ -102,19 +102,19 @@ Configure Git author identity and GitHub sign-in or a personal access token in *
 
 ### Manuscript workflow
 
-The RoboTeam workflow definition belongs to this agent: [`scriptahubAgent/flows/add-book.json`](scriptahubAgent/flows/add-book.json). RoboTeam's existing workspace discovery reads `<repository>/<agent>/flows/`; no separate `scripta-flow` repository or duplicate definition is needed. The workflow ID is `add-book`, derived from its filename. Schedules must select that workflow ID. Existing runs retain their captured graph; new runs read the current definition.
+The RoboTeam workflow definition belongs to this agent: [`flows/add-book.json`](flows/add-book.json). RoboTeam's existing workspace discovery reads `<repository>/flows/`; no separate `scripta-flow` repository or duplicate definition is needed. The workflow ID is `add-book`, derived from its filename. Schedules must select that workflow ID. Existing runs retain their captured graph; new runs read the current definition.
 
 ## Agent-owned skill runtime
 
-All thirteen skills, including document conversion, editorial processing, validation, presentation creation and theatrical audio, belong to `scriptahubAgent/skills/`; see [the catalogue](SKILLS.md). Installed npm packages, native libraries, models, Python environments and caches are not source files and are not committed.
+All thirteen skills, including document conversion, editorial processing, validation, presentation creation and theatrical audio, belong to `skills/`; see [the catalogue](SKILLS.md). Installed npm packages, native libraries, models, Python environments and caches are not source files and are not committed.
 
 Build the dedicated runtime image with the ScriptaHubAgent repository as context and `container-image-builds/images/scriptahub-agent/Dockerfile` as the Dockerfile. It installs locked npm packages, the declared native PDF/model assets (verified by SHA-256), Poppler, QPDF, LibreOffice, Ghostscript, Chromium, FFmpeg and the configured CPU audio environments. Cloud narration providers still require their own authorized account credentials; the deployment does not fabricate accounts or silently select another provider.
 
 The manifest selects `docker.io/assistos/scriptahub-agent:runtime`. Before local deployment, build that tag in the same Podman image store used by Ploinky's agents (inside the Box when using a Box). A local build does not publish the image: a different server needs the image built there or a separately published, verified image. Changing the manifest does not switch an already running agent from isolated to global mode; use Ploinky's supported enable lifecycle while preserving its data.
 
-The current verified PDF native assets support Linux ARM64. Other architectures are refused until matching native assets and runtime proof are provided. The same Linux image runs on an ARM64 Linux host or the Linux Podman VM on Apple Silicon.
+The image builds natively for Linux AMD64 and ARM64. AMD64 compiles the pinned Docling PDF addon with the locked Rust dependency graph and installs checksum-verified PDFium; ARM64 uses the existing checksum-verified addon. Each architecture must pass offline native PDF conversion and all runtime checks before the shared `runtime` tag is promoted. Linux servers and Podman on Apple Silicon select their matching image automatically.
 
-Ploinky starts this agent in `global` mode. Startup compares every deployed skill source against the image's captured source manifest and refuses a mismatched or missing runtime. No manuscript execution installs or repairs dependencies. Rebuild the image after changing skill sources.
+Ploinky starts this agent in `global` mode. Startup resolves the repository-level `skills/` directory from Ploinky’s selected agent source (or from the repository next to the agent for local execution), then compares every deployed skill source against the image's captured source manifest and refuses a mismatched or missing runtime. No manuscript execution installs or repairs dependencies. Rebuild the image after changing skill sources.
 
 Skills execute locally in the robot through its existing ALA sandbox and skill mounts. No `skillExecution` graph extension, private socket or `agentExec` permission is used. The ScriptaHub task helper calls the installed local CLI, checks the platform and source hashes, and preserves process output and exit status. Service calls remain limited to authenticated task/document access and publication.
 

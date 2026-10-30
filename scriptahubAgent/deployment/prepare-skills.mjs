@@ -5,6 +5,7 @@ import { createHash } from 'node:crypto';
 import { spawn } from 'node:child_process';
 import { skillSource } from './skill-source.mjs';
 import { prepareNativeNotices } from './prepare-native-notices.mjs';
+import { installBuiltNative } from './install-built-native.mjs';
 
 const root = path.resolve(process.argv[2] || '/opt/scriptahub/runtime');
 const config = JSON.parse(await fs.readFile(new URL('./skills-runtime.json',import.meta.url),'utf8'));
@@ -25,8 +26,9 @@ async function asset(filename, expected) {
 }
 const skills=path.join(root,'skills'), pdf=path.join(skills,'pdf2html');
 await fs.writeFile(path.join(root,'source.json'),JSON.stringify(await skillSource(skills))+'\n');
-const integrity=JSON.parse(await fs.readFile(path.join(pdf,'external/native/integrity.json'),'utf8'));
 const platform=`${process.platform}-${process.arch}`;
+await installBuiltNative(root,config,platform);
+const integrity=JSON.parse(await fs.readFile(path.join(pdf,'external/native/integrity.json'),'utf8'));
 if(!Object.keys(integrity.files).some(name=>name.startsWith(platform+'/')))throw new Error(`No verified pdf2html native assets for ${platform}; deployment is refused`);
 for(const skill of config.skills) {
   await fs.access(path.join(skills,skill,'SKILL.md'));
@@ -49,7 +51,7 @@ const audio=path.join(skills,'theatrical-audio');
 for(const engine of config.audioEngines) {
   if(engine==='piper') await run('python3',[path.join(audio,'tools/setup_piper.py'),'--voice',config.piperVoice,'--download']);
   else await run('python3',[path.join(audio,'tools/bootstrap.py'),'--engine',engine,'--device','cpu','--download',
-    ...(engine==='qwen' ? ['--lock',path.join(root,'qwen-linux-arm64.requirements.txt')] : [])]);
+    ...(engine==='qwen' ? ['--lock',path.join(root,`qwen-linux-${process.arch}.requirements.txt`)] : [])]);
 }
 const receipt={schemaVersion:1,platform,skills:config.skills,audioEngines:config.audioEngines,node:process.version,
   python:'python3',preparedAt:new Date().toISOString(),architecture:os.arch()};

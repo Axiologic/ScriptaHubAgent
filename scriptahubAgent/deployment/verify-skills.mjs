@@ -13,6 +13,19 @@ try {
     const launcher=launchers[skill];if(!launcher)throw new Error(`Missing launcher for ${skill}`);
     await fs.access(path.join(root,'skills',skill,launcher.at(-1)));
   }
+  await new Promise((resolve,reject)=>{
+    const worker=path.join(root,'skills/pdf2html/src/pdf2html/native-worker.mjs');
+    const fixture=path.join(root,'skills/pdf2html/tests/fixtures/semantic.pdf');
+    const child=spawn(process.execPath,[worker,fixture],{stdio:['ignore','pipe','inherit'],cwd});
+    const chunks=[];child.stdout.on('data',chunk=>chunks.push(chunk));
+    child.once('error',reject);child.once('exit',code=>{
+      if(code!==0)return reject(new Error(`Native PDF conversion failed (${code})`));
+      try { const result=JSON.parse(Buffer.concat(chunks).toString());
+        if(!result || typeof result!=='object')throw new Error('Native PDF conversion returned no document');
+        console.log('Native PDF engine converted the semantic fixture.');resolve();
+      }catch(error){reject(error);}
+    });
+  });
   const checks=await import(pathToFileURL(path.join(root,'skills/scriptahub-tasks/scripts/workflow-checks.mjs')).href);
   // Import relative to the actual installed tree, without a second source copy.
   process.chdir(cwd);const report=await checks.preflight();

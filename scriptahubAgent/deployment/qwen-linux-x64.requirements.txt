@@ -1,0 +1,5 @@
+# CPU-only AMD64 wheels; never install CUDA in the CPU runtime.
+--extra-index-url https://download.pytorch.org/whl/cpu
+torch==2.10.0+cpu
+torchaudio==2.10.0+cpu
+qwen-tts==0.1.1
