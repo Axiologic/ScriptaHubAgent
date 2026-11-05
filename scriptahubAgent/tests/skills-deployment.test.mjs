@@ -63,6 +63,38 @@ test('repository-level skills resolve locally and from the exact Ploinky selecte
   await assert.rejects(repositorySkillsSource({env}), /unavailable or ambiguous/);
 });
 
+test('the first start, which has no route yet, resolves only the checkout actually mounted', async t => {
+  const {repositorySkillsSource} = await import('../deployment/repository-source.mjs');
+  const root = await fs.realpath(await fs.mkdtemp(path.join(os.tmpdir(), 'scripta-first-start-')));
+  t.after(() => fs.rm(root, {recursive:true, force:true}));
+  const checkout = async (base, name) => {
+    await fs.mkdir(path.join(base, name, 'scriptahubAgent'), {recursive:true});
+    await fs.mkdir(path.join(base, name, 'skills'), {recursive:true});
+    await fs.writeFile(path.join(base, name, 'scriptahubAgent/manifest.json'), '{"name":"scriptahubAgent"}');
+    return {agent:path.join(base, name, 'scriptahubAgent'), skills:path.join(base, name, 'skills')};
+  };
+  const env = {PLOINKY_WORKSPACE_ROOT:root, PLOINKY_AGENT_ID:'agent:alias/scriptahubAgent'};
+  const refused = /unavailable or ambiguous/;
+  const repos = path.join(root, '.ploinky/repos');
+  const outside = await checkout(path.join(root, '.outside'), 'x');
+  await fs.mkdir(path.join(root, '.ploinky'));
+  await fs.writeFile(path.join(root, 'file-beside-checkouts'), '');
+  await fs.symlink('looping-entry', path.join(root, 'looping-entry'));
+  await assert.rejects(repositorySkillsSource({env, agentDirectory:outside.agent}), refused, 'no routing file and no mounted checkout');
+  const managed = await checkout(repos, 'alias');
+  await assert.rejects(repositorySkillsSource({env, agentDirectory:outside.agent}), refused, 'an identical copy is not the mounted directory');
+  assert.equal(await repositorySkillsSource({env, agentDirectory:managed.agent}), managed.skills);
+  const renamed = await checkout(root, 'Renamed');
+  assert.equal(await repositorySkillsSource({env, agentDirectory:renamed.agent}), renamed.skills, 'a renamed checkout beside a stale clone with the same manifest');
+  assert.equal(await repositorySkillsSource({env, agentDirectory:managed.agent}), managed.skills, 'a managed clone beside a same-manifest checkout');
+  await fs.symlink(renamed.agent.replace(/\/scriptahubAgent$/, ''), path.join(repos, 'linked'));
+  assert.equal(await repositorySkillsSource({env, agentDirectory:renamed.agent}), renamed.skills, 'one directory reached by two paths');
+  await fs.writeFile(path.join(root, '.ploinky/routing.json'), JSON.stringify({routes:{explorer:{repo:'AchillesIDE', agent:'explorer', hostPath:'/x'}}}));
+  assert.equal(await repositorySkillsSource({env, agentDirectory:managed.agent}), managed.skills, 'routes of other agents are ignored');
+  await fs.writeFile(path.join(root, '.ploinky/routing.json'), JSON.stringify({routes:{scriptahubAgent:{repo:'alias', agent:'scriptahubAgent', hostPath:renamed.agent}}}));
+  assert.equal(await repositorySkillsSource({env, agentDirectory:managed.agent}), renamed.skills, 'a committed route is never second-guessed');
+});
+
 test('workflow and skill source folders belong to the repository, not the agent mount', async () => {
   const repository = new URL('../../', import.meta.url);
   for (const name of ['skills','flows']) {
