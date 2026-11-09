@@ -26,6 +26,9 @@ COPY scriptahubAgent/site/reader/reader.css /usr/local/share/scriptahub/runtime/
 COPY --from=manuscript-assets /opt/scriptahub/runtime/skills/theatrical-audio/models/ /usr/local/share/scriptahub/runtime/skills/theatrical-audio/models/
 COPY --from=manuscript-assets /opt/scriptahub/native-build/ /opt/scriptahub/native-build/
 COPY --from=manuscript-assets /opt/scriptahub/runtime/skills/pdf2html/external/native/ /usr/local/share/scriptahub/runtime/skills/pdf2html/external/native/
+# On AMD64 the agent image rewrote integrity.json with its compiled binaries. Preparation records the
+# repository sources before it installs those binaries again, so the source file is restored here.
+COPY skills/pdf2html/external/native/integrity.json /usr/local/share/scriptahub/runtime/skills/pdf2html/external/native/integrity.json
 RUN node /usr/local/share/scriptahub/runtime/prepare-skills.mjs /usr/local/share/scriptahub/runtime \
     && rm -rf /root/.cache /root/.npm \
     && chmod -R a+rX /usr/local/share/scriptahub/runtime
