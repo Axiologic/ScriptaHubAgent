@@ -24,3 +24,21 @@ test('Docling page geometry positions a region with no matching text glyphs', ()
   applyFixedLayout($,$('main')[0],{typography:{body_size_pt:10},pages:[{page_number:1,width_pt:500,height_pt:700,words:[],images:[],strokes:[],rectangles:[]}]});
   assert.match($('#page_1 figure').attr('style'),/left: 20\.00pt; top: 30\.00pt; width: 100\.00pt/);
 });
+
+test('a text block whose glyphs carry no font size is positioned with the body size', () => {
+  const $ = parseHtml('<main class="pdf-document"><section class="source-page" data-source-page="1" id="page_1"><p>Plain words.</p></section></main>');
+  // Seen in a submitted manuscript: the extracted words of one block had no numeric size_pt.
+  applyFixedLayout($,$('main')[0],{typography:{body_size_pt:10},pages:[{page_number:1,width_pt:500,height_pt:700,images:[],strokes:[],rectangles:[],
+    words:[{text:'Plain',token:'plain',x0:50,x1:75,top:80,bottom:90,size_pt:null},{text:'words.',token:'words',x0:80,x1:110,top:80,bottom:90}]}]});
+  assert.match($('#page_1 p').attr('style'),/left: 50\.00pt; top: 80\.00pt; width: 70\.00pt/);
+  assert.equal($('[data-pdf-position-unresolved]').length,0);
+});
+
+test('words without geometry leave the block to its Docling provenance box', () => {
+  const $ = parseHtml('<main class="pdf-document"><section class="source-page" data-source-page="1" id="page_1"><p data-pdf-page="1" data-pdf-box="40,60,240,75">Plain words.</p></section></main>');
+  // The extractor derives size_pt from the glyph box, so a glyph with no size also has no position.
+  applyFixedLayout($,$('main')[0],{typography:{body_size_pt:10},pages:[{page_number:1,width_pt:500,height_pt:700,images:[],strokes:[],rectangles:[],
+    words:[{text:'Plain',token:'plain',x0:NaN,x1:NaN,top:NaN,bottom:NaN,size_pt:NaN},{text:'words.',token:'words',x0:NaN,x1:NaN,top:NaN,bottom:NaN,size_pt:NaN}]}]});
+  assert.match($('#page_1 p').attr('style'),/left: 40\.00pt; top: 60\.00pt; width: 200\.00pt/);
+  assert.equal($('[data-pdf-position-unresolved]').length,0);
+});

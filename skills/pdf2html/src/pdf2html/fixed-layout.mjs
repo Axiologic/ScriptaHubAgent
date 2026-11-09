@@ -132,9 +132,12 @@ export function applyFixedLayout($, main, evidence) {
         styleTable($, child, table);
       }
       if (!box) {
-        const words = blockWords(child, page, mapped);
+        // Some PDFs yield glyphs with no size and no geometry. Those words cannot place a block,
+        // which then falls back to its Docling provenance box below.
+        const words = blockWords(child, page, mapped).filter(word => [word.x0, word.x1, word.top, word.bottom].every(Number.isFinite));
         if (words.length) {
-          const ink = bounds(words), size = median(words.map(word => word.size_pt).filter(Number.isFinite));
+          const sizes = words.map(word => word.size_pt).filter(Number.isFinite), body = evidence.typography.body_size_pt;
+          const ink = bounds(words), size = sizes.length ? median(sizes) : Number.isFinite(body) ? body : 0;
           box = { ...ink, right:Math.min(page.width_pt, ink.right + Math.max(2, size)), bottom:ink.bottom + Math.max(1, size * 0.25) };
         }
       }
