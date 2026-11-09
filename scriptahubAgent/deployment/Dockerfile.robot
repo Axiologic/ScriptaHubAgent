@@ -1,8 +1,10 @@
-# Build context: the ScriptaHubAgent repository. Build this profile with the same
-# ScriptaHub sources as the application image; no libraries are committed to Git.
+# Build context: the ScriptaHubAgent repository. Skills, deployment helpers and the inventories come from
+# this checkout; the downloaded model and native files come from the published assets image, chosen by
+# digest. Those files are verified against this checkout's inventories before any of them is installed.
+# No library is committed to Git.
 ARG ROBOTEAM_BASE_IMAGE=docker.io/assistos/roboteam-agent:runtime
-ARG SCRIPTA_RUNTIME_IMAGE=docker.io/assistos/scriptahub-agent:runtime
-FROM ${SCRIPTA_RUNTIME_IMAGE} AS manuscript-assets
+ARG SCRIPTA_ASSETS_IMAGE=docker.io/assistos/scriptahub-assets:runtime
+FROM ${SCRIPTA_ASSETS_IMAGE} AS manuscript-assets
 FROM ${ROBOTEAM_BASE_IMAGE}
 USER root
 RUN dnf install -y --setopt=install_weak_deps=False \
@@ -21,15 +23,19 @@ RUN dnf install -y --setopt=install_weak_deps=False \
 COPY skills/ /usr/local/share/scriptahub/runtime/skills/
 COPY scriptahubAgent/deployment/ /usr/local/share/scriptahub/runtime/
 COPY scriptahubAgent/site/reader/reader.css /usr/local/share/scriptahub/runtime/reader/reader.css
-# Reuse the agent-owned downloaded assets, not its Debian executables or Python
-# environments. Preparation verifies native hashes and builds Fedora environments.
-COPY --from=manuscript-assets /opt/scriptahub/runtime/skills/theatrical-audio/models/ /usr/local/share/scriptahub/runtime/skills/theatrical-audio/models/
-COPY --from=manuscript-assets /opt/scriptahub/native-build/ /opt/scriptahub/native-build/
-COPY --from=manuscript-assets /opt/scriptahub/runtime/skills/pdf2html/external/native/ /usr/local/share/scriptahub/runtime/skills/pdf2html/external/native/
-# On AMD64 the agent image rewrote integrity.json with its compiled binaries. Preparation records the
-# repository sources before it installs those binaries again, so the source file is restored here.
-COPY skills/pdf2html/external/native/integrity.json /usr/local/share/scriptahub/runtime/skills/pdf2html/external/native/integrity.json
-RUN node /usr/local/share/scriptahub/runtime/prepare-skills.mjs /usr/local/share/scriptahub/runtime \
+# The assets image is mounted read-only and is never copied over the runtime root unchecked. This checkout's
+# verifier checks it against this checkout's inventories first; --exact refuses any file or link outside the
+# inventory, so the assets image cannot add a verifier, an inventory, an interpreter or a skill file. Only
+# verified files are copied, in the same step, and preparation then builds Fedora environments around them
+# and verifies the source record. An ARM64 assets image has an empty native-build directory.
+RUN --mount=type=bind,from=manuscript-assets,source=/assets,target=/mnt/assets \
+    node /usr/local/share/scriptahub/runtime/verify-assets.mjs \
+        --skills /usr/local/share/scriptahub/runtime/skills \
+        --runtime /mnt/assets/runtime --native-build /mnt/assets/native-build --exact \
+    && cp -a --no-preserve=ownership /mnt/assets/runtime/. /usr/local/share/scriptahub/runtime/ \
+    && mkdir -p /opt/scriptahub/native-build \
+    && if [ -d /mnt/assets/native-build ]; then cp -a --no-preserve=ownership /mnt/assets/native-build/. /opt/scriptahub/native-build/; fi \
+    && node /usr/local/share/scriptahub/runtime/prepare-skills.mjs /usr/local/share/scriptahub/runtime \
     && rm -rf /root/.cache /root/.npm \
     && chmod -R a+rX /usr/local/share/scriptahub/runtime
 ENV SCRIPTA_SKILL_RUNTIME_ROOT=/usr/local/share/scriptahub/runtime \

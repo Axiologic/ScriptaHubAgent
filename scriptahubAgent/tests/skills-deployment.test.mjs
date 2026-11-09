@@ -43,6 +43,26 @@ test('the robot image profile installs local dependencies without a remote execu
   assert.equal(manifest.skillRuntime,undefined);
 });
 
+test('the robot takes its models and native files from an assets image only after checking them against its own inventories',async()=>{
+  const profile=await fs.readFile(new URL('../deployment/Dockerfile.robot',import.meta.url),'utf8');
+  assert.ok(profile.includes('ARG SCRIPTA_ASSETS_IMAGE='));
+  assert.ok(profile.includes('FROM ${SCRIPTA_ASSETS_IMAGE} AS manuscript-assets'));
+  for (const gone of ['SCRIPTA_RUNTIME_IMAGE','scriptahub-agent','COPY skills/pdf2html/external/native/integrity.json']) assert.ok(!profile.includes(gone),gone);
+  assert.doesNotMatch(profile,/COPY\s+--from=manuscript-assets/,'the assets image is never copied over the runtime root before it is verified');
+  const mount=profile.indexOf('--mount=type=bind,from=manuscript-assets');
+  const verify=profile.indexOf('verify-assets.mjs',mount);
+  const exact=profile.indexOf('--exact',verify);
+  const copy=profile.indexOf('cp -a',exact);
+  const prepare=profile.indexOf('prepare-skills.mjs',copy);
+  assert.ok(mount>=0&&verify>mount&&exact>verify&&copy>exact&&prepare>copy,'bind mount, then verify --exact, then copy, then preparation');
+  const step=profile.slice(mount,profile.indexOf('\nENV ',mount));
+  assert.match(step,/--runtime \/mnt\/assets\/runtime --native-build \/mnt\/assets\/native-build --exact/);
+  assert.match(step,/--skills \/usr\/local\/share\/scriptahub\/runtime\/skills/,'the inventories are the ones copied from this checkout');
+  assert.match(step,/&& cp -a --no-preserve=ownership \/mnt\/assets\/runtime\/\./);
+  assert.match(step,/if \[ -d \/mnt\/assets\/native-build \]/,'an ARM64 assets image has no compiled binaries');
+  assert.ok(profile.indexOf('COPY scriptahubAgent/deployment/')<mount&&profile.indexOf('COPY skills/')<mount,'the verifier and the inventories are the checkout\'s own');
+});
+
 test('workflow and skill source folders belong to the repository, not the agent mount', async () => {
   const repository = new URL('../../', import.meta.url);
   for (const name of ['skills','flows']) {

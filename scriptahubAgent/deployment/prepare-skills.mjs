@@ -48,9 +48,13 @@ await prepareNativeNotices(root);
 for(const source of JSON.parse(await fs.readFile(path.join(pdf,'external/native/sources/sources.json'),'utf8')))
   await asset(path.join(pdf,source.path),source);
 const audio=path.join(skills,'theatrical-audio');
+// Qwen and Kokoro weights are the verified files of the assets image (audio-models.json), so the setup
+// program only builds the Python environment around them. Piper's receipt is already in place, so --download
+// installs its package and checks the voice against that receipt.
 for(const engine of config.audioEngines) {
   if(engine==='piper') await run('python3',[path.join(audio,'tools/setup_piper.py'),'--voice',config.piperVoice,'--download']);
-  else await run('python3',[path.join(audio,'tools/bootstrap.py'),'--engine',engine,'--device','cpu','--download',
+  else await run('python3',[path.join(audio,'tools/bootstrap.py'),'--engine',engine,'--device','cpu',
+    '--models-dir',path.join(audio,'models',engine==='qwen' ? 'qwen-custom' : 'kokoro'),
     ...(engine==='qwen' ? ['--lock',path.join(root,`qwen-linux-${process.arch}.requirements.txt`)] : [])]);
 }
 const receipt={schemaVersion:1,platform,skills:config.skills,audioEngines:config.audioEngines,node:process.version,
