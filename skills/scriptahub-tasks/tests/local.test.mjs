@@ -41,3 +41,17 @@ test('aborting a local skill terminates its child rather than leaving work in an
   const timer=setTimeout(()=>controller.abort(),50);
   try {await assert.rejects(pending,{name:'AbortError'});}finally{clearTimeout(timer);}
 });
+test('robot steps find each selected skill at its RoboTeam mount, named by SKILL.md',async t=>{
+  const f=await fixture(t);
+  // RoboTeam mounts every selected skill as /workspace/roboteam-skill-<n>, not under its own name.
+  const mounted=path.join(f.root,'workspace'),skill=path.join(mounted,'roboteam-skill-3');
+  await fs.mkdir(path.join(mounted,'roboteam-skill-0'),{recursive:true});await fs.mkdir(skill);
+  await fs.writeFile(path.join(mounted,'roboteam-skill-0/SKILL.md'),'---\nname: scriptahub-tasks\n---\n');
+  const source='---\nname: pdf2html\n---\n';
+  await fs.writeFile(path.join(skill,'SKILL.md'),source);
+  await fs.writeFile(path.join(f.runtimeRoot,'source.json'),JSON.stringify({'pdf2html/SKILL.md':crypto.createHash('sha256').update(source).digest('hex')}));
+  await fs.writeFile(path.join(f.runtimeRoot,'run-skill.mjs'),'process.exitCode=0;');
+  assert.equal(await runLocalSkill({skill:'pdf2html'},{...f,sourceRoot:mounted}),0);
+  await fs.rm(skill,{recursive:true});
+  await assert.rejects(runLocalSkill({skill:'pdf2html'},{...f,sourceRoot:mounted}),/pdf2html skill sources are not available to this robot step/);
+});

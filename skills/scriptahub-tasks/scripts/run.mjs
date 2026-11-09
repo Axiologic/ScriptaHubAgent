@@ -181,7 +181,7 @@ async function main() {
       : await call(operations[operation],input);
     process.stdout.write(JSON.stringify(result) + '\n');
   } catch (error) {
-    console.error(error.code === 'ENOENT' ? 'The RoboTeam Ploinky task runtime is unavailable' : error.message);
+    console.error(error.code === 'ENOENT' && String(error.path || '').startsWith('/workspace/ploinky-runtime/') ? 'The RoboTeam Ploinky task runtime is unavailable' : error.message);
     process.exitCode = 1;
   } finally { await client?.close(); }
 }
