@@ -5,7 +5,8 @@ import {preflight,writeHandoff,verifyPackage,requirePreflight} from './workflow-
 import { constants } from 'node:fs';
 import path from 'node:path';
 import crypto from 'node:crypto';
-import { pathToFileURL, fileURLToPath } from 'node:url';
+import http from 'node:http';
+import { fileURLToPath } from 'node:url';
 
 const operations = { claim: 'scriptahub_task_claim', status: 'scriptahub_task_status', finish: 'scriptahub_task_finish' };
 export function chooseRepository({ repositories, candidates } = {}) {
@@ -26,17 +27,32 @@ function unwrap(response) {
     return result;
 }
 
-async function loadClient() {
-    const directory = '/workspace/ploinky-runtime';
+// RoboTeam's task runtime (context version 3) exposes a callback socket and a capability token.
+// The RoboTeam controller relays each agent call with its own service identity; the robot holds no credentials.
+export async function loadClient(directory = '/workspace/ploinky-runtime') {
     const setup = JSON.parse(await fs.readFile(path.join(directory, 'context.json'), 'utf8'));
-    if (setup.version !== 2 || !path.isAbsolute(setup.workingDir)) throw new Error('A RoboTeam Ploinky task runtime is required');
-    for (const [name, value] of Object.entries(setup.env || {})) {
-        if (!name.startsWith('PLOINKY_') || /MASTER|PRIVATE_SECRET|SUBJECT|PASSWORD/i.test(name) || typeof value !== 'string') throw new Error('Invalid task SDK environment');
-        process.env[name] = value;
-    }
-    const { createAgentClient } = await import(pathToFileURL(path.join(directory, 'sdk/client/AgentMcpClient.mjs')).href);
-    // This is a service call. Never copy setup.userDelegationToken into the client.
-    return createAgentClient(process.env.SCRIPTA_TASK_AGENT || 'scriptahubAgent');
+    if (setup.version !== 3 || !path.isAbsolute(setup.workingDir || '') || typeof setup.token !== 'string' || !setup.token) throw new Error('A RoboTeam Ploinky task runtime is required');
+    const agent = process.env.SCRIPTA_TASK_AGENT || 'scriptahubAgent';
+    const socketPath = path.join(directory, 'request.sock');
+    const callTool = (tool, payload = {}, { timeoutMs = 90000 } = {}) => new Promise((resolve, reject) => {
+        const req = http.request({ socketPath, path: '/agent-call', method: 'POST',
+            headers: { 'content-type': 'application/json', 'x-task-capability': setup.token } }, res => {
+            const chunks = []; let size = 0;
+            res.on('data', chunk => { size += chunk.length; if (size > 4 * 1024 * 1024) req.destroy(new Error('Task callback response is too large')); else chunks.push(chunk); });
+            res.once('end', () => {
+                try {
+                    const value = JSON.parse(Buffer.concat(chunks).toString('utf8'));
+                    if (res.statusCode < 200 || res.statusCode >= 300) throw new Error(value?.error || 'Task callback refused');
+                    resolve(value);
+                } catch (error) { reject(error); }
+            });
+            res.once('error', reject);
+        });
+        req.setTimeout(timeoutMs, () => req.destroy(new Error('Task callback timed out')));
+        req.once('error', reject);
+        req.end(JSON.stringify({ agent, tool, payload }));
+    });
+    return { callTool, async close() {} };
 }
 
 export async function downloadDocument(call, input) {

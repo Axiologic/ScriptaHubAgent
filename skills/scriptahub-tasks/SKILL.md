@@ -10,7 +10,7 @@ This skill is owned by ScriptaHubAgent and selected through the existing robot s
 
 # ScriptaHub task execution
 
-Use Node.js 22+ and the existing RoboTeam Ploinky task runtime mounted at `/workspace/ploinky-runtime`. Do not read credentials, construct Router URLs, mount ScriptaHub data or access its database. The script uses the SDK and certified Router descriptor already delivered by RoboTeam. ScriptaHub authorizes the service identity; browser user delegation is not sent.
+Use Node.js 22+ and the existing RoboTeam Ploinky task runtime mounted at `/workspace/ploinky-runtime` (context version 3). Do not read credentials, construct Router URLs, mount ScriptaHub data or access its database. The script sends each service call through that runtime's callback socket; the RoboTeam controller relays it with its own service identity, which ScriptaHub authorizes through `SCRIPTA_EXECUTOR_AGENT_IDS`. Browser user delegation is not sent.
 
 Run `node <skill-directory>/scripts/run.mjs OPERATION` with one JSON object on standard input. Service operations map to the implemented ScriptaHub MCP tools; local operations prepare or verify run artifacts:
 
