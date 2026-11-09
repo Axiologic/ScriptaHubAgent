@@ -132,3 +132,30 @@ test('book workflows traverse their fixed batch using ordinary graph edges, with
     assert.equal(graph.skillExecution,undefined);
   }
 });
+
+test('a Cron run reusing a finished run folder starts a new batch, while an open batch resumes and status never reserves',async t=>{
+  const {runBatchOperation}=await import('../../skills/scriptahub-tasks/scripts/task-batch.mjs');
+  const f=await fixture(t),first=f.add();
+  const reservations=[];
+  const call=async(tool,args)=>{
+    if(tool==='scriptahub_task_batch_snapshot') reservations.push(args.batchId);
+    return f.service[{scriptahub_task_batch_snapshot:'snapshot',scriptahub_task_batch_close:'closeBatch'}[tool]](executor,args);
+  };
+  const run=(op,input={})=>runBatchOperation(call,op,input,{root:f.root});
+  const statePath=path.join(f.root,'run-state/task-batch.json');
+  const open=await run('batch-start',{taskType:'manuscript'});
+  assert.deepEqual(open.taskIds,[first.task.id]);
+  assert.deepEqual(await run('batch-start',{taskType:'manuscript'}),open,'an open batch is resumed');
+  await run('batch-close');
+  const before=await fs.readFile(statePath,'utf8');reservations.length=0;
+  const status=await run('batch-status');
+  assert.equal(status.batchId,open.batchId);assert.equal(status.closed,true);
+  assert.equal(await fs.readFile(statePath,'utf8'),before,'status never replaces the batch');
+  assert.deepEqual(reservations,[open.batchId],'status only reads the stored batch');
+  const later=f.add();
+  const next=await run('batch-start',{taskType:'manuscript'});
+  assert.notEqual(next.batchId,open.batchId);assert.equal(next.closed,false);
+  assert.deepEqual(new Set(next.taskIds),new Set([first.task.id,later.task.id]),'released and new work joins the new batch');
+  assert.equal(JSON.parse(await fs.readFile(statePath,'utf8')).batchId,next.batchId);
+  assert.deepEqual(await run('batch-start',{taskType:'manuscript'}),next);
+});

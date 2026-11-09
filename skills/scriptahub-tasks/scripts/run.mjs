@@ -149,7 +149,7 @@ async function main() {
   let client;
   try {
     const operation = process.argv[2];
-    if (process.argv.length !== 3 || (!operations[operation] && !['batch-start', 'batch-next', 'batch-close', 'exec', 'download', 'choose', 'publish', 'retry-publication', 'preflight', 'handoff', 'verify-package'].includes(operation))) throw new Error('Use batch-start, batch-next, batch-close, exec, preflight, claim, status, download, choose, handoff, verify-package, publish, retry-publication or finish');
+    if (process.argv.length !== 3 || (!operations[operation] && !['batch-start', 'batch-status', 'batch-next', 'batch-close', 'exec', 'download', 'choose', 'publish', 'retry-publication', 'preflight', 'handoff', 'verify-package'].includes(operation))) throw new Error('Use batch-start, batch-status, batch-next, batch-close, exec, preflight, claim, status, download, choose, handoff, verify-package, publish, retry-publication or finish');
     const chunks = [];
     let size = 0;
     for await (const chunk of process.stdin) {

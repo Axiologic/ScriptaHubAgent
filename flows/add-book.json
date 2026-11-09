@@ -87,7 +87,7 @@
       "skillsets": [
         "ScriptaHubAgent/scriptahub-tasks"
       ],
-      "prompt": "Read the durable batch through scriptahub-tasks batch-start with {\"taskType\":\"manuscript\"}; this returns the original snapshot, never new arrivals. Report actual completed, failed, cancelled and unprocessed counts and the relative artifact directories. If the batch is not closed and no task remains active, use batch-close to release unstarted reservations. Never overwrite an uncertain publication or claim more work. Report any preflight or service failure precisely. This is the end of the batch; do not loop or start another flow."
+      "prompt": "Read the durable batch through scriptahub-tasks batch-status with {}; this returns the original snapshot without reserving anything, never new arrivals. Report actual completed, failed, cancelled and unprocessed counts and the relative artifact directories. If the batch is not closed and no task remains active, use batch-close to release unstarted reservations. Never overwrite an uncertain publication or claim more work. Report any preflight or service failure precisely. This is the end of the batch; do not loop or start another flow."
     }
   ],
   "edges": [

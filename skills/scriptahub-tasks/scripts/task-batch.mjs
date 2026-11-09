@@ -30,19 +30,31 @@ export async function runBatchOperation(call,operation,input,{root=process.cwd()
   root = await fs.realpath(root);
   await directory(root,'run-state');
   const filename = path.join(root,'run-state/task-batch.json');
-  if (operation === 'batch-start') {
-    if (!types.has(input.taskType)) throw new Error('Provide manuscript or edit taskType');
+  const persist = async replace => {
     const state = {batchId:crypto.randomUUID(),taskType:input.taskType};
     const temp = filename + '.' + crypto.randomUUID() + '.tmp';
     try {
       await fs.writeFile(temp,JSON.stringify(state)+'\n',{flag:'wx',mode:0o600});
-      await fs.link(temp,filename).catch(error=>{if(error.code!=='EEXIST')throw error;});
+      if (replace) await fs.rename(temp,filename);
+      else await fs.link(temp,filename).catch(error=>{if(error.code!=='EEXIST')throw error;});
     } finally { await fs.rm(temp,{force:true}); }
+  };
+  if (operation === 'batch-start') {
+    if (!types.has(input.taskType)) throw new Error('Provide manuscript or edit taskType');
+    await persist(false);
   }
-  const state = await readState(filename);
+  let state = await readState(filename);
   if (!identifier(state.batchId) || !types.has(state.taskType) || input.taskType && input.taskType !== state.taskType) throw new Error('Batch identity mismatch');
   if (operation === 'batch-close') return call('scriptahub_task_batch_close',{batchId:state.batchId});
-  const snapshot = await call('scriptahub_task_batch_snapshot',state);
+  let snapshot = await call('scriptahub_task_batch_snapshot',state);
+  if (operation === 'batch-status') return snapshot;
+  // A Cron job reuses its run folder, so a batch an earlier run closed is replaced
+  // by a new one. An open or paused batch is resumed, never replaced.
+  if (operation === 'batch-start' && snapshot.closed === true) {
+    await persist(true);
+    state = await readState(filename);
+    snapshot = await call('scriptahub_task_batch_snapshot',state);
+  }
   if (operation === 'batch-start') return snapshot;
   if (operation !== 'batch-next') throw new Error('Unknown batch operation');
   if (!Array.isArray(snapshot.items)) throw new Error('ScriptaHub did not return the reserved batch items');
