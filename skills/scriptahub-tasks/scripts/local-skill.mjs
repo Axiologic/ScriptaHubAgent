@@ -24,11 +24,28 @@ async function findSkillDirectory(sourceRoot,skill) {
   throw new Error(`The ${skill} skill sources are not available to this robot step; select its skillset for this workflow task`);
 }
 
+const realOrSelf=directory=>fs.realpath(directory).catch(()=>path.resolve(directory));
+const isWithin=(child,parent)=>{const relative=path.relative(parent,child);return relative===''||(!relative.startsWith('..')&&!path.isAbsolute(relative));};
+
+// The robot image also contains an installed copy of every skill, which the build
+// changes after recording the sources (on AMD64 it adds the compiled PDF engine to
+// pdf2html's integrity.json). That copy is never a source of truth: when this helper
+// is started from it, the sources are checked at the robot's skill mounts instead.
+async function selectSourceRoot(sourceRoot,runtimeRoot,mountRoots,skill) {
+  if (!isWithin(await realOrSelf(sourceRoot),await realOrSelf(runtimeRoot))) return sourceRoot;
+  for (const root of mountRoots) {
+    try { await findSkillDirectory(root,skill); return root; }
+    catch (error) { if (!/skill sources are not available to this robot step/.test(error.message)) throw error; }
+  }
+  throw new Error(`The ${skill} skill sources must come from the robot's skill mount, not the installed runtime copy; run scriptahub-tasks from its mounted skill directory (for example /skills/scriptahub-tasks/scripts/run.mjs)`);
+}
+
 // Only installed runtime files are executed. Repository skill sources remain
 // owned by ScriptaHub and mounted read-only by the existing robot skill system.
 export async function runLocalSkill({skill,args=[],input=''}, {
   runtimeRoot=process.env.SCRIPTA_SKILL_RUNTIME_ROOT || '/usr/local/share/scriptahub/runtime',
   sourceRoot=path.resolve(path.dirname(fileURLToPath(import.meta.url)),'../..'),
+  mountRoots=['/skills','/workspace'],
   stdout=process.stdout,stderr=process.stderr,signal,
 }={}) {
   if (!/^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(skill||'') || !Array.isArray(args) || args.length>256
@@ -46,7 +63,7 @@ export async function runLocalSkill({skill,args=[],input=''}, {
   if (receipt.platform!==`${process.platform}-${process.arch}` || !receipt.skills?.includes(skill)) throw new Error('The robot skill runtime does not support this platform or skill');
   const files=Object.entries(expected).filter(([name])=>name.startsWith(skill+'/'));
   if (!files.length) throw new Error('The installed skill has no source verification record');
-  const skillDirectory=await findSkillDirectory(sourceRoot,skill);
+  const skillDirectory=await findSkillDirectory(await selectSourceRoot(sourceRoot,runtimeRoot,mountRoots,skill),skill);
   for (const [name,hash] of files) {
     if (name.split('/').some(part=>!part||part==='.'||part==='..') || name.includes('\\')) throw new Error('Invalid runtime source record');
     const actual=crypto.createHash('sha256').update(await fs.readFile(path.join(skillDirectory,name.slice(skill.length+1)))).digest('hex');
