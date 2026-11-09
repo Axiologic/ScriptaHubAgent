@@ -52,13 +52,15 @@ test('the robot takes its models and native files from an assets image only afte
   const mount=profile.indexOf('--mount=type=bind,from=manuscript-assets');
   const verify=profile.indexOf('verify-assets.mjs',mount);
   const exact=profile.indexOf('--exact',verify);
-  const copy=profile.indexOf('cp -a',exact);
+  const copy=profile.indexOf('cp -R',exact);
   const prepare=profile.indexOf('prepare-skills.mjs',copy);
   assert.ok(mount>=0&&verify>mount&&exact>verify&&copy>exact&&prepare>copy,'bind mount, then verify --exact, then copy, then preparation');
   const step=profile.slice(mount,profile.indexOf('\nENV ',mount));
   assert.match(step,/--runtime \/mnt\/assets\/runtime --native-build \/mnt\/assets\/native-build --exact/);
   assert.match(step,/--skills \/usr\/local\/share\/scriptahub\/runtime\/skills/,'the inventories are the ones copied from this checkout');
-  assert.match(step,/&& cp -a --no-preserve=ownership \/mnt\/assets\/runtime\/\./);
+  assert.match(step,/&& cp -R --no-preserve=ownership \/mnt\/assets\/runtime\/\. \/usr\/local\/share\/scriptahub\/runtime\//);
+  assert.match(step,/cp -R --no-preserve=ownership \/mnt\/assets\/native-build\/\. \/opt\/scriptahub\/native-build\//);
+  assert.doesNotMatch(profile,/\bcp\s+(?:-\S*[aP]\S*|--archive|--preserve\S*)(?:\s|$)/,'cp -a would carry the assets image\'s directory modes and setuid bits into the robot');
   assert.match(step,/if \[ -d \/mnt\/assets\/native-build \]/,'an ARM64 assets image has no compiled binaries');
   assert.ok(profile.indexOf('COPY scriptahubAgent/deployment/')<mount&&profile.indexOf('COPY skills/')<mount,'the verifier and the inventories are the checkout\'s own');
 });

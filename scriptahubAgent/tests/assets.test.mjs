@@ -10,6 +10,8 @@ import { expectedAssets, hashFile, loadInventory } from '../deployment/asset-inv
 import { prepareAssets } from '../deployment/prepare-assets.mjs';
 import { verifyAssets } from '../deployment/verify-assets.mjs';
 
+// Modes are asserted below, so the fixtures must not depend on the developer's umask.
+process.umask(0o022);
 const run = promisify(execFile);
 const deployment = path.join(import.meta.dirname, '../deployment');
 const sha = bytes => createHash('sha256').update(bytes).digest('hex');
@@ -229,6 +231,33 @@ test('an HTTP error is final; a network fault is retried up to three attempts, a
   assert.equal(s.calls.filter(url => url === 'https://models.test/layout.onnx').length, 3);
 });
 
+test('throttling and server errors are retried within the three-attempt budget; other client errors are final', async t => {
+  const layout = 'https://models.test/layout.onnx';
+  for (const status of [429, 500, 503]) {
+    const f = await fixture(t);
+    const s = server(f, (url, call) => url === layout && call < 3 ? new Response('busy', { status }) : undefined);
+    await prepare(f, 'linux-arm64', { fetch: s.fetch });
+    assert.equal(s.calls.filter(url => url === layout).length, 3, `${status} twice, then success`);
+    assert.equal(await fs.readFile(path.join(f.runtime, NATIVE, 'models/layout.onnx'), 'utf8'), 'layout model');
+  }
+  let f = await fixture(t);
+  let s = server(f, url => url === layout ? new Response('busy', { status: 503 }) : undefined);
+  await assert.rejects(prepare(f, 'linux-arm64', { fetch: s.fetch }), /Asset download failed \(503\): skills\/pdf2html\/external\/native\/models\/layout\.onnx/);
+  assert.equal(s.calls.filter(url => url === layout).length, 3, 'a persistent 503 stops after three attempts');
+  assert.deepEqual((await fs.readdir(path.join(f.runtime, NATIVE, 'models'))).filter(name => name.includes('layout')), []);
+  for (const status of [400, 401, 403, 404, 410]) {
+    f = await fixture(t);
+    s = server(f, url => url === layout ? new Response('no', { status }) : undefined);
+    await assert.rejects(prepare(f, 'linux-arm64', { fetch: s.fetch }), new RegExp(`Asset download failed \\(${status}\\)`));
+    assert.equal(s.calls.filter(url => url === layout).length, 1, `${status} is final`);
+  }
+  // A mismatch after a transient failure is still never retried.
+  f = await fixture(t);
+  s = server(f, (url, call) => url === layout ? (call === 1 ? new Response('busy', { status: 503 }) : new Response('LAYOUT MODEL')) : undefined);
+  await assert.rejects(prepare(f, 'linux-arm64', { fetch: s.fetch }), /Asset checksum mismatch/);
+  assert.equal(s.calls.filter(url => url === layout).length, 2);
+});
+
 test('a download that stalls is aborted by the per-file timeout and is not left behind', async t => {
   const f = await fixture(t);
   const stalled = () => new Response(new ReadableStream({ start(controller) { controller.enqueue(Buffer.from('lay')); } }));
@@ -311,7 +340,7 @@ test('an AMD64 build is accepted only with its source-bound receipt, matching bi
   await assert.rejects(verify(f, 'linux-x64', { exact: true }), /Unexpected asset: native-build\/linux-x64\/run\.sh/);
   await fs.rm(path.join(f.build, 'linux-x64/run.sh'));
   await f.write(path.join(f.runtime, `${NATIVE}/linux-x64/docling.node`), 'planted');
-  await assert.rejects(verify(f, 'linux-x64', { exact: true }), /Unexpected asset: skills\/pdf2html\/external\/native\/linux-x64\/docling\.node/);
+  await assert.rejects(verify(f, 'linux-x64', { exact: true }), /Unexpected asset: skills\/pdf2html\/external\/native\/linux-x64$/);
 });
 
 test('an ARM64 assets tree has an empty or absent native build', async t => {
@@ -470,4 +499,95 @@ test('the audio models are handed to the setup programs as prepared directories,
   const audio = JSON.parse(await fs.readFile(path.join(deployment, 'audio-models.json'), 'utf8')).engines;
   assert.equal(audio.qwen.target, 'skills/theatrical-audio/models/qwen-custom');
   assert.equal(audio.kokoro.target, 'skills/theatrical-audio/models/kokoro');
+});
+
+// --exact also governs permissions and directories, not only file names.
+const modes = async (f, change) => { await prepare(f, 'linux-arm64', { fetch: server(f).fetch }); await verify(f, 'linux-arm64', { exact: true }); await change(); };
+
+test('--exact refuses group- or world-writable entries and setuid, setgid and sticky bits', async t => {
+  const model = f => path.join(f.runtime, NATIVE, 'models/layout.onnx');
+  const cases = [
+    ['a group-writable file', 0o664, f => model(f)], ['a world-writable file', 0o666, f => model(f)],
+    ['a setuid file', 0o4755, f => model(f)], ['a setgid file', 0o2755, f => model(f)], ['a sticky file', 0o1755, f => model(f)],
+    ['a group-writable directory', 0o775, f => path.join(f.runtime, NATIVE, 'models')],
+    ['a world-writable directory', 0o777, f => path.join(f.runtime, 'skills')],
+    ['a setgid directory', 0o2755, f => path.join(f.runtime, NATIVE)],
+    ['a sticky directory', 0o1755, f => path.join(f.runtime, 'skills/pdf2html')],
+    ['a writable runtime root', 0o777, f => f.runtime],
+  ];
+  for (const [label, mode, target] of cases) {
+    const f = await fixture(t);
+    await modes(f, async () => { await fs.chmod(target(f), mode); });
+    await assert.rejects(verify(f, 'linux-arm64', { exact: true }), /^Error: Asset mode refused: /, label);
+    await verify(f, 'linux-arm64');
+  }
+  // Read-only and executable-for-all entries are ordinary, and the default check never looks at modes.
+  const f = await fixture(t);
+  await modes(f, async () => { await fs.chmod(model(f), 0o444); await fs.chmod(path.join(f.runtime, NATIVE, 'models'), 0o555); });
+  await verify(f, 'linux-arm64', { exact: true });
+  await fs.chmod(path.join(f.runtime, NATIVE, 'models'), 0o755);
+});
+
+test('--exact refuses a directory that is neither an inventoried ancestor nor an asset root', async t => {
+  let f = await fixture(t);
+  await modes(f, async () => { await fs.mkdir(path.join(f.runtime, 'skills/theatrical-audio/runtime/qwen/bin/python'), { recursive: true }); });
+  await assert.rejects(verify(f, 'linux-arm64', { exact: true }), /^Error: Unexpected asset: skills\/theatrical-audio\/runtime\/qwen$/);
+  await verify(f, 'linux-arm64');
+  f = await fixture(t);
+  await modes(f, async () => { await fs.mkdir(path.join(f.runtime, `${NATIVE}/models/empty`)); });
+  await assert.rejects(verify(f, 'linux-arm64', { exact: true }), /^Error: Unexpected asset: skills\/pdf2html\/external\/native\/models\/empty$/);
+  f = await fixture(t);
+  await modes(f, async () => { await fs.mkdir(path.join(f.runtime, 'bin')); });
+  await assert.rejects(verify(f, 'linux-arm64', { exact: true }), /^Error: Unexpected asset: bin$/);
+});
+
+test('--exact applies the same permission and directory rules to an AMD64 native build, and accepts an empty ARM64 one', async t => {
+  const f = await fixture(t);
+  await prepare(f, 'linux-x64', { fetch: server(f).fetch });
+  await x64Build(f);
+  await verify(f, 'linux-x64', { exact: true });
+  const checks = [
+    ['setuid binary', () => fs.chmod(path.join(f.build, 'linux-x64/docling.node'), 0o4755), /Asset mode refused: native-build\/linux-x64\/docling\.node/, () => fs.chmod(path.join(f.build, 'linux-x64/docling.node'), 0o644)],
+    ['writable library directory', () => fs.chmod(path.join(f.build, 'linux-x64/lib'), 0o777), /Asset mode refused: native-build\/linux-x64\/lib/, () => fs.chmod(path.join(f.build, 'linux-x64/lib'), 0o755)],
+    ['writable notice', () => fs.chmod(path.join(f.build, 'linux-x64/notices/docling-LICENSE'), 0o666), /Asset mode refused: native-build\/linux-x64\/notices\/docling-LICENSE/, () => fs.chmod(path.join(f.build, 'linux-x64/notices/docling-LICENSE'), 0o644)],
+    ['writable build root', () => fs.chmod(f.build, 0o775), /Asset mode refused: native-build\/\./, () => fs.chmod(f.build, 0o755)],
+    ['planted directory', () => fs.mkdir(path.join(f.build, 'bin')), /Unexpected asset: native-build\/bin/, () => fs.rmdir(path.join(f.build, 'bin'))],
+    ['planted directory beside the binaries', () => fs.mkdir(path.join(f.build, 'linux-x64/extra')), /Unexpected asset: native-build\/linux-x64\/extra/, () => fs.rmdir(path.join(f.build, 'linux-x64/extra'))],
+  ];
+  for (const [label, apply, expected, undo] of checks) {
+    await apply();
+    await assert.rejects(verify(f, 'linux-x64', { exact: true }), expected, label);
+    await undo();
+    await verify(f, 'linux-x64', { exact: true });
+  }
+  // Nested notice directories are ordinary.
+  await fs.mkdir(path.join(f.build, 'linux-x64/notices/pdfium-components'));
+  await f.write(path.join(f.build, 'linux-x64/notices/pdfium-components/LICENSE'), 'x');
+  await verify(f, 'linux-x64', { exact: true });
+  const arm = await fixture(t);
+  await modes(arm, async () => { await fs.mkdir(arm.build, { recursive: true }); });
+  await verify(arm, 'linux-arm64', { exact: true });
+  await fs.chmod(arm.build, 0o777);
+  await assert.rejects(verify(arm, 'linux-arm64', { exact: true }), /Asset mode refused: native-build\/\./);
+});
+
+test('prepare creates directories and files that --exact accepts whatever the umask', async t => {
+  const f = await fixture(t);
+  const previous = process.umask(0o002);
+  try { await prepare(f, 'linux-arm64', { fetch: server(f).fetch }); }
+  finally { process.umask(previous); }
+  await verify(f, 'linux-arm64', { exact: true });
+});
+
+test('a missing program path is not the main module, instead of throwing', async () => {
+  const { isMain } = await import('../deployment/asset-inventory.mjs');
+  const argv = process.argv[1];
+  try {
+    process.argv[1] = path.join(os.tmpdir(), 'scripta-no-such-program.mjs');
+    assert.equal(isMain(import.meta.url), false);
+    process.argv[1] = path.join(os.tmpdir(), 'scripta-no-such-dir', 'x.mjs');
+    assert.equal(isMain(import.meta.url), false);
+    process.argv[1] = '';
+    assert.equal(isMain(import.meta.url), false);
+  } finally { process.argv[1] = argv; }
 });

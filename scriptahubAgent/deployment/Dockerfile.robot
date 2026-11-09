@@ -25,16 +25,18 @@ COPY scriptahubAgent/deployment/ /usr/local/share/scriptahub/runtime/
 COPY scriptahubAgent/site/reader/reader.css /usr/local/share/scriptahub/runtime/reader/reader.css
 # The assets image is mounted read-only and is never copied over the runtime root unchecked. This checkout's
 # verifier checks it against this checkout's inventories first; --exact refuses any file or link outside the
-# inventory, so the assets image cannot add a verifier, an inventory, an interpreter or a skill file. Only
-# verified files are copied, in the same step, and preparation then builds Fedora environments around them
+# inventory and any group- or world-writable or setuid, setgid or sticky entry, so the assets image cannot add
+# a verifier, an inventory, an interpreter, a skill file or loosened permissions. Only verified files are
+# copied, with cp -R (not -a) so existing directories keep their modes and no special bit is carried over, in
+# the same step, and preparation then builds Fedora environments around them
 # and verifies the source record. An ARM64 assets image has an empty native-build directory.
 RUN --mount=type=bind,from=manuscript-assets,source=/assets,target=/mnt/assets \
     node /usr/local/share/scriptahub/runtime/verify-assets.mjs \
         --skills /usr/local/share/scriptahub/runtime/skills \
         --runtime /mnt/assets/runtime --native-build /mnt/assets/native-build --exact \
-    && cp -a --no-preserve=ownership /mnt/assets/runtime/. /usr/local/share/scriptahub/runtime/ \
+    && cp -R --no-preserve=ownership /mnt/assets/runtime/. /usr/local/share/scriptahub/runtime/ \
     && mkdir -p /opt/scriptahub/native-build \
-    && if [ -d /mnt/assets/native-build ]; then cp -a --no-preserve=ownership /mnt/assets/native-build/. /opt/scriptahub/native-build/; fi \
+    && if [ -d /mnt/assets/native-build ]; then cp -R --no-preserve=ownership /mnt/assets/native-build/. /opt/scriptahub/native-build/; fi \
     && node /usr/local/share/scriptahub/runtime/prepare-skills.mjs /usr/local/share/scriptahub/runtime \
     && rm -rf /root/.cache /root/.npm \
     && chmod -R a+rX /usr/local/share/scriptahub/runtime

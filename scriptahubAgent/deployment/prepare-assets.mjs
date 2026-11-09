@@ -12,8 +12,12 @@ import { assertPlatform, currentPlatform, expectedAssets, hashFile, isMain, load
 // is streamed to disk while it is hashed (models are multi-gigabyte, so nothing is buffered
 // whole) and is renamed into place only when its size and SHA-256 match the inventory.
 
-// A checksum or HTTP status failure is a verdict on the source, never a transient fault.
+// A checksum failure or a client error is a verdict on the source, never a transient fault.
 class AssetRefusal extends Error {}
+// Throttling (429) and server errors (5xx) are worth another attempt within the same budget.
+class TransientStatus extends Error {
+  constructor(status, relative) { super(`Asset download failed (${status}): ${relative}`); this.status = status; }
+}
 
 const tryStat = async file => {
   try { return await fs.lstat(file); }
@@ -29,6 +33,7 @@ async function stream({ fetch, relative, entry, target, timeoutMs }) {
     const response = await fetch(entry.url, { signal });
     if (!response.ok) {
       await response.body?.cancel().catch(() => {});
+      if (response.status === 429 || response.status >= 500) throw new TransientStatus(response.status, relative);
       throw new AssetRefusal(`Asset download failed (${response.status}): ${relative}`);
     }
     if (!response.body) throw new Error('The response has no body');
@@ -62,7 +67,7 @@ export async function prepareAssets({ skillsDir, runtimeRoot, platform = current
       const actual = await hashFile(target);
       if (actual.bytes === entry.bytes && actual.sha256 === entry.sha256) { counts.kept++; continue; }
     } else if (existing) throw new Error(`Unexpected asset: ${relative}`);
-    await fs.mkdir(path.dirname(target), { recursive: true });
+    await fs.mkdir(path.dirname(target), { recursive: true, mode: 0o755 });
     if (entry.generated) {
       const partial = `${target}.partial`;
       try { await fs.writeFile(partial, entry.generated, { mode: 0o644 }); await fs.rename(partial, target); }
@@ -74,8 +79,11 @@ export async function prepareAssets({ skillsDir, runtimeRoot, platform = current
       try { await stream({ fetch, relative, entry, target, timeoutMs }); break; }
       catch (error) {
         if (error instanceof AssetRefusal) throw error;
-        if (attempt >= attempts) throw new Error(`Asset download failed (${error.cause?.code || error.name}): ${relative}: ${error.message}`);
-        if (retryDelayMs) await delay(retryDelayMs);
+        if (attempt >= attempts) {
+          if (error instanceof TransientStatus) throw error;
+          throw new Error(`Asset download failed (${error.cause?.code || error.name}): ${relative}: ${error.message}`);
+        }
+        if (retryDelayMs) await delay(retryDelayMs * attempt);
       }
     }
     counts.downloaded++;

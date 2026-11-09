@@ -4,8 +4,10 @@ import { parseArgs } from 'node:util';
 import { assertPlatform, currentPlatform, expectedAssets, hashFile, isMain, loadInventory } from './asset-inventory.mjs';
 
 // Read-only check of an assets tree against the committed inventories. The tree may come
-// from any image: --exact refuses every file, link or special entry outside the inventory,
-// so an assets image cannot carry code or inventory files into the robot.
+// from any image: --exact refuses every file, directory, link or special entry outside the
+// inventory, and any entry that is writable by group or others or carries a setuid, setgid or
+// sticky bit, so an assets image cannot carry code, inventory files or loosened permissions
+// into the robot.
 const HEX64 = /^[0-9a-f]{64}$/;
 const BUILT = ['docling.node', 'lib/libpdfium.so'];
 
@@ -14,26 +16,36 @@ const tryStat = async file => {
   catch (error) { if (error.code === 'ENOENT' || error.code === 'ENOTDIR') return null; throw error; }
 };
 
+// Every entry below root, directories included. A symlink anywhere is refused.
 async function walk(root) {
   const found = [];
   async function visit(relative) {
     for (const entry of await fs.readdir(path.join(root, relative), { withFileTypes: true })) {
       const name = relative ? `${relative}/${entry.name}` : entry.name;
-      if (entry.isSymbolicLink()) throw new Error(`Asset symlink refused: ${name}`);
-      if (entry.isDirectory()) await visit(name);
-      else found.push({ name, regular: entry.isFile() });
+      const stat = await fs.lstat(path.join(root, name));
+      if (stat.isSymbolicLink()) throw new Error(`Asset symlink refused: ${name}`);
+      const kind = stat.isDirectory() ? 'dir' : stat.isFile() ? 'file' : 'other';
+      found.push({ name, kind, regular: kind === 'file', mode: stat.mode });
+      if (kind === 'dir') await visit(name);
     }
   }
   if (await tryStat(root)) await visit('');
   return found;
 }
 
+// Group- or other-writable entries and setuid, setgid or sticky bits are never part of an asset.
+const refuseUnsafeMode = (name, mode) => {
+  if (mode & 0o7022) throw new Error(`Asset mode refused: ${name} (${(mode & 0o7777).toString(8)})`);
+};
+
 // Same rule as install-built-native.mjs: the receipt is bound to the declared source and
 // platform, and each compiled binary must match the size and hash it records.
 async function verifyNative({ config, nativeBuildRoot, platform, exact }) {
   const label = name => `native-build/${name}`;
+  const root = await tryStat(nativeBuildRoot);
+  if (root && exact) refuseUnsafeMode(label('.'), root.mode);
   if (platform !== 'linux-x64') {
-    const entries = await tryStat(nativeBuildRoot) ? await fs.readdir(nativeBuildRoot) : [];
+    const entries = root ? await fs.readdir(nativeBuildRoot) : [];
     if (entries.length) throw new Error(`Unexpected asset: ${label(entries.sort()[0])}`);
     return { files: 0, bytes: 0 };
   }
@@ -61,9 +73,13 @@ async function verifyNative({ config, nativeBuildRoot, platform, exact }) {
   const notices = (await walk(path.join(nativeBuildRoot, platform, 'notices'))).filter(entry => entry.regular);
   if (!notices.length) throw new Error(`Asset missing: ${label(`${platform}/notices/`)}`);
   if (exact) {
-    const allowed = new Set(['receipt.json', ...BUILT.map(name => `${platform}/${name}`)]);
+    const files = new Set(['receipt.json', ...BUILT.map(name => `${platform}/${name}`)]);
+    const directories = new Set([platform, `${platform}/lib`, `${platform}/notices`]);
     for (const entry of await walk(nativeBuildRoot)) {
-      if (!entry.regular || !(allowed.has(entry.name) || entry.name.startsWith(`${platform}/notices/`))) throw new Error(`Unexpected asset: ${label(entry.name)}`);
+      const notice = entry.name.startsWith(`${platform}/notices/`);
+      const allowed = entry.kind === 'dir' ? directories.has(entry.name) || notice : entry.kind === 'file' && (files.has(entry.name) || notice);
+      if (!allowed) throw new Error(`Unexpected asset: ${label(entry.name)}`);
+      refuseUnsafeMode(label(entry.name), entry.mode);
     }
   }
   return { files, bytes };
@@ -86,7 +102,16 @@ export async function verifyAssets({ skillsDir, runtimeRoot, nativeBuildRoot, pl
   }
   const native = await verifyNative({ config: inventory.config, nativeBuildRoot, platform, exact });
   if (exact) {
-    for (const entry of await walk(runtimeRoot)) if (!entry.regular || !expected.has(entry.name)) throw new Error(`Unexpected asset: ${entry.name}`);
+    // Directories are allowed only as ancestors of inventoried files: a planted directory such as
+    // skills/theatrical-audio/runtime/qwen/bin would otherwise shadow what preparation builds there.
+    const directories = new Set();
+    for (const relative of expected.keys()) for (let dir = path.posix.dirname(relative); dir !== '.'; dir = path.posix.dirname(dir)) directories.add(dir);
+    const root = await tryStat(runtimeRoot);
+    if (root) refuseUnsafeMode('.', root.mode);
+    for (const entry of await walk(runtimeRoot)) {
+      if (!(entry.kind === 'dir' ? directories.has(entry.name) : entry.regular && expected.has(entry.name))) throw new Error(`Unexpected asset: ${entry.name}`);
+      refuseUnsafeMode(entry.name, entry.mode);
+    }
   }
   return { files: files + native.files, bytes: bytes + native.bytes };
 }

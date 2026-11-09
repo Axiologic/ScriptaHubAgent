@@ -17,7 +17,11 @@ const PDF_EXTERNAL = 'skills/pdf2html/external';
 const HEX64 = /^[0-9a-f]{64}$/;
 
 // True when this module is the program being run; symlinked directories (macOS /var) must not hide it.
-export const isMain = metaUrl => Boolean(process.argv[1]) && realpathSync(process.argv[1]) === fileURLToPath(metaUrl);
+export const isMain = metaUrl => {
+  if (!process.argv[1]) return false;
+  try { return realpathSync(process.argv[1]) === fileURLToPath(metaUrl); }
+  catch (error) { if (error.code === 'ENOENT' || error.code === 'ENOTDIR') return false; throw error; }
+};
 
 export const currentPlatform = () => `${process.platform}-${process.arch}`;
 
