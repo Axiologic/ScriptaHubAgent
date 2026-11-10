@@ -1,6 +1,7 @@
+import {withExecutionLock} from './anchored-files.mjs';
 import fs from 'node:fs/promises';
 import {runBatchOperation} from './task-batch.mjs';
-import {runLocalSkill} from './local-skill.mjs';
+import {runRemoteSkill,releaseIncompleteRemote,guardRemoteBackups} from './remote-skill.mjs';
 import {preflight,writeHandoff,verifyPackage,requirePreflight} from './workflow-checks.mjs';
 import { constants } from 'node:fs';
 import path from 'node:path';
@@ -19,7 +20,7 @@ export function chooseRepository({ repositories, candidates } = {}) {
     }
     return { repository: unique[crypto.randomInt(unique.length)], candidates: unique };
 }
-function unwrap(response) {
+export function unwrap(response) {
     if (response?.isError) throw new Error('ScriptaHub rejected the task operation');
     const result = Array.isArray(response?.content)
         ? JSON.parse(response.content.filter(item => item.type === 'text').map(item => item.text).join('\n')) : response;
@@ -96,7 +97,10 @@ export async function downloadDocument(call, input) {
 }
 
 // Transfer validated bytes, never a server-side filesystem path or Git credential.
-export async function publishPackage(call, input) {
+export async function publishPackage(call, input, {hook=async()=>{}}={}) {
+    return withExecutionLock(process.cwd(),input.executionId,async base=>{
+    await guardRemoteBackups(base,input.executionId);
+    await hook('guarded');
     const run = await fs.realpath(process.cwd());
     const localPath = async value => {
         if (typeof value !== 'string' || !value || path.isAbsolute(value)) throw new Error('Use paths relative to this run');
@@ -143,13 +147,20 @@ export async function publishPackage(call, input) {
         } finally { await handle.close(); }
     }
     return call('scriptahub_task_publish',{executionId:input.executionId});
+    });
+}
+
+export async function retryPublication(call,input,{root=process.cwd(),stderr=process.stderr}={}) {
+    try { await guardRemoteBackups(await fs.realpath(root),input.executionId); }
+    catch (error) { stderr.write('Local processing conflict remains: '+error.message+'\n'); }
+    return call('scriptahub_task_publish',{executionId:input.executionId});
 }
 
 async function main() {
   let client;
   try {
     const operation = process.argv[2];
-    if (process.argv.length !== 3 || (!operations[operation] && !['batch-start', 'batch-status', 'batch-next', 'batch-close', 'exec', 'download', 'choose', 'publish', 'retry-publication', 'preflight', 'handoff', 'verify-package'].includes(operation))) throw new Error('Use batch-start, batch-status, batch-next, batch-close, exec, preflight, claim, status, download, choose, handoff, verify-package, publish, retry-publication or finish');
+    if (process.argv.length !== 3 || (!operations[operation] && !['batch-start', 'batch-status', 'batch-next', 'batch-close', 'exec', 'release-incomplete', 'download', 'choose', 'publish', 'retry-publication', 'preflight', 'handoff', 'verify-package'].includes(operation))) throw new Error('Use batch-start, batch-status, batch-next, batch-close, exec, preflight, claim, status, download, choose, handoff, verify-package, publish, retry-publication or finish');
     const chunks = [];
     let size = 0;
     for await (const chunk of process.stdin) {
@@ -159,12 +170,8 @@ async function main() {
     }
     const input = JSON.parse(Buffer.concat(chunks).toString('utf8'));
     if (!input || typeof input !== 'object' || Array.isArray(input)) throw new Error('Provide a JSON object');
-    if (operation === 'exec' || operation === 'preflight' && process.env.SCRIPTA_SKILLS_LOCAL !== '1') {
-        process.exitCode = await runLocalSkill(operation === 'exec' ? input : {skill:'scriptahub-tasks',args:['preflight'],input:JSON.stringify(input)});
-        return;
-    }
-    if (['preflight','handoff','verify-package'].includes(operation)) {
-        const result = operation === 'preflight' ? await preflight() : operation === 'handoff' ? await writeHandoff(input) : await verifyPackage(input);
+    if (['handoff','verify-package'].includes(operation)) {
+        const result = operation === 'handoff' ? await writeHandoff(input) : await verifyPackage(input);
         process.stdout.write(JSON.stringify(result) + '\n'); return;
     }
     if (operation === 'choose') {
@@ -174,10 +181,14 @@ async function main() {
     if (operation === 'claim' || operation === 'batch-next') await requirePreflight();
     client = await loadClient();
     const call = async (tool, args) => unwrap(await client.callTool(tool, args, { timeoutMs: tool === 'scriptahub_task_publish' ? 600000 : 90000 }));
+    if (operation === 'claim' || operation === 'batch-next') await preflight(await call('scriptahub_skills_preflight',{}));
+    if (operation === 'exec') { process.exitCode = await runRemoteSkill(input,call); return; }
+    if (operation === 'release-incomplete') { const exitCode = await releaseIncompleteRemote(input,call); process.stdout.write(JSON.stringify({released:true,executionId:input.executionId,originalExitCode:exitCode})+'\n'); return; }
+    if (operation === 'preflight') { const receipt = await call('scriptahub_skills_preflight',{}); await preflight(receipt); process.stdout.write(JSON.stringify(receipt)+'\n'); return; }
     const result = operation.startsWith('batch-') ? await runBatchOperation(call,operation,input)
       : operation === 'download' ? await downloadDocument(call,input)
       : operation === 'publish' ? await publishPackage(call,input)
-      : operation === 'retry-publication' ? await call('scriptahub_task_publish',{executionId:input.executionId})
+      : operation === 'retry-publication' ? await retryPublication(call,input)
       : await call(operations[operation],input);
     process.stdout.write(JSON.stringify(result) + '\n');
   } catch (error) {

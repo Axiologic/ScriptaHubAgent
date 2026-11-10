@@ -211,7 +211,7 @@ export function createSiteServer(siteRoot, { dataDir: submissionDataDir = dataDi
   return server;
 }
 
-export async function main() {
+export async function main({ onShutdown = async () => {} } = {}) {
   const refresh = new AbortController();
   const configPath = process.env.SCRIPTA_CONFIG || path.join(import.meta.dirname, 'sources.json');
   let interval = syncIntervalMs(await loadSourceConfig({ configPath, dataDir }));
@@ -227,7 +227,7 @@ export async function main() {
   let timer;
   let settingsWatcher;
   let settingsServer;
-  const shutdown = (code = 0) => {
+  const shutdown = async (code = 0) => {
     if (stopping) return;
     stopping = true;
     refresh.abort();
@@ -235,9 +235,8 @@ export async function main() {
     stopNotifications();
     settingsWatcher?.close();
     settingsServer?.kill('SIGTERM');
+    try { await onShutdown(); } catch { code = 1; console.error('Processing supervisor drain failed'); }
     server.close();
-    // Ploinky requires a clean exit to acknowledge a targeted drain.
-    setTimeout(() => process.exit(code), 3000).unref();
     process.exitCode = code;
   };
   process.once('SIGTERM', () => shutdown());

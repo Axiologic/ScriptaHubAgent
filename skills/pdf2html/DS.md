@@ -10,6 +10,8 @@ The read-only `decorations INPUT.pdf` JSON includes `tables` alongside borders, 
 
 Node.js ECMAScript modules implement the skill. The public launcher is `scripts/pdf2html`, with `doctor`, `convert` and `check` commands. `convert` and `check` run `scripts/setup.mjs --ensure` before importing conversion modules. Setup provisions missing pinned models, JavaScript packages, Chromium and local Poppler/QPDF packages under an installation lock, then checks the runtime in a fresh process. `doctor` remains read-only. Runtime paths resolve inside the skill directory; local command binaries take precedence over PATH. See `dependencies.md` for the complete inventory and licenses.
 
+QPDF stdout and stderr use separate private temporary files, with a default 256 MiB limit per stream and a 120-second timeout. The monitor can overshoot the limit between checks. Timeout, abort and overflow terminate the child and wait for it to close before cleanup. Input paths and the execution environment remain unchanged.
+
 ## Conversion
 
 The input PDF is immutable. PDF.js extracts source glyphs, font names and sizes, colors, text matrices, page geometry, drawings, image regions and link annotations. QPDF checks encryption and extracts embedded font streams. Docling.rs supplies semantic regions, ordered body items, page provenance, pictures and TableFormer grids. CPU FP32 model files and sidecars are integrity-checked. The worker disables OCR and reports failed table inference before publication.

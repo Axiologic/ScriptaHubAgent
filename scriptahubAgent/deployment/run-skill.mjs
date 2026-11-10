@@ -8,15 +8,13 @@ export const launchers = Object.freeze({
   doc2pdf:['scripts/doc2pdf'],html2doc:['scripts/html2doc'],
   'humanise-html':['scripts/humanisehtml'],'marketing-summary':['scripts/marketingsummary'],
   pdf2html:['scripts/pdf2html'],'relevant-keywords':['scripts/relevantkeywords'],
-  'scriptahub-tasks':['node','scripts/run.mjs'],
   'shf-presentation-creator':['node','scripts/shf.mjs'],
   'short-description':['scripts/shortdescription'],
   'theatrical-audio':['node','bin/audio.mjs'],'translate-html':['scripts/translatehtml'],
   'validate-book':['scripts/validatebook'],
 });
 
-// This process runs inside the robot's existing ALA sandbox. It does not create
-// another agent session, access a Router credential or request agent-exec.
+// This launcher is invoked inside the processing sandbox with a cleared environment.
 export function skillCommand(skill,args,cwd,root=path.dirname(fileURLToPath(import.meta.url))) {
   if (!Object.hasOwn(launchers,skill) || !Array.isArray(args) || args.length>256
       || args.some(value=>typeof value!=='string'||value.includes('\0'))
@@ -28,11 +26,14 @@ export function skillCommand(skill,args,cwd,root=path.dirname(fileURLToPath(impo
   return {
     command:launcher[0]==='node'?process.execPath:'/bin/sh',
     args:[path.join(directory,launcher.at(-1)),...args],cwd:workdir,
-    env:{...process.env,SCRIPTA_SKILLS_LOCAL:'1',SCRIPTA_SKILL_RUNTIME_ROOT:root,
+    env:{PATH:'/usr/local/bin:/usr/bin:/bin',HOME:'/tmp/home',TMPDIR:'/tmp',XDG_CACHE_HOME:'/tmp/cache',
+      HF_HUB_OFFLINE:'1',TRANSFORMERS_OFFLINE:'1',AUDIO_ENGINE:'piper',
       PDF2HTML_RUNTIME_ROOT:path.join(root,'skills/pdf2html'),
       VALIDATEBOOK_PDF2HTML:path.join(root,'skills/pdf2html/scripts/pdf2html'),
       PDF2HTML_CHROMIUM_EXECUTABLE:'/usr/local/bin/chromium-browser',
       VALIDATEBOOK_CHROMIUM:'/usr/local/bin/chromium-browser',
+      VALIDATEBOOK_PDFTOTEXT:'/usr/bin/pdftotext',VALIDATEBOOK_PDFFONTS:'/usr/bin/pdffonts',
+      VALIDATEBOOK_PDFIMAGES:'/usr/bin/pdfimages',VALIDATEBOOK_PDFTOHTML:'/usr/bin/pdftohtml',
       VALIDATEBOOK_READER_CSS:path.join(root,'reader/reader.css'),
       CHROMIUM_USER_FLAGS:'--no-sandbox --disable-dev-shm-usage'},
   };

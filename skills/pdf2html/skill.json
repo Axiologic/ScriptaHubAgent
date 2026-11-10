@@ -2,6 +2,7 @@
   "title": "PDF to Semantic HTML",
   "family": "document-conversion",
   "sourceTableContract": "The decorations command exports ruled and fill-partitioned tables with source page widths, cell spans, fills, individual borders, vertical alignment and uniform typography. JSON is flushed before exit.",
+  "qpdfCapture": "QPDF uses private temporary files for stdout and stderr, with monitored per-stream limits and cleanup after exit.",
   "summary": "Converts born-digital PDFs to semantic positioned HTML and local assets. Checks technical output assembly and resource loading only; bookValidated is always false. Manuscript fidelity and book acceptance belong exclusively to validateBook. Supports a hash-verified prepared runtime for read-only mounts.",
   "aliases": [
     "pdf2html",

@@ -1,5 +1,6 @@
 import crypto from 'node:crypto';
 import path from 'node:path';
+import { createProcessingTables, requireNoActiveProcessing } from './processing-store.mjs';
 
 export const publicationError = (message, status = 400) => { throw Object.assign(new Error(message), { status }); };
 export const sha256 = bytes => crypto.createHash('sha256').update(bytes).digest('hex');
@@ -18,7 +19,7 @@ export function createPublicationTables(store) {
     byte_offset INTEGER NOT NULL, data BLOB NOT NULL, PRIMARY KEY(execution_id,file_path,byte_offset));`);
 }
 export class PublicationTransfer {
-  constructor(service) { this.service = service; this.store = service.store; createPublicationTables(this.store); }
+  constructor(service) { this.service = service; this.store = service.store; createPublicationTables(this.store); createProcessingTables(this.store); }
   row(executionId) { return this.store.db.prepare('SELECT * FROM task_publications WHERE execution_id=?').get(executionId); }
   running(executor, executionId) {
     const execution = this.service.execution(executor, executionId);
@@ -55,6 +56,7 @@ export class PublicationTransfer {
     const digest = sha256(text);
     return this.store.transaction(() => {
       this.running(executor, executionId);
+      requireNoActiveProcessing(this.store, executionId);
       const existing = this.row(executionId);
       if (existing && existing.digest !== digest) publicationError('A different package is already registered for this execution', 409);
       if (!existing) this.store.db.prepare('INSERT INTO task_publications(execution_id,manifest,digest) VALUES(?,?,?)').run(executionId,text,digest);

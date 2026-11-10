@@ -33,7 +33,7 @@ test('claim requires a fresh successful preflight, including a valid timestamp',
   await assert.rejects(requirePreflight(), /preflight/);
   await fs.mkdir('run-state');
   const now = Date.now();
-  const report = {ok:true, checks:Array.from({length:8}, () => ({status:'passed'})), checkedAt:new Date(now).toISOString()};
+  const report = {ok:true, runtimeId:'runtime', platform:'linux-x64', sourceDigests:{}, checks:Array.from({length:8}, () => ({status:'passed'})), checkedAt:new Date(now).toISOString()};
   await fs.writeFile('run-state/preflight.json', JSON.stringify(report));
   await requirePreflight(now);
   for (const change of [{ok:false}, {checkedAt:'invalid'}, {checkedAt:new Date(now+1000).toISOString()}, {checkedAt:new Date(now-900001).toISOString()}, {checks:[]}]) {

@@ -21,6 +21,8 @@ node /path/to/pdf2html/scripts/setup.mjs
 
 The skill owns its Node.js packages, Docling.rs native engine, layout/table models and managed Chromium. The supplied binaries cover macOS arm64 and Linux arm64 with glibc. See [runtime installation](references/dependencies.md) for local tool packages, container prerequisites, other architecture builds and offline copying. See [dependencies](dependencies.md) for versions and licenses.
 
+QPDF output is captured in private temporary files. The temporary filesystem must have room for its output; per-stream limits are monitored and can be exceeded briefly between checks.
+
 ## Conversion
 
 From the book folder:

@@ -5,9 +5,30 @@ import os from 'node:os';
 import path from 'node:path';
 import net from 'node:net';
 import { spawn } from 'node:child_process';
+import { processingSocketPath } from '../processing-ipc.mjs';
+import { ProcessingService } from '../processing-service.mjs';
+import { DashboardStore } from '../dashboard-store.mjs';
 
-// The application image carries no skills runtime: skills run only in the robot.
-// The manifest entry point must therefore serve without /opt/scriptahub/runtime.
+test('failed IPC startup drains the supervisor and preserves the unexpected file', async t => {
+  const root = await fs.mkdtemp(path.join(os.tmpdir(), 'scripta-start-failure-'));
+  const data = path.join(root, 'data'), socket = processingSocketPath(data);
+  t.after(async () => { await fs.rm(socket, { force: true }); await fs.rm(root, { recursive: true, force: true }); });
+  await fs.writeFile(socket, 'keep');
+  const child = spawn(process.execPath, [path.join(import.meta.dirname, '../deployment/start.mjs')], {
+    env: { ...process.env, SCRIPTA_DATA_DIR: data }, stdio: 'ignore',
+  });
+  const code = await new Promise((resolve, reject) => { child.once('error', reject); child.once('exit', resolve); });
+  assert.notEqual(code, 0); assert.equal(await fs.readFile(socket, 'utf8'), 'keep');
+  const store = new DashboardStore(data);
+  try { assert.equal(store.db.prepare('SELECT count(*) AS n FROM processing_supervisor').get().n, 0); }
+  finally { store.close(); }
+  const service = new ProcessingService(data);
+  try { assert.equal(service.store.db.prepare('SELECT count(*) AS n FROM processing_supervisor').get().n, 1); }
+  finally { await service.drain(); }
+});
+
+// The service can start without the optional installed runtime; processing
+// preflight fails until that runtime is present and verified.
 test('the manifest entry point starts and answers /health without a skills runtime', async t => {
   const manifest = JSON.parse(await fs.readFile(new URL('../manifest.json', import.meta.url), 'utf8'));
   assert.equal(manifest.agent, 'node /code/deployment/start.mjs');

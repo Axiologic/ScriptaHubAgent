@@ -9,6 +9,7 @@ import { promisify } from 'node:util';
 import { DashboardStore } from '../dashboard-store.mjs';
 import { TaskExecution } from '../task-execution.mjs';
 import { TaskPublication } from '../task-publication.mjs';
+import { ProcessingStore } from '../processing-store.mjs';
 import { publicationGit } from '../publication-git.mjs';
 import { PublicationAccessStore } from '../publication-access.mjs';
 import { publicationTarget, checkPublicationPackage, verifyCatalogueBranch } from '../publication-policy.mjs';
@@ -250,4 +251,35 @@ for (const discardHistory of [true,false]) test(`real Git edition publication ${
     assert.equal(await f.git(f.remote,'show','main:'+directory+'/en/full.html'),'<p>Original manuscript</p>');
     assert.equal(f.service.status(agent,{executionId:task.executionId}).state,'completed');
   }
+});
+
+
+test('processing gates publication and finish, and registered packages permanently gate new jobs',async t=>{
+  const f=await fixture(t), jobs=new ProcessingStore(f.service);
+  const request={executionId:f.task.executionId,jobId:'job-1',virtualCwd:'/workspace/run'};
+  jobs.prepare(agent,request,'runtime',0);
+  for (const state of ['uploading','starting','running','stopping']) {
+    f.store.db.prepare('UPDATE task_processing_jobs SET state=? WHERE execution_id=?').run(state,request.executionId);
+    assert.throws(()=>f.publisher.prepare(agent,f.input,f.config),{status:409});
+    assert.throws(()=>f.service.finish(agent,{executionId:request.executionId,state:'failed',error:'stopped'}),{status:409});
+  }
+  f.store.db.prepare("UPDATE task_processing_jobs SET state='cancelled' WHERE execution_id=?").run(request.executionId);
+  f.publisher.prepare(agent,f.input,f.config);
+  assert.throws(()=>jobs.prepare(agent,{...request,jobId:'job-2'},'runtime',0),{status:409});
+});
+
+test('publication lease checks processing after a deferred credential lookup',async t=>{
+  const f=await fixture(t); f.upload();
+  let resume, began;
+  const ready=new Promise(resolve=>{began=resolve;});
+  const credentials=new Promise(resolve=>{resume=resolve;});
+  const publisher=new TaskPublication(f.service,{tokenProvider:async()=>{began();return credentials;}});
+  const publishing=publisher.publish(agent,{executionId:f.task.executionId},f.config);
+  await ready;
+  const now=new Date().toISOString();
+  f.store.db.prepare(`INSERT INTO task_processing_jobs(execution_id,job_id,executor_agent_id,request,digest,state,runtime_id,created_at,updated_at) VALUES(?,?,?,?,?,'running',?,?,?)`)
+    .run(f.task.executionId,'legacy-job',agent,'{}','digest','runtime',now,now);
+  resume('test-token');
+  await assert.rejects(publishing,{status:409});
+  assert.equal(f.publisher.row(f.task.executionId).lease_until,0);
 });

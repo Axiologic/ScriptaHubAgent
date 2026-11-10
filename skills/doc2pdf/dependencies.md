@@ -36,6 +36,8 @@ These tools are independent system dependencies with their own licenses. Keep di
 
 Discovery checks PATH and common installation directories. SCRIPTA_SOFFICE, SCRIPTA_QPDF, SCRIPTA_PDFTOTEXT, SCRIPTA_PDFFONTS, SCRIPTA_PDFTOPPM and SCRIPTA_GS override individual executable paths. A missing override fails explicitly. doctor reports paths and capability probes; required tools are checked before creating conversion output. Missing Ghostscript prevents selecting a compression profile.
 
+On Linux and macOS, a Node.js helper captures QPDF output in private files on the temporary filesystem. Each stream has a monitored 256 MiB default limit; writes can overshoot between checks. The coordinator reports cleanup failures. Cleanup is not atomic: abrupt caller death during the final control-response and exit handoff can leave capture files, as can termination when the helper cannot perform cleanup. The worker's temporary filesystem and PID namespace bound those cases.
+
 On macOS install LibreOffice with brew install --cask libreoffice and the PDF tools with brew install qpdf poppler ghostscript. On Debian or Ubuntu use apt-get install libreoffice-writer qpdf poppler-utils ghostscript. On Fedora use dnf install libreoffice-writer qpdf poppler-utils ghostscript. Use a distribution providing QPDF >=11.4. On Windows place the equivalent tools on PATH or set the executable overrides; automated installation is available for macOS and Linux.
 
 install-deps displays the missing-tool installation commands. install-deps --yes executes them after user authorization. Conversion and startup never install tools. Update through the same package manager and run the complete conversion suite, including all profiles, fidelity fallback and DOC input.

@@ -1,3 +1,5 @@
+import {withExecutionLock} from './anchored-files.mjs';
+import {guardRemoteBackups} from './remote-skill.mjs';
 import fs from 'node:fs/promises';
 import path from 'node:path';
 import os from 'node:os';
@@ -65,50 +67,15 @@ export async function writeHandoff(input) {
   rejectSecrets(input.context);
   return atomicJson(handoffPath,{step:input.step,context:input.context,updatedAt:new Date().toISOString()});
 }
-async function executable(name) {
-  for (const directory of String(process.env.PATH || '').split(path.delimiter)) {
-    if (!path.isAbsolute(directory)) continue;
-    const file = path.join(directory,name);
-    try {await fs.access(file,constants.X_OK);if((await fs.stat(file)).isFile())return file;} catch {}
-  }
-  throw new Error('Required executable not available on PATH: '+name);
+export async function preflight(receipt) {
+  if (!receipt || receipt.ok !== true || typeof receipt.runtimeId !== 'string' || typeof receipt.platform !== 'string' || !receipt.sourceDigests || !Array.isArray(receipt.checks) || !receipt.checks.length || receipt.checks.some(check => check.status !== 'passed') || !Number.isFinite(Date.parse(receipt.checkedAt))) throw new Error('ScriptaHub runtime preflight failed');
+  await atomicJson('run-state/preflight.json',receipt);
+  return receipt;
 }
-export async function preflight() {
-  const skills = path.resolve(path.dirname(await fs.realpath(fileURLToPath(import.meta.url))),'../..');
-  const checks = [], tools = {};
-  for (const name of ['pdftotext','pdffonts','pdfimages','pdftohtml']) {
-    try { tools[name] = await executable(name); }
-    catch (error) { checks.push({skill:name,status:'failed',error:error.message}); }
-  }
-  let chromium;
-  try {
-    chromium = process.env.VALIDATEBOOK_CHROMIUM || await executable('chromium-browser');
-    await fs.access(chromium, constants.X_OK);
-  } catch (error) { checks.push({skill:'chromium',status:'failed',error:error.message}); }
-  const pdfRuntime = process.env.PDF2HTML_RUNTIME_ROOT || path.join(skills,'pdf2html');
-  const env = {...process.env,PDF2HTML_RUNTIME_ROOT:pdfRuntime};
-  // These flags match the operator-prepared root container's Chromium launcher.
-  if (process.getuid?.() === 0 && !env.CHROMIUM_USER_FLAGS) env.CHROMIUM_USER_FLAGS='--no-sandbox';
-  const entries = [
-    ['comprehensive-summary','comprehensivesummary',[]],['marketing-summary','marketingsummary',[]],
-    ['short-description','shortdescription',[]],['relevant-keywords','relevantkeywords',[]],
-    ['translate-html','translatehtml',[]],['doc2pdf','doc2pdf',[]],
-    ['pdf2html','pdf2html',[]],['validate-book','validatebook',[...(chromium ? ['--chromium',chromium] : []),...Object.entries(tools).flatMap(([name,file])=>['--'+name,file])]]];
-  for (const [skill,launcher,args] of entries) {
-    const entry = path.join(skills,skill,'scripts',launcher);
-    try {
-      const {stdout} = await execute('/bin/sh',[entry,'doctor',...args],{env,timeout:60000,maxBuffer:1024*1024});
-      const result=JSON.parse(stdout);
-      if (!(result.ok===true || ['ok','passed'].includes(result.status))) throw new Error('Doctor did not pass');
-      checks.push({skill,status:'passed'});
-    } catch(error) {checks.push({skill,status:'failed',error:String(error.stderr||error.message).slice(0,1600)});}
-  }
-  const report={ok:checks.every(check=>check.status==='passed'),checks,tools:{...tools,chromium},pdfRuntime,checkedAt:new Date().toISOString()};
-  await atomicJson('run-state/preflight.json',report);
-  if(!report.ok) throw new Error('Runtime preflight failed: '+checks.filter(c=>c.status==='failed').map(c=>c.skill+': '+c.error).join('; '));
-  return report;
-}
-export async function verifyPackage(input) {
+export async function verifyPackage(input,{hook=async()=>{}}={}) {
+  return withExecutionLock(process.cwd(),input.executionId,async base=>{
+  await guardRemoteBackups(base,input.executionId);
+  await hook('guarded');
   const root=await insideRun(input.packageRoot,{directory:true}), inventory=await jsonArtifact(input.inventory);
   if(inventory.executionId!==input.executionId || !Array.isArray(inventory.files) || !inventory.files.length)throw new Error('Inventory belongs to another execution or has no files');
   const names=new Set();let bytes=0;
@@ -147,6 +114,7 @@ export async function verifyPackage(input) {
   }
   await atomicJson(itemArtifact(input.directory,'package-check.json'),report);
   return report;
+  });
 }
 
 export async function requirePreflight(now = Date.now()) {
@@ -155,7 +123,7 @@ export async function requirePreflight(now = Date.now()) {
   catch { throw new Error('Run preflight successfully before claiming a manuscript'); }
   const age = now - Date.parse(report.checkedAt);
   if (report.ok !== true || !Number.isFinite(age) || age < 0 || age > 15 * 60 * 1000
-      || !Array.isArray(report.checks) || report.checks.length < 8 || report.checks.some(check => check.status !== 'passed')) {
+      || typeof report.runtimeId !== 'string' || typeof report.platform !== 'string' || !report.sourceDigests || !Array.isArray(report.checks) || report.checks.length < 1 || report.checks.some(check => check.status !== 'passed')) {
     throw new Error('Run preflight successfully before claiming a manuscript');
   }
 }

@@ -5,7 +5,7 @@ description: Conservatively edit large same-language semantic HTML documents and
 
 ## ScriptaHub deployment
 
-This skill is owned and deployed by ScriptaHubAgent. In a RoboTeam workflow, execute its CLI through `scriptahub-tasks exec` with this canonical skill name, a CLI `args` array and optional `input` text. The CLI and preflight execute locally in the robot using the prepared ScriptaHub skill runtime. Its libraries and system tools must be installed in the robot image before deployment, never during manuscript processing. The existing robot sandbox confines execution; service calls alone contact ScriptaHub for authorized task access and publication.
+This skill is owned by ScriptaHubAgent. In a ScriptaHub RoboTeam workflow, invoke its CLI with `scriptahub-tasks exec`, passing the claimed `executionId`, returned `taskDirectory`, canonical skill name, CLI `args` array and optional `input`. ScriptaHub runs the CLI in its isolated service runtime through authenticated MCP. Preflight checks that runtime before a claim. Do not install or repair dependencies during a manuscript run. The standalone CLI instructions below also apply when using this portable skill outside ScriptaHub.
 
 
 # Humanise HTML

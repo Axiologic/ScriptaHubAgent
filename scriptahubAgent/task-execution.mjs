@@ -6,11 +6,12 @@ import path from 'node:path';
 import { verifyRecord } from './record-integrity.mjs';
 import { validateSourceConfig, SUMMARY_READING_MINUTES } from './settings.mjs';
 import { createPublicationTables } from './publication-transfer.mjs';
+import { createProcessingTables, requireNoActiveProcessing } from './processing-store.mjs';
 
 const fail = (message, status = 400) => { throw Object.assign(new Error(message), { status }); };
 const identifier = value => typeof value === 'string' && /^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$/.test(value);
 const timestamp = () => new Date().toISOString();
-export const executionTools = new Set(['scriptahub_task_batch_snapshot', 'scriptahub_task_batch_settle', 'scriptahub_task_batch_close', 'scriptahub_task_claim', 'scriptahub_task_status', 'scriptahub_task_document_read', 'scriptahub_task_finish', 'scriptahub_task_package_prepare', 'scriptahub_task_package_upload', 'scriptahub_task_publish']);
+export const executionTools = new Set(['scriptahub_task_batch_snapshot', 'scriptahub_task_batch_settle', 'scriptahub_task_batch_close', 'scriptahub_task_claim', 'scriptahub_task_status', 'scriptahub_task_document_read', 'scriptahub_task_finish', 'scriptahub_task_package_prepare', 'scriptahub_task_package_upload', 'scriptahub_task_publish', 'scriptahub_skills_preflight', 'scriptahub_skill_job_prepare', 'scriptahub_skill_job_upload', 'scriptahub_skill_job_start', 'scriptahub_skill_job_status', 'scriptahub_skill_job_result', 'scriptahub_skill_job_read', 'scriptahub_skill_job_cancel', 'scriptahub_skill_job_release']);
 
 // The envelope is supplied by AgentServer only after secure-wire verification.
 // Do not call this with browser headers or client-provided identity fields.
@@ -40,6 +41,7 @@ export class TaskExecution {
       PRIMARY KEY(batch_id,task_id));
       CREATE UNIQUE INDEX IF NOT EXISTS task_batch_exclusive ON task_batch_items(task_id) WHERE released=0;`);
     createPublicationTables(store);
+    createProcessingTables(store);
   }
   execution(executor, executionId) {
     if (!identifier(executionId)) fail('Invalid execution ID');
@@ -226,6 +228,7 @@ export class TaskExecution {
         if (row.finish_digest !== digest) fail('Execution already finished with another result', 409);
         return this.status(executor, { executionId });
       }
+      requireNoActiveProcessing(this.store, executionId);
       const packageRow = this.store.db.prepare('SELECT commit_id,receipt,lease_until FROM task_publications WHERE execution_id=?').get(executionId);
       if (state === 'completed' && (!publication || !packageRow?.receipt)) fail('Only ScriptaHub can complete a confirmed publication', 409);
       if (state !== 'completed' && packageRow && (packageRow.receipt || packageRow.commit_id || packageRow.lease_until > Date.now())) fail('Publication must be reconciled before finishing the task', 409);

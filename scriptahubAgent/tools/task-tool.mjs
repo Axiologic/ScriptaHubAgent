@@ -4,6 +4,7 @@ import { DashboardStore } from '../dashboard-store.mjs';
 import { TaskExecution, requireExecutor } from '../task-execution.mjs';
 import { loadSourceConfig, validateSourceConfig } from '../settings.mjs';
 import { TaskPublication } from '../task-publication.mjs';
+import { invokeSupervisor } from '../processing-ipc.mjs';
 
 let store;
 try {
@@ -30,6 +31,10 @@ try {
   const publisher = new TaskPublication(service);
   let result;
   if (tool === 'scriptahub_task_claim') {
+    let receipt;
+    try {receipt=await invokeSupervisor(dataDir,{tool:'scriptahub_skills_preflight',executor,input:{}});}
+    catch {throw Object.assign(new Error('ScriptaHub processing preflight is unavailable'),{status:503});}
+    if(receipt.ok!==true)throw Object.assign(new Error('ScriptaHub processing preflight is unavailable'),{status:503});
     await publisher.preflight(config);
     result = service.claimConfigured(executor, args, config);
   } else if (tool === 'scriptahub_task_package_prepare') result = publisher.prepare(executor,args,config);

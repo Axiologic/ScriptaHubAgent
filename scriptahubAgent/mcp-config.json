@@ -89,7 +89,7 @@
         "tools/task-tool.mjs"
       ],
       "cwd": "/code",
-      "timeoutMs": 90000,
+      "timeoutMs": 650000,
       "inputSchema": {
         "type": "object",
         "properties": {
@@ -555,6 +555,441 @@
       ],
       "env": {
         "TOOL_NAME": "scriptahub_task_batch_close"
+      }
+    },
+    {
+      "name": "scriptahub_skills_preflight",
+      "title": "scriptahub_skills_preflight",
+      "description": "Authenticated ScriptaHub processing operation.",
+      "command": "node",
+      "args": [
+        "tools/processing-tool.mjs"
+      ],
+      "cwd": "/code",
+      "timeoutMs": 650000,
+      "inputSchema": {
+        "type": "object",
+        "properties": {},
+        "required": [],
+        "additionalProperties": false
+      },
+      "tags": [
+        "internal"
+      ],
+      "env": {
+        "TOOL_NAME": "scriptahub_skills_preflight"
+      }
+    },
+    {
+      "name": "scriptahub_skill_job_prepare",
+      "title": "scriptahub_skill_job_prepare",
+      "description": "Authenticated ScriptaHub processing operation.",
+      "command": "node",
+      "args": [
+        "tools/processing-tool.mjs"
+      ],
+      "cwd": "/code",
+      "timeoutMs": 90000,
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "executionId": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128,
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$"
+          },
+          "jobId": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128,
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$"
+          },
+          "virtualCwd": {
+            "type": "string",
+            "maxLength": 1024
+          },
+          "skill": {
+            "type": "string",
+            "maxLength": 128
+          },
+          "args": {
+            "type": "array",
+            "maxItems": 256,
+            "items": {
+              "type": "string",
+              "maxLength": 60000
+            }
+          },
+          "input": {
+            "type": "string",
+            "maxLength": 65536
+          },
+          "sourceDigest": {
+            "type": "string",
+            "pattern": "^[a-f0-9]{64}$"
+          },
+          "manifestSha256": {
+            "type": "string",
+            "pattern": "^[a-f0-9]{64}$"
+          },
+          "manifestSize": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 8388608
+          }
+        },
+        "required": [
+          "executionId",
+          "jobId",
+          "virtualCwd",
+          "skill",
+          "args",
+          "input",
+          "sourceDigest",
+          "manifestSha256",
+          "manifestSize"
+        ],
+        "additionalProperties": false
+      },
+      "tags": [
+        "internal"
+      ],
+      "env": {
+        "TOOL_NAME": "scriptahub_skill_job_prepare"
+      }
+    },
+    {
+      "name": "scriptahub_skill_job_upload",
+      "title": "scriptahub_skill_job_upload",
+      "description": "Authenticated ScriptaHub processing operation.",
+      "command": "node",
+      "args": [
+        "tools/processing-tool.mjs"
+      ],
+      "cwd": "/code",
+      "timeoutMs": 90000,
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "executionId": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128,
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$"
+          },
+          "jobId": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128,
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$"
+          },
+          "kind": {
+            "type": "string",
+            "enum": [
+              "manifest",
+              "file"
+            ]
+          },
+          "path": {
+            "type": "string",
+            "maxLength": 1024
+          },
+          "offset": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "data": {
+            "type": "string",
+            "maxLength": 87384
+          }
+        },
+        "required": [
+          "executionId",
+          "jobId",
+          "kind",
+          "offset",
+          "data"
+        ],
+        "additionalProperties": false
+      },
+      "tags": [
+        "internal"
+      ],
+      "env": {
+        "TOOL_NAME": "scriptahub_skill_job_upload"
+      }
+    },
+    {
+      "name": "scriptahub_skill_job_start",
+      "title": "scriptahub_skill_job_start",
+      "description": "Authenticated ScriptaHub processing operation.",
+      "command": "node",
+      "args": [
+        "tools/processing-tool.mjs"
+      ],
+      "cwd": "/code",
+      "timeoutMs": 90000,
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "executionId": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128,
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$"
+          },
+          "jobId": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128,
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$"
+          }
+        },
+        "required": [
+          "executionId",
+          "jobId"
+        ],
+        "additionalProperties": false
+      },
+      "tags": [
+        "internal"
+      ],
+      "env": {
+        "TOOL_NAME": "scriptahub_skill_job_start"
+      }
+    },
+    {
+      "name": "scriptahub_skill_job_status",
+      "title": "scriptahub_skill_job_status",
+      "description": "Authenticated ScriptaHub processing operation.",
+      "command": "node",
+      "args": [
+        "tools/processing-tool.mjs"
+      ],
+      "cwd": "/code",
+      "timeoutMs": 90000,
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "executionId": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128,
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$"
+          },
+          "jobId": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128,
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$"
+          }
+        },
+        "required": [
+          "executionId",
+          "jobId"
+        ],
+        "additionalProperties": false
+      },
+      "tags": [
+        "internal"
+      ],
+      "env": {
+        "TOOL_NAME": "scriptahub_skill_job_status"
+      }
+    },
+    {
+      "name": "scriptahub_skill_job_result",
+      "title": "scriptahub_skill_job_result",
+      "description": "Authenticated ScriptaHub processing operation.",
+      "command": "node",
+      "args": [
+        "tools/processing-tool.mjs"
+      ],
+      "cwd": "/code",
+      "timeoutMs": 90000,
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "executionId": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128,
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$"
+          },
+          "jobId": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128,
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$"
+          },
+          "cursor": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "limit": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 100
+          }
+        },
+        "required": [
+          "executionId",
+          "jobId"
+        ],
+        "additionalProperties": false
+      },
+      "tags": [
+        "internal"
+      ],
+      "env": {
+        "TOOL_NAME": "scriptahub_skill_job_result"
+      }
+    },
+    {
+      "name": "scriptahub_skill_job_read",
+      "title": "scriptahub_skill_job_read",
+      "description": "Authenticated ScriptaHub processing operation.",
+      "command": "node",
+      "args": [
+        "tools/processing-tool.mjs"
+      ],
+      "cwd": "/code",
+      "timeoutMs": 90000,
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "executionId": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128,
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$"
+          },
+          "jobId": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128,
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$"
+          },
+          "kind": {
+            "type": "string",
+            "enum": [
+              "file",
+              "stdout",
+              "stderr"
+            ]
+          },
+          "path": {
+            "type": "string",
+            "maxLength": 1024
+          },
+          "offset": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "length": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 196608
+          }
+        },
+        "required": [
+          "executionId",
+          "jobId",
+          "kind",
+          "offset",
+          "length"
+        ],
+        "additionalProperties": false
+      },
+      "tags": [
+        "internal"
+      ],
+      "env": {
+        "TOOL_NAME": "scriptahub_skill_job_read"
+      }
+    },
+    {
+      "name": "scriptahub_skill_job_cancel",
+      "title": "scriptahub_skill_job_cancel",
+      "description": "Authenticated ScriptaHub processing operation.",
+      "command": "node",
+      "args": [
+        "tools/processing-tool.mjs"
+      ],
+      "cwd": "/code",
+      "timeoutMs": 90000,
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "executionId": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128,
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$"
+          },
+          "jobId": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128,
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$"
+          }
+        },
+        "required": [
+          "executionId",
+          "jobId"
+        ],
+        "additionalProperties": false
+      },
+      "tags": [
+        "internal"
+      ],
+      "env": {
+        "TOOL_NAME": "scriptahub_skill_job_cancel"
+      }
+    },
+    {
+      "name": "scriptahub_skill_job_release",
+      "title": "Release acknowledged processing artifacts",
+      "description": "Release retained artifacts after acknowledging an immutable terminal result.",
+      "command": "node",
+      "args": [
+        "tools/processing-tool.mjs"
+      ],
+      "cwd": "/code",
+      "timeoutMs": 90000,
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "executionId": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128,
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$"
+          },
+          "jobId": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128,
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$"
+          },
+          "resultDigest": {
+            "type": "string",
+            "pattern": "^[a-f0-9]{64}$"
+          }
+        },
+        "required": [
+          "executionId",
+          "jobId",
+          "resultDigest"
+        ],
+        "additionalProperties": false
+      },
+      "tags": [
+        "internal"
+      ],
+      "env": {
+        "TOOL_NAME": "scriptahub_skill_job_release"
       }
     }
   ]

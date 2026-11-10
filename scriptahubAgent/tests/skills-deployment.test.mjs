@@ -19,61 +19,31 @@ test('runtime source comparison ignores installed libraries but detects edited s
   await write('pdf2html/scripts/convert.mjs','changed');assert.notDeepEqual(await skillSource(root),before);
   await fs.symlink('/etc/passwd',path.join(root,'outside'));await assert.rejects(skillSource(root),/symlinks/);
 });
-test('every owned skill launches locally inside the existing robot execution boundary',async t=>{
+test('installed skill launchers match the hosted runtime inventory',async t=>{
   const run=await fs.mkdtemp(path.join(os.tmpdir(),'scripta-skill-run-'));t.after(()=>fs.rm(run,{recursive:true,force:true}));
   const manifest=JSON.parse(await fs.readFile(new URL('../deployment/skills-runtime.json',import.meta.url),'utf8'));
   assert.deepEqual(Object.keys(launchers).sort(),manifest.skills.slice().sort());
-  const plan=skillCommand('pdf2html',['doctor'],run,'/usr/local/share/scriptahub/runtime');
+  process.env.SCRIPTA_TEST_PRIVATE_SENTINEL='test-only';
+  t.after(()=>{delete process.env.SCRIPTA_TEST_PRIVATE_SENTINEL;});
+  const plan=skillCommand('pdf2html',['doctor'],run,'/opt/scriptahub/runtime');
+  assert.equal(Object.hasOwn(plan.env,'SCRIPTA_TEST_PRIVATE_SENTINEL'),false);
   assert.equal(plan.command,'/bin/sh');
-  assert.deepEqual(plan.args,['/usr/local/share/scriptahub/runtime/skills/pdf2html/scripts/pdf2html','doctor']);
+  assert.deepEqual(plan.args,['/opt/scriptahub/runtime/skills/pdf2html/scripts/pdf2html','doctor']);
   assert.equal(plan.cwd,await fs.realpath(run));
-  assert.equal(plan.env.SCRIPTA_SKILLS_LOCAL,'1');
-  assert.equal(plan.env.PDF2HTML_RUNTIME_ROOT,'/usr/local/share/scriptahub/runtime/skills/pdf2html');
+  assert.equal(plan.env.HF_HUB_OFFLINE,'1');
+  assert.equal(Object.hasOwn(plan.env,'SCRIPTA_SKILLS_LOCAL'),false);
+  assert.equal(Object.hasOwn(plan.env,'SCRIPTA_SKILL_RUNTIME_ROOT'),false);
+  assert.equal(plan.env.PDF2HTML_RUNTIME_ROOT,'/opt/scriptahub/runtime/skills/pdf2html');
   assert.throws(()=>skillCommand('../private',[],process.cwd()));
   assert.throws(()=>skillCommand('pdf2html',['bad\0arg'],process.cwd()));
   assert.throws(()=>skillCommand('pdf2html',[],'/'));
 });
 
-test('the robot image profile installs local dependencies without a remote execution capability',async()=>{
-  const profile=await fs.readFile(new URL('../deployment/Dockerfile.robot',import.meta.url),'utf8');
-  assert.match(profile,/FROM \$\{ROBOTEAM_BASE_IMAGE\}/);
-  for (const required of ['python3.11','chromium','libreoffice-writer','poppler-utils','qpdf','prepare-skills.mjs','verify-skills.mjs']) assert.ok(profile.includes(required));
-  assert.ok(profile.includes('/usr/local/share/scriptahub/runtime'));
-  const manifest=JSON.parse(await fs.readFile(new URL('../manifest.json',import.meta.url),'utf8'));
-  assert.equal(manifest.skillRuntime,undefined);
-});
-
-test('the robot takes its models and native files from an assets image only after checking them against its own inventories',async()=>{
-  const profile=await fs.readFile(new URL('../deployment/Dockerfile.robot',import.meta.url),'utf8');
-  assert.ok(profile.includes('ARG SCRIPTA_ASSETS_IMAGE='));
-  assert.ok(profile.includes('FROM ${SCRIPTA_ASSETS_IMAGE} AS manuscript-assets'));
-  for (const gone of ['SCRIPTA_RUNTIME_IMAGE','scriptahub-agent','COPY skills/pdf2html/external/native/integrity.json']) assert.ok(!profile.includes(gone),gone);
-  assert.doesNotMatch(profile,/COPY\s+--from=manuscript-assets/,'the assets image is never copied over the runtime root before it is verified');
-  const mount=profile.indexOf('--mount=type=bind,from=manuscript-assets');
-  const verify=profile.indexOf('verify-assets.mjs',mount);
-  const exact=profile.indexOf('--exact',verify);
-  const copy=profile.indexOf('cp -R',exact);
-  const prepare=profile.indexOf('prepare-skills.mjs',copy);
-  assert.ok(mount>=0&&verify>mount&&exact>verify&&copy>exact&&prepare>copy,'bind mount, then verify --exact, then copy, then preparation');
-  const step=profile.slice(mount,profile.indexOf('\nENV ',mount));
-  assert.match(step,/--runtime \/mnt\/assets\/runtime --native-build \/mnt\/assets\/native-build --exact/);
-  assert.match(step,/--skills \/usr\/local\/share\/scriptahub\/runtime\/skills/,'the inventories are the ones copied from this checkout');
-  assert.match(step,/&& cp -R --no-preserve=ownership \/mnt\/assets\/runtime\/\. \/usr\/local\/share\/scriptahub\/runtime\//);
-  assert.match(step,/cp -R --no-preserve=ownership \/mnt\/assets\/native-build\/\. \/opt\/scriptahub\/native-build\//);
-  assert.doesNotMatch(profile,/\bcp\s+(?:-\S*[aP]\S*|--archive|--preserve\S*)(?:\s|$)/,'cp -a would carry the assets image\'s directory modes and setuid bits into the robot');
-  assert.match(step,/if \[ -d \/mnt\/assets\/native-build \]/,'an ARM64 assets image has no compiled binaries');
-  assert.ok(profile.indexOf('COPY scriptahubAgent/deployment/')<mount&&profile.indexOf('COPY skills/')<mount,'the verifier and the inventories are the checkout\'s own');
-});
-
-test('workflow and skill source folders belong to the repository, not the agent mount', async () => {
-  const repository = new URL('../../', import.meta.url);
-  for (const name of ['skills','flows']) {
-    assert.equal((await fs.stat(new URL(name, repository))).isDirectory(), true);
-    await assert.rejects(fs.lstat(new URL(`scriptahubAgent/${name}`, repository)), {code:'ENOENT'});
-  }
-  const profile = await fs.readFile(new URL('../deployment/Dockerfile.robot', import.meta.url), 'utf8');
-  assert.match(profile, /COPY skills\//);
-  assert.doesNotMatch(profile, /COPY scriptahubAgent\/skills\//);
+test('the hosted entrypoint starts and drains its supervisor',async()=>{
+  const startup=await fs.readFile(new URL('../deployment/start.mjs',import.meta.url),'utf8');
+  assert.match(startup,/new ProcessingService/);assert.match(startup,/await supervisor.listen/);
+  assert.match(startup,/onShutdown:.*supervisor.drain/);
+  assert.equal(launchers['scriptahub-tasks'],undefined);
 });
 
 test('AMD64 build artifacts require the selected source and matching binary checksums', async t => {

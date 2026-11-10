@@ -6,6 +6,7 @@ import { publicationTarget, checkPublicationPackage, verifyCatalogueBranch } fro
 import { publicationGit, writePackageFile } from './publication-git.mjs';
 import { readPublicationToken } from './publication-access.mjs';
 import { publicationConfig } from './publication-config.mjs';
+import { requireNoActiveProcessing } from './processing-store.mjs';
 
 export class TaskPublication extends PublicationTransfer {
   constructor(service, { tokenProvider, gitFactory = publicationGit } = {}) {
@@ -30,6 +31,7 @@ export class TaskPublication extends PublicationTransfer {
     const owner = crypto.randomUUID();
     this.store.transaction(() => {
       const current = this.service.execution(executor,executionId);
+      requireNoActiveProcessing(this.store, executionId);
       if (!(current.state === 'stop_requested' && this.row(executionId)?.commit_id)) this.running(executor,executionId);
       if (this.store.db.prepare('UPDATE task_publications SET lease_owner=?,lease_until=? WHERE execution_id=? AND lease_until<? AND receipt IS NULL')
         .run(owner, Date.now() + 600000, executionId, Date.now()).changes !== 1) fail('Publication is already in progress; retry the same operation later', 409);

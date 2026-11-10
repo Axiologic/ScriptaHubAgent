@@ -5,7 +5,7 @@ description: Convert born-digital PDF documents into self-contained folders of s
 
 ## ScriptaHub deployment
 
-This skill is owned and deployed by ScriptaHubAgent. In a RoboTeam workflow, execute its CLI through `scriptahub-tasks exec` with this canonical skill name, a CLI `args` array and optional `input` text. The CLI and preflight execute locally in the robot using the prepared ScriptaHub skill runtime. Its libraries and system tools must be installed in the robot image before deployment, never during manuscript processing. The existing robot sandbox confines execution; service calls alone contact ScriptaHub for authorized task access and publication.
+This skill is owned by ScriptaHubAgent. In a ScriptaHub RoboTeam workflow, invoke its CLI with `scriptahub-tasks exec`, passing the claimed `executionId`, returned `taskDirectory`, canonical skill name, CLI `args` array and optional `input`. ScriptaHub runs the CLI in its isolated service runtime through authenticated MCP. Preflight checks that runtime before a claim. Do not install or repair dependencies during a manuscript run. The standalone CLI instructions below also apply when using this portable skill outside ScriptaHub.
 
 
 # PDF to Semantic HTML
@@ -19,6 +19,8 @@ The read-only `decorations INPUT.pdf` JSON includes `tables` alongside borders, 
 Use this skill when the user asks to convert one or more born-digital PDF files to HTML whose pages, text, pictures and tables stay close to the source layout while scaling uniformly in a reader.
 
 The skill processes documents locally with Node.js. Docling.rs supplies semantic regions and table recognition. PDF.js supplies source text, typography, drawings, image regions and annotations; QPDF extracts embedded fonts. Poppler crops image regions and Chromium checks whether generated resources load.
+
+QPDF captures output in private temporary files. The temporary filesystem must have room for its output; per-stream limits are monitored and can be exceeded briefly between checks.
 
 ## Required boundary
 
