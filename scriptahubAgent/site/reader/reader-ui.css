@@ -51,7 +51,8 @@
   .reader-controls { padding: 9px 8px max(9px,env(safe-area-inset-bottom)); }
   .reader-virtual-page { height: 34px; min-width: 74px; padding: 0 4px; font-size: 11px; }
   .reader-stage { width: 100%; }
-  .reader-html-content { padding: 26px 20px 56px; }
+  .reader-html-content { padding: 26px clamp(14px, 5vw, 20px) 56px; overflow-wrap: anywhere; }
+  .reader-html-content pre { max-width: 100%; overflow-x: auto; }
 }
 :root [data-reader-app][data-appearance] .reader-html-content :is(h1,h2,h3,h4) { color: var(--reader-ink); }
 :root [data-reader-app][data-appearance] .reader-html-content a { color: var(--reader-accent); }

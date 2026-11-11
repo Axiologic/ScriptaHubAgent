@@ -5,6 +5,8 @@ import os from 'node:os';
 import path from 'node:path';
 import crypto from 'node:crypto';
 import { createSiteServer } from '../server.mjs';
+import { DashboardStore } from '../dashboard-store.mjs';
+import { TaskExecution } from '../task-execution.mjs';
 
 process.env.SCRIPTA_RECORD_KEY = 'test-record-key-0123456789abcdef0123456789';
 
@@ -55,4 +57,38 @@ test('authenticated PDF intake persists one pending task', async t => {
   const forged = makeBody();
   forged.set('metadata', JSON.stringify({ submissionId: crypto.randomUUID(), kind: 'manuscript', agreementVersion: '2026-09-10', agreementAccepted: true, values: { name: 'Impersonated', titles: 'Test book' }, language: 'en' }));
   assert.equal((await fetch(endpoint, { method: 'POST', body: forged, headers: { 'x-test-user': 'user:alice' } })).status, 400);
+});
+
+test('a description without attachments reaches the Add book executor with its instructions', async t => {
+  const root = await fs.mkdtemp(path.join(os.tmpdir(), 'scripta-proposal-'));
+  const server = createSiteServer(root, { dataDir: root, verifyUser: async () => ({ id: 'user:alice', email: 'alice@example.test' }) }).listen(0, '127.0.0.1');
+  t.after(async () => { await new Promise(resolve => server.close(resolve)); await fs.rm(root, { recursive: true, force: true }); });
+  await new Promise(resolve => server.once('listening', resolve));
+  const endpoint = `http://127.0.0.1:${server.address().port}/api/submissions`;
+  const send = (values, withFile = false) => {
+    const body = new FormData();
+    body.set('metadata', JSON.stringify({ submissionId: crypto.randomUUID(), kind: 'book-proposal', agreementVersion: '2026-09-10', agreementAccepted: true, language: 'ro', values }));
+    if (withFile) body.set('documents', new File(['%PDF-1.7\npage'], 'test.pdf'));
+    return fetch(endpoint, { method: 'POST', body });
+  };
+  const values = { titles: 'Grădini de cartier', description: 'O carte despre grădini comunitare.', audience: 'Începători', structure: 'Ghid pas cu pas' };
+  assert.equal((await send({ description: ' ' })).status, 400);
+  assert.equal((await send(values, true)).status, 400);
+  const response = await send(values);
+  assert.equal(response.status, 202);
+  const receipt = await response.json();
+  assert.equal(receipt.task.type, 'scriptahub.book-proposal');
+  const store = new DashboardStore(root);
+  try {
+    const service = new TaskExecution(store, root), executor = 'agent:test/processor';
+    const {taskIds} = service.snapshot(executor,{taskType:'add-book',batchId:'create-batch'});
+    assert.deepEqual(taskIds,[receipt.task.id]);
+    const args = {taskType:'add-book',batchId:'create-batch',taskId:receipt.task.id,runId:'generation-run'};
+    const {task} = service.claim(executor,args);
+    assert.equal(task.type,'scriptahub.book-proposal');
+    assert.equal(task.language,'ro');
+    assert.deepEqual(task.files,[]);
+    assert.deepEqual(task.values,values);
+    assert.deepEqual(service.claim(executor,args).task,task);
+  } finally { store.close(); }
 });

@@ -3,7 +3,7 @@ import path from 'node:path';
 import crypto from 'node:crypto';
 import {constants} from 'node:fs';
 
-const types = new Set(['manuscript','edit']);
+const types = new Set(['manuscript','book-proposal','add-book','edit']);
 const terminal = new Set(['completed','failed','cancelled']);
 const identifier = value => typeof value === 'string' && /^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$/.test(value);
 const itemRunId = (batchId,taskId) => 'scripta-' + crypto.createHash('sha256').update(JSON.stringify([batchId,taskId])).digest('hex');
@@ -40,11 +40,12 @@ export async function runBatchOperation(call,operation,input,{root=process.cwd()
     } finally { await fs.rm(temp,{force:true}); }
   };
   if (operation === 'batch-start') {
-    if (!types.has(input.taskType)) throw new Error('Provide manuscript or edit taskType');
+    if (!types.has(input.taskType)) throw new Error('Provide manuscript, book-proposal, add-book or edit taskType');
     await persist(false);
   }
   let state = await readState(filename);
-  if (!identifier(state.batchId) || !types.has(state.taskType) || input.taskType && input.taskType !== state.taskType) throw new Error('Batch identity mismatch');
+  const upgradingBookBatch = operation === 'batch-start' && state.taskType === 'manuscript' && input.taskType === 'add-book';
+  if (!identifier(state.batchId) || !types.has(state.taskType) || input.taskType && input.taskType !== state.taskType && !upgradingBookBatch) throw new Error('Batch identity mismatch');
   if (operation === 'batch-close') return call('scriptahub_task_batch_close',{batchId:state.batchId});
   let snapshot = await call('scriptahub_task_batch_snapshot',state);
   if (operation === 'batch-status') return snapshot;

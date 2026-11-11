@@ -751,18 +751,16 @@ button, select { cursor: pointer; }
   .librarian-result-action { margin-top: 16px; }
   .legal-facts > div, .legal-table > div { grid-template-columns: 1fr; }
   .legal-facts dd, .legal-table span { padding-top: 0; }
-  .form-grid { grid-template-columns: 1fr; }
+  .form-grid { grid-template-columns: minmax(0, 1fr); }
   .edition-card { padding: 14px; gap: 12px; }
   .workflow-form { padding: 16px; }
 }
 
 @media (max-width: 720px) {
-  :root:not(:is([data-theme="dark"],[data-theme="dark-orange"])) body { padding: 0; background: var(--canvas); }
-  :root:not(:is([data-theme="dark"],[data-theme="dark-orange"])) .site-shell { width: 80%; min-height: 100vh; padding: 0 16px; border: 0; border-radius: 0; box-shadow: none; }
-  :root:not(:is([data-theme="dark"],[data-theme="dark-orange"])) .site-header { margin: 0 -16px; padding: 8px 16px; }
-  :root:is([data-theme="dark"],[data-theme="dark-orange"]) body { padding: 0; background: var(--canvas); }
-  :root:is([data-theme="dark"],[data-theme="dark-orange"]) .site-shell { width: 80%; min-height: 100vh; padding: 0 16px; border: 0; border-radius: 0; box-shadow: none; }
-  :root:is([data-theme="dark"],[data-theme="dark-orange"]) .site-header { margin: 0 -16px; padding: 8px 16px; }
+  :root { --shell-width: 100%; --tower-gutter: 16px; }
+  :root[data-theme] body, :root:not([data-theme]) body { min-width: 0; padding: 0; background: var(--canvas); }
+  :root[data-theme] .site-shell, :root:not([data-theme]) .site-shell { width: 100%; min-height: 100vh; padding-inline: var(--tower-gutter); border: 0; border-radius: 0; box-shadow: none; }
+  :root[data-theme] .site-header, :root:not([data-theme]) .site-header { margin-inline: calc(-1 * var(--tower-gutter)); padding: 8px var(--tower-gutter); }
 }
 
 :root button:not(.header-unified button),
@@ -1008,8 +1006,8 @@ button, select { cursor: pointer; }
   body[data-book-page="true"] .site-header .header-tools > .header-librarian { width: 26px; height: 28px; min-height: 28px; }
   body[data-book-page="true"] .site-header .theme-switcher button { width: 22px; }
   body[data-book-page="true"] .site-header .language-picker select { width: 48px; min-width: 48px; max-width: 48px; }
-  body[data-book-page="true"] .site-footer { padding: 10px 16px; overflow-x: auto; gap: 10px; flex-wrap: nowrap; white-space: nowrap; }
-  body[data-book-page="true"] .site-footer nav { flex: 0 0 auto; justify-content: flex-start; gap: 10px; flex-wrap: nowrap; }
+  body[data-book-page="true"] .site-footer { padding: 12px 16px; gap: 10px; flex-wrap: wrap; white-space: normal; }
+  body[data-book-page="true"] .site-footer nav { flex: 1 1 100%; justify-content: flex-start; gap: 8px 12px; }
   body[data-book-page="true"] .site-footer,
   body[data-book-page="true"] .footer-wordmark { font-size: .62rem; }
   body[data-book-page="true"] .footer-status { flex: none; }
@@ -1058,13 +1056,53 @@ html[lang] [data-workflow-page="create"] .workflow-hero h1 {
 }
 .create-title-field { grid-area: title; }
 .create-instructions-field { grid-area: instructions; }
+[data-workflow-page="create"] .create-form-grid { grid-template-areas: "title files" "description files" "instructions instructions"; }
+.create-description-field { grid-area: description; }
+.create-description-field textarea { min-height: 144px; }
+.create-instructions { min-width: 0; margin: 0; padding: 20px 0 0; border: 0; }
+.create-instructions legend { padding: 0; color: var(--ink); font-size: .95rem; font-weight: 720; }
+.create-instructions-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 18px 24px; }
+.instruction-picker { display: grid; grid-template-columns: minmax(0, 1fr); align-content: start; gap: 8px; min-width: 0; }
+.instruction-caption { color: var(--content); font-size: .8rem; font-weight: 680; }
+.instruction-trigger {
+  display: flex; justify-content: space-between; align-items: center; gap: 12px; width: 100%; min-height: 48px; padding: 11px 14px;
+  border: 1px solid var(--line); border-radius: 9px; background: var(--field); color: var(--ink); text-align: start; font-size: .85rem;
+}
+.instruction-trigger > span { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.instruction-trigger svg { flex: 0 0 16px; width: 16px; height: 16px; fill: none; stroke: currentColor; stroke-width: 1.5; }
+.instruction-picker button:focus-visible, .instruction-choice:has(:focus-visible) { outline: 2px solid var(--green); outline-offset: 2px; }
+.instruction-pills { display: flex; flex-wrap: wrap; gap: 6px; margin: 0; padding: 0; list-style: none; }
+.instruction-pills[hidden] { display: none; }
+.instruction-pills li { display: flex; align-items: center; gap: 5px; max-width: 100%; padding: 2px 4px 2px 10px; border-radius: 999px; background: var(--field); color: var(--ink); font-size: .73rem; }
+.instruction-pills li span { overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+.instruction-pills button, .instruction-close { flex: none; min-width: 28px; min-height: 28px; padding: 0; border: 0; border-radius: 50%; background: transparent; color: var(--ink); }
+.instruction-pills button:hover, .instruction-close:hover { background: var(--field); }
+.instruction-dialog { width: min(30rem, calc(100% - 32px)); max-height: calc(100% - 32px); padding: 0; overflow: auto; border: 1px solid var(--line); border-radius: 14px; background: var(--surface); color: var(--ink); box-shadow: 0 18px 64px #0005; }
+.instruction-dialog::backdrop { background: #111b2180; }
+.instruction-dialog header, .instruction-dialog footer { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 16px 20px; }
+.instruction-dialog header { border-bottom: 1px solid var(--line); }
+.instruction-dialog h2 { margin: 0; font-size: 1.1rem; }
+.instruction-dialog footer { justify-content: flex-end; border-top: 1px solid var(--line); }
+.instruction-choices { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; padding: 16px 20px; }
+.instruction-choice { position: relative; display: flex; align-items: center; min-height: 44px; padding: 8px 10px; border: 1px solid transparent; border-radius: 8px; background: var(--field); color: var(--ink); font-size: .82rem; cursor: pointer; overflow-wrap: anywhere; }
+.instruction-choice:hover { border-color: var(--green); }
+.instruction-choice:has(:checked) { border-color: var(--green); background: color-mix(in srgb, var(--green) 22%, var(--surface)); }
+.instruction-choice input { position: absolute; width: 1px; height: 1px; margin: 0; padding: 0; clip-path: inset(50%); }
+.instruction-custom { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: end; gap: 8px; padding: 0 20px 16px; }
+.instruction-add { border: 1px solid var(--line); background: var(--field); color: var(--ink); font-weight: 680; }
+.instruction-add:hover { border-color: var(--green); }
+.instruction-done.workflow-submit { margin: 0; }
+:root .instruction-done.workflow-submit::before { content: none; }
 .create-form-grid .form-field { gap: 10px; min-width: 0; }
 .create-form-grid .form-field input,
 .create-form-grid .form-field textarea { border-radius: 9px; padding: 13px 14px; font-size: .85rem; font-weight: 400; }
 .create-form-grid .form-field input { min-height: 48px; }
+.instruction-custom .form-field input,
+.instruction-custom .instruction-add { height: max(42px, 2.15rem); min-height: 0; padding: 0 12px; border-radius: 7px; font-size: .82rem; line-height: 1.25; }
 .create-form-grid .form-field input::placeholder,
 .create-form-grid .form-field textarea::placeholder { color: var(--muted); opacity: 1; }
 .create-instructions-field textarea { min-height: 200px; line-height: 1.6; }
+[data-workflow-page="create"] .form-file-picker { min-height: 0; }
 .form-file-field { position: relative; display: grid; grid-template-rows: auto minmax(0,1fr); gap: 10px; min-width: 0; align-self: stretch; grid-area: files; color: var(--content); font-size: .8rem; font-weight: 680; cursor: pointer; }
 .form-file-input {
   position: absolute !important; width: 1px !important; height: 1px !important;
@@ -1108,14 +1146,30 @@ html[lang] [data-workflow-page="create"] .workflow-hero h1 {
 .create-workflow-form .workflow-status:empty { display: none; }
 @media (max-width: 900px) {
   .create-form-grid { grid-template-columns: minmax(0, 1fr); grid-template-areas: "title" "instructions" "files"; }
+  [data-workflow-page="create"] .create-form-grid { grid-template-areas: "title" "description" "instructions" "files"; }
   .form-file-picker { min-height: 0; }
 }
 @media (max-width: 590px) {
   html[lang] [data-workflow-page="create"] .workflow-hero h1 { font-size: clamp(1.7rem, 7vw, 2.3rem); }
   .create-form-grid { gap: 20px; }
   .create-instructions-field textarea { min-height: 180px; }
+  .create-instructions-grid { grid-template-columns: minmax(0, 1fr); gap: 16px; }
+  [data-workflow-page="create"] .create-workflow-form.workflow-form { padding: 16px; }
+  .instruction-dialog[open] { display: grid; grid-template-rows: auto minmax(0, 1fr) auto; width: calc(100% - 24px); max-height: calc(100dvh - 24px); overflow: hidden; }
+  .instruction-dialog-body { min-height: 0; overflow-y: auto; overscroll-behavior: contain; }
+  .instruction-dialog header, .instruction-dialog footer, .instruction-choices, .instruction-custom { padding-inline: 14px; }
+  .instruction-dialog header, .instruction-dialog footer { padding-block: 10px; }
+  .instruction-close, .instruction-done.workflow-submit { min-height: 44px; }
+  .instruction-close { min-width: 44px; }
+  .instruction-done.workflow-submit { width: 100%; }
+  .instruction-custom .form-field input, .instruction-custom .instruction-add { height: max(44px, 2.15rem); }
+  .instruction-pills li span { white-space: normal; overflow-wrap: anywhere; }
+  :root .workflow-page .form-field :is(input, textarea, select) { font-size: max(16px, .85rem); }
   .create-form-footer { align-items: stretch; flex-direction: column; gap: 18px; }
   .create-form-footer .workflow-submit { justify-content: center; }
+}
+@media (max-width: 359px) {
+  .instruction-choices { grid-template-columns: minmax(0, 1fr); }
 }
 
 
@@ -1356,8 +1410,6 @@ body[data-book-workflow] .workflow-context h2 { font-size: 1.05rem; line-height:
 :root:not(:is([data-theme="dark"],[data-theme="dark-orange"])) .site-header :is(.header-create,.site-scale button,.theme-switcher button):is(:hover,:focus-visible){background:#009b79;color:#062e29}
 :root:not(:is([data-theme="dark"],[data-theme="dark-orange"])) .site-header .header-tools>.header-home{background:var(--inset-bg);border-color:transparent;color:var(--inset-ink);box-shadow:var(--inset-shadow)}
 :root:not(:is([data-theme="dark"],[data-theme="dark-orange"])) .site-header .header-tools>.header-home:is(:hover,:focus-visible){background:var(--inset-hover);color:var(--inset-ink);border-color:transparent}
-@media(max-width:650px){:root{--tower-gutter:20px}}
-
 /* Additional light palettes share the same geometry and neutral controls. */
 :root[data-theme="orange"] {
  --brand-green:#ff7900;--green:#a4430d;--green-deep:#8b3508;
@@ -1649,6 +1701,13 @@ body[data-book-workflow] .animation-contribution>.workflow-hero{padding-bottom:8
   :root .site-header.header-unified .header-text-size.is-open .site-scale { display: flex; }
   :root .site-header.header-unified .header-preferences .theme-switcher { height: 34px; }
   :root .site-header.header-unified .header-preferences .language-picker select { width: 68px; max-width: 68px; height: 34px; font-size: 11px; }
+}
+@media (max-width: 590px) {
+  :root .site-header.header-unified :is(.header-navigation > a, .header-actions > .header-account, .header-text-toggle, .header-preferences .theme-switcher, .header-preferences .theme-switcher button) { width: 44px; min-width: 44px; height: 44px; min-height: 44px; }
+  :root .site-header.header-unified :is(.header-actions > .header-create, .header-preferences .language-picker select) { height: 44px; min-height: 44px; }
+}
+@media (max-width: 359px) {
+  :root .site-header.header-unified .wordmark span { display: none; }
 }
 
 /* Contextual book suggestions use the existing reader and form controls. */

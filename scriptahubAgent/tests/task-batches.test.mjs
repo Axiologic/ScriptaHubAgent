@@ -81,22 +81,24 @@ test('concurrent processes reserve disjoint snapshots of the same queue',async t
 
 test('the flow helper drains its fixed batch sequentially, preserving claims, evidence and new arrivals',async t=>{
   const {runBatchOperation}=await import('../../skills/scriptahub-tasks/scripts/task-batch.mjs');
-  const f=await fixture(t),one=f.add(),two=f.add();
+  const f=await fixture(t),one=f.add(),two=f.add('book-proposal');
   const methods={scriptahub_task_batch_snapshot:'snapshot',scriptahub_task_batch_close:'closeBatch',scriptahub_task_batch_settle:'settle',scriptahub_task_claim:'claim'};
   const call=async(tool,args)=>f.service[methods[tool]](executor,args);
   const run=(op,input={})=>runBatchOperation(call,op,input,{root:f.root});
-  const batch=await run('batch-start',{taskType:'manuscript'});
+  const batch=await run('batch-start',{taskType:'add-book'});
+  assert.deepEqual(new Set(batch.taskIds),new Set([one.task.id,two.task.id]));
   const later=f.add();
-  assert.deepEqual(await run('batch-start',{taskType:'manuscript'}),batch);
+  assert.deepEqual(await run('batch-start',{taskType:'add-book'}),batch);
   const first=await run('batch-next');
   assert.equal(first.task.taskId,batch.taskIds[0]);
   assert.equal(first.taskDirectory,'tasks/'+first.task.taskId);
   assert.deepEqual(await run('batch-next'),first,'a lost response or repeated selection must recover the same execution');
-  assert.throws(()=>f.service.claim(executor,{batchId:batch.batchId,runId:'out-of-order',taskId:batch.taskIds[1]}),/preceding task/);
+  assert.throws(()=>f.service.claim(executor,{batchId:batch.batchId,runId:'out-of-order',taskType:'add-book',taskId:batch.taskIds[1]}),/preceding task/);
   await fs.writeFile(path.join(f.root,first.taskDirectory,'evidence.txt'),'original evidence');
   f.service.finish(executor,{executionId:first.task.executionId,state:'failed',error:'Conversion failed'});
   const second=await run('batch-next');
   assert.equal(second.task.taskId,batch.taskIds[1]);
+  assert.deepEqual(new Set([first.task.type,second.task.type]),new Set(['scriptahub.manuscript','scriptahub.book-proposal']));
   assert.notEqual(second.task.runId,first.task.runId);
   assert.notEqual(second.taskDirectory,first.taskDirectory);
   assert.equal(await fs.readFile(path.join(f.root,first.taskDirectory,'evidence.txt'),'utf8'),'original evidence');
@@ -105,7 +107,6 @@ test('the flow helper drains its fixed batch sequentially, preserving claims, ev
   assert.equal((await run('batch-next')).closed,true);
   assert.equal((await run('batch-next')).task,null);
   assert.deepEqual(f.service.snapshot(executor,{batchId:'later-run',taskType:'manuscript'}).taskIds,[later.task.id]);
-  assert.equal(new Set([one.task.id,two.task.id]).size,2);
 });
 
 test('flow batch setup is retry safe and rejects changed task types and symlinked state',async t=>{
@@ -145,17 +146,17 @@ test('a Cron run reusing a finished run folder starts a new batch, while an open
   const statePath=path.join(f.root,'run-state/task-batch.json');
   const open=await run('batch-start',{taskType:'manuscript'});
   assert.deepEqual(open.taskIds,[first.task.id]);
-  assert.deepEqual(await run('batch-start',{taskType:'manuscript'}),open,'an open batch is resumed');
+  assert.deepEqual(await run('batch-start',{taskType:'add-book'}),open,'an open manuscript batch is resumed');
   await run('batch-close');
   const before=await fs.readFile(statePath,'utf8');reservations.length=0;
   const status=await run('batch-status');
   assert.equal(status.batchId,open.batchId);assert.equal(status.closed,true);
   assert.equal(await fs.readFile(statePath,'utf8'),before,'status never replaces the batch');
   assert.deepEqual(reservations,[open.batchId],'status only reads the stored batch');
-  const later=f.add();
-  const next=await run('batch-start',{taskType:'manuscript'});
+  const later=f.add('book-proposal');
+  const next=await run('batch-start',{taskType:'add-book'});
   assert.notEqual(next.batchId,open.batchId);assert.equal(next.closed,false);
   assert.deepEqual(new Set(next.taskIds),new Set([first.task.id,later.task.id]),'released and new work joins the new batch');
   assert.equal(JSON.parse(await fs.readFile(statePath,'utf8')).batchId,next.batchId);
-  assert.deepEqual(await run('batch-start',{taskType:'manuscript'}),next);
+  assert.deepEqual(await run('batch-start',{taskType:'add-book'}),next);
 });

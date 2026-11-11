@@ -107,6 +107,8 @@
             "type": "string",
             "enum": [
               "manuscript",
+              "book-proposal",
+              "add-book",
               "edit"
             ]
           },
@@ -474,6 +476,8 @@
             "type": "string",
             "enum": [
               "manuscript",
+              "book-proposal",
+              "add-book",
               "edit"
             ]
           }

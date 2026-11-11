@@ -54,6 +54,9 @@ export async function saveSubmission({ body, contentType, user, dataDir, store }
   const uploads = form.getAll('documents');
   validateDocuments(uploads);
   if (meta.kind === 'manuscript' && !uploads.length) throw new Error('A manuscript is required');
+  if (meta.kind === 'book-proposal' && (uploads.length || !(meta.values.description?.trim() || meta.values.prompt?.trim()))) {
+    throw new Error('A book proposal without a manuscript requires a description or editorial instructions');
+  }
   const files = [];
   for (const upload of uploads) {
     if (typeof upload === 'string') throw new Error('Invalid document');

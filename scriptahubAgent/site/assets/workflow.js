@@ -92,12 +92,231 @@
     pl: { title: "Proponowany tytuł", titleHint: "Tytuł roboczy (opcjonalnie)", chooseFiles: "Wybierz załączniki", filesHint: "Dodaj rękopis lub materiały źródłowe do propozycji (opcjonalnie)." },
   };
 
+  const instructionFields = ["audience", "purpose", "scope", "structure", "viewpoints", "qualityCriteria"];
+  const instructionPickerCopy = {
+    en: ["Done", "Close", "Remove", "Custom option", "Add"],
+    ro: ["Gata", "Închide", "Elimină", "Opțiune personalizată", "Adaugă"],
+    fr: ["Terminé", "Fermer", "Retirer", "Option personnalisée", "Ajouter"],
+    de: ["Fertig", "Schließen", "Entfernen", "Eigene Option", "Hinzufügen"],
+    es: ["Listo", "Cerrar", "Quitar", "Opción personalizada", "Añadir"],
+    pt: ["Concluir", "Fechar", "Remover", "Opção personalizada", "Adicionar"],
+    it: ["Fatto", "Chiudi", "Rimuovi", "Opzione personalizzata", "Aggiungi"],
+    pl: ["Gotowe", "Zamknij", "Usuń", "Własna opcja", "Dodaj"],
+  };
+  const instructionHints = {
+    en: ["Who is the book for?", "What should the book achieve?", "What should it cover?", "How should it be organized?", "Whose perspectives should it include?", "What standards should it meet?"],
+    ro: ["Cui îi este destinată cartea?", "Ce vrei să realizeze cartea?", "Ce ar trebui să acopere?", "Cum ar trebui organizată?", "Ale cui perspective vrei să incluzi?", "Ce standarde ar trebui să respecte?"],
+    fr: ["À qui s’adresse le livre ?", "Quel est le but du livre ?", "Que doit-il couvrir ?", "Comment doit-il être organisé ?", "Quels points de vue inclure ?", "Quels critères doit-il respecter ?"],
+    de: ["Für wen ist das Buch gedacht?", "Was soll das Buch erreichen?", "Was soll es abdecken?", "Wie soll es aufgebaut sein?", "Welche Sichtweisen sollen einfließen?", "Welche Standards soll es erfüllen?"],
+    es: ["¿Para quién es el libro?", "¿Qué debe lograr el libro?", "¿Qué debe abarcar?", "¿Cómo debe organizarse?", "¿Qué perspectivas debe incluir?", "¿Qué criterios debe cumplir?"],
+    pt: ["A quem se destina o livro?", "Que objetivo deve cumprir?", "O que deve abranger?", "Como deve ser organizado?", "Que perspetivas deve incluir?", "Que critérios deve cumprir?"],
+    it: ["A chi si rivolge il libro?", "Qual è il suo obiettivo?", "Che cosa deve trattare?", "Come deve essere organizzato?", "Quali punti di vista includere?", "Quali criteri deve rispettare?"],
+    pl: ["Dla kogo jest książka?", "Jaki jest cel książki?", "Co ma obejmować?", "Jak ją uporządkować?", "Czyje perspektywy uwzględnić?", "Jakie standardy ma spełniać?"],
+  };
+  const instructionLabels = {
+    en: ["Audience", "Purpose", "Scope", "Structure", "Viewpoints to include", "Quality criteria"],
+    fr: ["Public cible", "Objectif", "Périmètre", "Structure", "Points de vue à inclure", "Critères de qualité"],
+    de: ["Zielgruppe", "Zweck", "Umfang", "Struktur", "Einzubeziehende Perspektiven", "Qualitätskriterien"],
+    es: ["Público objetivo", "Objetivo", "Alcance", "Estructura", "Perspectivas que incluir", "Criterios de calidad"],
+    pt: ["Público-alvo", "Objetivo", "Âmbito", "Estrutura", "Perspetivas a incluir", "Critérios de qualidade"],
+    it: ["Pubblico di riferimento", "Obiettivo", "Ambito", "Struttura", "Punti di vista da includere", "Criteri di qualità"],
+    ro: ["Public țintă", "Scop", "Subiecte și limite", "Structură", "Perspective de inclus", "Criterii de calitate"],
+    pl: ["Grupa docelowa", "Cel", "Zakres", "Struktura", "Perspektywy do uwzględnienia", "Kryteria jakości"],
+  };
+  const descriptionCopy = {
+    en: ["Book description", "What is the book about? Describe the main topic, central idea, or story."],
+    ro: ["Descrierea cărții", "Despre ce este cartea? Descrie subiectul, ideea centrală sau povestea."],
+    fr: ["Description du livre", "De quoi parle le livre ? Décrivez le sujet, l’idée centrale ou l’histoire."],
+    de: ["Beschreibung des Buches", "Worum geht es im Buch? Beschreiben Sie das Thema, die zentrale Idee oder die Handlung."],
+    es: ["Descripción del libro", "¿De qué trata el libro? Describe el tema, la idea central o la historia."],
+    pt: ["Descrição do livro", "Sobre o que é o livro? Descreva o tema, a ideia central ou a história."],
+    it: ["Descrizione del libro", "Di cosa parla il libro? Descrivi il tema, l’idea centrale o la storia."],
+    pl: ["Opis książki", "O czym jest książka? Opisz temat, główną ideę lub fabułę."],
+  };
+  // Rows follow instructionFields: audience, purpose, scope, structure, viewpoints, quality.
+  const instructionOptions = {
+    en: [
+      ["General readers", "Beginners", "Students", "Professionals and specialists", "Children", "Teenagers", "Educators", "Researchers"],
+      ["Explain a topic", "Teach a practical skill", "Explore and compare ideas", "Tell a story", "Introduce a debate", "Document an experience", "Present research", "Support a decision"],
+      ["Focused topic", "Introductory overview", "In-depth treatment", "Broad survey", "Foundational concepts", "Practical applications", "Recent developments", "Selected examples"],
+      ["Thematic chapters", "Step-by-step guide", "Chronological narrative", "Case studies", "Questions and answers", "Problem and solution", "Theory and practice", "Essays and reflections"],
+      ["Multiple perspectives", "Expert and practitioner perspectives", "Experiences of affected people", "Historical and contemporary perspectives", "Interdisciplinary perspectives", "Different cultural contexts", "Critical perspectives", "Policy and ethics"],
+      ["Clear and accessible writing", "Factual accuracy and reliable sources", "Practical examples", "Balanced analysis", "Consistent terminology", "Transparent citations", "Clear argumentation", "Useful chapter summaries"],
+    ],
+    ro: [
+      ["Public larg", "Începători", "Elevi și studenți", "Profesioniști și specialiști", "Copii", "Adolescenți", "Cadre didactice", "Cercetători"],
+      ["Explicarea unui subiect", "Predarea unei abilități practice", "Explorarea și compararea ideilor", "Spunerea unei povești", "Introducerea unei dezbateri", "Documentarea unei experiențe", "Prezentarea unei cercetări", "Sprijinirea unei decizii"],
+      ["Subiect bine delimitat", "Privire de ansamblu introductivă", "Tratare aprofundată", "Panoramă amplă", "Concepte fundamentale", "Aplicații practice", "Evoluții recente", "Exemple selectate"],
+      ["Capitole tematice", "Ghid pas cu pas", "Narațiune cronologică", "Studii de caz", "Întrebări și răspunsuri", "Problemă și soluție", "Teorie și practică", "Eseuri și reflecții"],
+      ["Perspective diverse", "Perspective ale experților și practicienilor", "Experiențele persoanelor afectate", "Perspective istorice și contemporane", "Perspective interdisciplinare", "Contexte culturale diferite", "Perspective critice", "Politici publice și etică"],
+      ["Limbaj clar și accesibil", "Acuratețe factuală și surse credibile", "Exemple practice", "Analiză echilibrată", "Terminologie consecventă", "Citări transparente", "Argumentare clară", "Rezumate utile pe capitole"],
+    ],
+    fr: [
+      ["Grand public", "Débutants", "Étudiants", "Professionnels et spécialistes", "Enfants", "Adolescents", "Enseignants", "Chercheurs"],
+      ["Expliquer un sujet", "Enseigner une compétence pratique", "Explorer et comparer des idées", "Raconter une histoire", "Introduire un débat", "Documenter une expérience", "Présenter une recherche", "Éclairer une décision"],
+      ["Sujet précis", "Vue d’ensemble introductive", "Étude approfondie", "Panorama général", "Notions fondamentales", "Applications pratiques", "Évolutions récentes", "Exemples choisis"],
+      ["Chapitres thématiques", "Guide pas à pas", "Récit chronologique", "Études de cas", "Questions et réponses", "Problème et solution", "Théorie et pratique", "Essais et réflexions"],
+      ["Points de vue variés", "Experts et praticiens", "Expériences des personnes concernées", "Perspectives historiques et contemporaines", "Perspectives interdisciplinaires", "Contextes culturels variés", "Perspectives critiques", "Politiques publiques et éthique"],
+      ["Écriture claire et accessible", "Exactitude et sources fiables", "Exemples pratiques", "Analyse équilibrée", "Terminologie cohérente", "Références transparentes", "Argumentation claire", "Résumés utiles par chapitre"],
+    ],
+    de: [
+      ["Allgemeines Publikum", "Einsteiger", "Lernende und Studierende", "Fachleute", "Kinder", "Jugendliche", "Lehrkräfte", "Forschende"],
+      ["Ein Thema erklären", "Eine praktische Fertigkeit vermitteln", "Ideen erkunden und vergleichen", "Eine Geschichte erzählen", "Eine Debatte einführen", "Eine Erfahrung dokumentieren", "Forschung vorstellen", "Eine Entscheidung unterstützen"],
+      ["Eng umrissenes Thema", "Einführender Überblick", "Vertiefte Betrachtung", "Breiter Überblick", "Grundbegriffe", "Praktische Anwendungen", "Neuere Entwicklungen", "Ausgewählte Beispiele"],
+      ["Thematische Kapitel", "Schritt-für-Schritt-Anleitung", "Chronologische Erzählung", "Fallstudien", "Fragen und Antworten", "Problem und Lösung", "Theorie und Praxis", "Essays und Reflexionen"],
+      ["Vielfältige Perspektiven", "Fachleute und Praktiker", "Erfahrungen betroffener Personen", "Historische und heutige Sichtweisen", "Interdisziplinäre Perspektiven", "Unterschiedliche kulturelle Kontexte", "Kritische Perspektiven", "Politik und Ethik"],
+      ["Klare und verständliche Sprache", "Sachliche Genauigkeit und verlässliche Quellen", "Praxisbeispiele", "Ausgewogene Analyse", "Einheitliche Terminologie", "Nachvollziehbare Quellenangaben", "Klare Argumentation", "Nützliche Kapitelzusammenfassungen"],
+    ],
+    es: [
+      ["Público general", "Principiantes", "Estudiantes", "Profesionales y especialistas", "Niños", "Adolescentes", "Docentes", "Investigadores"],
+      ["Explicar un tema", "Enseñar una habilidad práctica", "Explorar y comparar ideas", "Contar una historia", "Introducir un debate", "Documentar una experiencia", "Presentar una investigación", "Orientar una decisión"],
+      ["Tema específico", "Panorama introductorio", "Análisis en profundidad", "Panorama amplio", "Conceptos fundamentales", "Aplicaciones prácticas", "Avances recientes", "Ejemplos seleccionados"],
+      ["Capítulos temáticos", "Guía paso a paso", "Narración cronológica", "Estudios de caso", "Preguntas y respuestas", "Problema y solución", "Teoría y práctica", "Ensayos y reflexiones"],
+      ["Perspectivas diversas", "Expertos y profesionales", "Experiencias de las personas afectadas", "Perspectivas históricas y actuales", "Perspectivas interdisciplinarias", "Contextos culturales diversos", "Perspectivas críticas", "Políticas públicas y ética"],
+      ["Redacción clara y accesible", "Precisión y fuentes fiables", "Ejemplos prácticos", "Análisis equilibrado", "Terminología coherente", "Citas transparentes", "Argumentación clara", "Resúmenes útiles por capítulo"],
+    ],
+    pt: [
+      ["Público geral", "Principiantes", "Estudantes", "Profissionais e especialistas", "Crianças", "Adolescentes", "Docentes", "Investigadores"],
+      ["Explicar um tema", "Ensinar uma competência prática", "Explorar e comparar ideias", "Contar uma história", "Introduzir um debate", "Documentar uma experiência", "Apresentar uma investigação", "Apoiar uma decisão"],
+      ["Tema específico", "Visão introdutória", "Abordagem aprofundada", "Panorama abrangente", "Conceitos fundamentais", "Aplicações práticas", "Desenvolvimentos recentes", "Exemplos selecionados"],
+      ["Capítulos temáticos", "Guia passo a passo", "Narrativa cronológica", "Estudos de caso", "Perguntas e respostas", "Problema e solução", "Teoria e prática", "Ensaios e reflexões"],
+      ["Perspetivas diversas", "Especialistas e profissionais", "Experiências das pessoas afetadas", "Perspetivas históricas e atuais", "Perspetivas interdisciplinares", "Contextos culturais distintos", "Perspetivas críticas", "Políticas públicas e ética"],
+      ["Escrita clara e acessível", "Rigor factual e fontes fiáveis", "Exemplos práticos", "Análise equilibrada", "Terminologia coerente", "Citações transparentes", "Argumentação clara", "Resumos úteis por capítulo"],
+    ],
+    it: [
+      ["Pubblico generale", "Principianti", "Studenti", "Professionisti e specialisti", "Bambini", "Adolescenti", "Docenti", "Ricercatori"],
+      ["Spiegare un tema", "Insegnare una competenza pratica", "Esplorare e confrontare idee", "Raccontare una storia", "Introdurre un dibattito", "Documentare un’esperienza", "Presentare una ricerca", "Orientare una decisione"],
+      ["Tema circoscritto", "Panoramica introduttiva", "Trattazione approfondita", "Panoramica ampia", "Concetti fondamentali", "Applicazioni pratiche", "Sviluppi recenti", "Esempi selezionati"],
+      ["Capitoli tematici", "Guida passo passo", "Narrazione cronologica", "Casi di studio", "Domande e risposte", "Problema e soluzione", "Teoria e pratica", "Saggi e riflessioni"],
+      ["Prospettive diverse", "Esperti e professionisti", "Esperienze delle persone coinvolte", "Prospettive storiche e contemporanee", "Prospettive interdisciplinari", "Contesti culturali diversi", "Prospettive critiche", "Politiche pubbliche ed etica"],
+      ["Scrittura chiara e accessibile", "Accuratezza e fonti affidabili", "Esempi pratici", "Analisi equilibrata", "Terminologia coerente", "Citazioni trasparenti", "Argomentazione chiara", "Sintesi utili per capitolo"],
+    ],
+    pl: [
+      ["Szeroka publiczność", "Początkujący", "Uczniowie i studenci", "Specjaliści", "Dzieci", "Młodzież", "Nauczyciele", "Badacze"],
+      ["Wyjaśnić temat", "Nauczyć praktycznej umiejętności", "Omówić i porównać idee", "Opowiedzieć historię", "Wprowadzić do debaty", "Udokumentować doświadczenie", "Przedstawić badania", "Pomóc w podjęciu decyzji"],
+      ["Wąski temat", "Przegląd wprowadzający", "Dogłębne omówienie", "Szeroki przegląd", "Podstawowe pojęcia", "Zastosowania praktyczne", "Najnowsze osiągnięcia", "Wybrane przykłady"],
+      ["Rozdziały tematyczne", "Poradnik krok po kroku", "Narracja chronologiczna", "Studia przypadków", "Pytania i odpowiedzi", "Problem i rozwiązanie", "Teoria i praktyka", "Eseje i refleksje"],
+      ["Różne perspektywy", "Eksperci i praktycy", "Doświadczenia osób, których dotyczy temat", "Perspektywy historyczne i współczesne", "Perspektywy interdyscyplinarne", "Różne konteksty kulturowe", "Perspektywy krytyczne", "Polityka publiczna i etyka"],
+      ["Jasny i przystępny język", "Rzetelność i wiarygodne źródła", "Praktyczne przykłady", "Wyważona analiza", "Spójna terminologia", "Przejrzyste cytowania", "Jasna argumentacja", "Przydatne podsumowania rozdziałów"],
+    ],
+  };
+
   const escape = (value) => String(value ?? "").replace(/[&<>'"]/g, (character) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", "'": "&#39;", '"': "&quot;" })[character]);
   const params = () => new URLSearchParams(location.search);
   const language = () => collection.supportedLanguages.some((item) => item.code === document.documentElement.lang) ? document.documentElement.lang : "en";
   const activeBook = () => collection.books.find((book) => document.body.dataset.animationBook ? book.id === document.body.dataset.animationBook : book.directory === params().get("book"));
   const field = (label, name, type = "text", wide = false, placeholder = "", required = false, extraClass = "") => `<label class="form-field${wide ? " form-field-wide" : ""}${extraClass ? ` ${extraClass}` : ""}"><span>${escape(label)}</span><input type="${type}" name="${name}" placeholder="${escape(placeholder)}"${required ? " required" : ""}></label>`;
   const textarea = (label, name, placeholder, required = false, extraClass = "") => `<label class="form-field form-field-wide${extraClass ? ` ${extraClass}` : ""}"><span>${escape(label)}</span><textarea name="${name}" placeholder="${escape(placeholder)}"${required ? " required" : ""}></textarea></label>`;
+  function bookInstructions(title, labels, lang) {
+    const options = instructionOptions[lang];
+    const [done, close, , custom, add] = instructionPickerCopy[lang];
+    const fields = instructionFields.map((name, index) => {
+      const id = `book-instruction-${name}`;
+      const label = escape(labels[index]);
+      const choices = options[index].map(option => `<label class="instruction-choice"><input type="checkbox" name="${name}" value="${escape(option)}"><span>${escape(option)}</span></label>`).join("");
+      return `<div class="instruction-picker" data-instruction-picker="${name}">
+        <span id="${id}-label" class="instruction-caption">${label}</span>
+        <button type="button" class="instruction-trigger" aria-haspopup="dialog" aria-controls="${id}-dialog" aria-expanded="false" aria-labelledby="${id}-label ${id}-trigger"><span id="${id}-trigger">${escape(instructionHints[lang][index])}</span><svg aria-hidden="true" viewBox="0 0 16 16"><path d="m4 6 4 4 4-4"/></svg></button>
+        <ul class="instruction-pills" aria-labelledby="${id}-label" hidden></ul>
+        <dialog class="instruction-dialog" id="${id}-dialog" aria-labelledby="${id}-title">
+          <header><h2 id="${id}-title">${label}</h2><button type="button" class="instruction-close" aria-label="${escape(close)}" autofocus>×</button></header>
+          <div class="instruction-dialog-body">
+            <div class="instruction-choices" role="group" aria-labelledby="${id}-title">${choices}</div>
+            <div class="instruction-custom">
+              <label class="form-field"><span>${escape(custom)}</span><input type="text" maxlength="200"></label>
+              <button type="button" class="instruction-add">${escape(add)}</button>
+            </div>
+          </div>
+          <footer><button type="button" class="workflow-submit instruction-done">${escape(done)}</button></footer>
+        </dialog>
+      </div>`;
+    });
+    return `<fieldset class="create-instructions-field create-instructions"><legend>${escape(title)}</legend><div class="create-instructions-grid">${fields.join("")}</div></fieldset>`;
+  }
+  function bindInstructionPickers(form, lang, saved = {}) {
+    const [, , remove] = instructionPickerCopy[lang];
+    for (const picker of form.querySelectorAll("[data-instruction-picker]")) {
+      const name = picker.dataset.instructionPicker;
+      const panel = picker.querySelector("dialog");
+      const trigger = picker.querySelector(".instruction-trigger");
+      const pills = picker.querySelector(".instruction-pills");
+      const menu = panel.querySelector(".instruction-choices");
+      const choices = [...menu.querySelectorAll("input")];
+      const customInput = panel.querySelector(".instruction-custom input");
+      const addButton = panel.querySelector(".instruction-add");
+      function appendChoice(value) {
+        const row = menu.firstElementChild.cloneNode(true);
+        const choice = row.querySelector("input");
+        choice.value = value;
+        choice.checked = true;
+        row.querySelector("span").textContent = value;
+        choices.push(choice);
+        menu.append(row);
+        return choice;
+      }
+      const prior = saved[name];
+      if (typeof prior === "string" && prior) {
+        const selected = prior.split("; ");
+        if (selected.every(value => choices.some(choice => choice.value === value))) {
+          for (const choice of choices) choice.checked = selected.includes(choice.value);
+        } else {
+          // Retain a saved value that predates the preset list.
+          appendChoice(prior);
+        }
+      }
+      function render() {
+        const selected = choices.filter(choice => choice.checked);
+        pills.hidden = !selected.length;
+        pills.replaceChildren(...selected.map(choice => {
+          const pill = document.createElement("li");
+          const caption = document.createElement("span");
+          const button = document.createElement("button");
+          caption.textContent = choice.value;
+          button.type = "button";
+          button.textContent = "×";
+          button.setAttribute("aria-label", `${remove}: ${choice.value}`);
+          button.addEventListener("click", () => {
+            choice.checked = false;
+            choice.dispatchEvent(new Event("change", { bubbles: true }));
+            trigger.focus();
+          });
+          pill.append(caption, button);
+          return pill;
+        }));
+      }
+      function open() {
+        if (panel.open) return;
+        panel.showModal();
+        trigger.setAttribute("aria-expanded", "true");
+      }
+      function addCustom() {
+        const value = customInput.value.trim();
+        if (!value) return;
+        const key = value.toLocaleLowerCase(lang);
+        const choice = choices.find(item => item.value.toLocaleLowerCase(lang) === key) || appendChoice(value);
+        choice.checked = true;
+        customInput.value = "";
+        choice.dispatchEvent(new Event("change", { bubbles: true }));
+      }
+      addButton.addEventListener("click", () => { addCustom(); customInput.focus(); });
+      customInput.addEventListener("keydown", event => {
+        if (event.key !== "Enter") return;
+        event.preventDefault();
+        if (!event.isComposing) addCustom();
+      });
+      trigger.addEventListener("click", open);
+      panel.querySelector(".instruction-close").addEventListener("click", () => panel.close());
+      panel.querySelector(".instruction-done").addEventListener("click", () => { addCustom(); panel.close(); });
+      panel.addEventListener("click", event => { if (event.target === panel) panel.close(); });
+      panel.addEventListener("close", () => {
+        trigger.setAttribute("aria-expanded", "false");
+        trigger.focus({ preventScroll: true });
+      });
+      menu.addEventListener("change", render);
+      form.addEventListener("reset", () => queueMicrotask(render));
+      render();
+    }
+  }
   const pageHero = (kicker, title, lead = "") => `<section class="workflow-hero"><div><p class="eyebrow">${escape(kicker)}</p><h1 title="${escape(title)}">${escape(title)}</h1></div>${lead ? `<p class="lead">${escape(lead)}</p>` : ""}</section>`;
   const backLabels = { en: "Back to book", fr: "Retour au livre", de: "Zurück zum Buch", es: "Volver al libro", pt: "Voltar ao livro", it: "Torna al libro", ro: "Înapoi la carte", pl: "Powrót do książki" };
   const backToBook = (book, lang) => book ? `<nav class="workflow-back"><a class="button button-quiet" href="${escape(new URL(book.editions[lang].book, siteRoot).href)}?lang=${lang}">${escape(backLabels[lang])}</a></nav>` : "";
@@ -137,13 +356,16 @@
     if (!draft) return;
     const back = new URL(draft.returnUrl);
     if (back.pathname !== location.pathname || back.searchParams.get("book") !== params().get("book")) return;
+    const hasInstructionPickers = form.querySelector(".create-instructions");
     for (const [name, value] of Object.entries(draft.values)) {
+      if (hasInstructionPickers && instructionFields.includes(name)) continue;
       const input = form.elements.namedItem(name);
       if (input && input.type !== "file") input.value = value;
     }
     form._draftFiles = draft.files;
+    return draft.values;
   }
-  async function submitContribution(subject, lines, lang, form, expectedNames = []) {
+  async function submitContribution(subject, lines, lang, form, expectedNames = [], data) {
     if(!form.reportValidity())return;
     const status=form.querySelector('[data-workflow-status]'),button=form.querySelector('button[type="submit"]');
     const accepted=form.querySelector('[data-contract-accept]')?.checked===true;
@@ -151,7 +373,7 @@
     try {
       let files=[...(form.elements.documents?.files || [])];
       if(!files.length && expectedNames.length) files=await ScriptaContributionBridge.loadDraftFiles(params().get('draft'),expectedNames);
-      const values=Object.fromEntries([...new FormData(form)].filter(([,value])=>typeof value==='string'));
+      const values=Object.fromEntries([...(data || new FormData(form))].filter(([,value])=>typeof value==='string'));
       const submitted=await ScriptaContributionBridge.submitContribution({subject,lines,values,language:lang,returnUrl:location.href,agreementAccepted:accepted},files,status,button);
       if(submitted && params().get('draft')) {
         sessionStorage.removeItem(draftPrefix+params().get('draft'));
@@ -185,15 +407,24 @@
     const words = fork ? {...text[lang], createTitle: labels[0], createKicker: "Fork", prompt: labels[2], promptHint: labels[3], createSubject: "ScriptaHub derived book proposal"} : text[lang];
     if (fork && !book) { root.innerHTML = pageHero("Fork", words.missingBook); return; }
     const fields = createFieldLabels[lang];
+    const instructionNames = instructionLabels[lang];
+    const [descriptionLabel, descriptionHint] = descriptionCopy[lang];
     document.title = `${words.createTitle} · ScriptaHub`;
 
     root.innerHTML = `${fork ? backToBook(book, lang) : ""}${pageHero(words.createKicker, words.createTitle, fork ? labels[1] : "")}${fork ? `<div class="fork-source">${compactBookContext(book, lang, words, false)}</div>` : ""}<section class="workflow-layout create-workflow-layout"><form class="workflow-form create-workflow-form" data-workflow-form><div class="form-grid create-form-grid">
       ${field(fields.title, "titles", "text", false, fields.titleHint, false, "create-title-field")}
-      ${textarea(words.prompt, "prompt", words.promptHint, true, "create-instructions-field")}
+      ${fork ? "" : textarea(descriptionLabel, "description", descriptionHint, true, "create-description-field")}
+      ${fork ? textarea(words.prompt, "prompt", words.promptHint, true, "create-instructions-field") : bookInstructions(words.prompt, instructionNames, lang)}
       <label class="form-file-field"><input class="form-file-input" type="file" name="documents" multiple aria-label="${escape(words.files)}"><span class="form-file-label">${escape(words.files)}</span><span class="form-file-picker"><span class="form-file-hint">${escape(fields.filesHint)}</span><span class="form-file-button"><svg aria-hidden="true" viewBox="0 0 24 24"><path d="M8.5 12.8 14 7.3a3.2 3.2 0 0 1 4.5 4.5l-7.1 7.1a5 5 0 0 1-7.1-7.1l7.5-7.5"/></svg>${escape(fields.chooseFiles)}</span><span class="form-file-selection" data-file-selection aria-live="polite"></span></span></label>
       </div><div class="create-form-footer"><p class="workflow-note">${escape(ScriptaContributionBridge.note(lang))}</p><button class="workflow-submit" type="submit">${escape(submitLabels[lang])}<svg aria-hidden="true" viewBox="0 0 24 24"><path d="M4 12h16m-6-6 6 6-6 6"/></svg></button></div><p class="workflow-status" data-workflow-status aria-live="polite"></p></form></section>`;
     const form = root.querySelector("form");
-    restoreDraft(form);
+    const saved = restoreDraft(form);
+    if (!fork) {
+      if (saved?.prompt && !saved.description && !instructionFields.some(name => saved[name])) {
+        form.elements.description.value = saved.prompt;
+      }
+      bindInstructionPickers(form, lang, saved);
+    }
     prepareContributionForm(form,lang);
     const documents = form.elements.documents;
     const fileSelection = form.querySelector("[data-file-selection]");
@@ -217,12 +448,24 @@
       event.preventDefault();
       if (!form.reportValidity()) return;
       const data = new FormData(form);
+      if (!fork) {
+        const description = data.get("description").trim();
+        if (!description) return;
+        data.set("description", description);
+        const sections = instructionFields.flatMap((name, index) => {
+          const value = data.getAll(name).join("; ");
+          if (!value) return [];
+          data.set(name, value);
+          return [`${instructionNames[index]}:\n${value}`];
+        });
+        data.set("prompt", [description, ...sections].join("\n\n"));
+      }
       const files = form.elements.documents.files.length ? [...form.elements.documents.files].map((file) => file.name) : (form._draftFiles || []);
       const lines = [
         ...(fork ? [`Source book ID: ${book.id}`, `Source book: ${book.title.en}`, `Source directory: ${book.directory}`, `Source edition: ${book.currentEdition || book.animation?.edition || "Current published edition"}`, ""] : []),
         `Selected documents: ${files.join(", ") || "None"}`, "", "PROPOSED TITLE", data.get("titles") || "", "", "BOOK INSTRUCTIONS", data.get("prompt") || "", "", `Interface language: ${lang}`,
       ];
-      submitContribution(words.createSubject, lines, lang, form, files);
+      submitContribution(words.createSubject, lines, lang, form, files, data);
     });
   }
 

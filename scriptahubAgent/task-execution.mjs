@@ -11,6 +11,10 @@ import { createProcessingTables, requireNoActiveProcessing } from './processing-
 const fail = (message, status = 400) => { throw Object.assign(new Error(message), { status }); };
 const identifier = value => typeof value === 'string' && /^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$/.test(value);
 const timestamp = () => new Date().toISOString();
+const taskKinds = new Map([
+  ['manuscript', ['manuscript']], ['book-proposal', ['book-proposal']],
+  ['add-book', ['manuscript', 'book-proposal']], ['edit', ['edit']],
+]);
 export const executionTools = new Set(['scriptahub_task_batch_snapshot', 'scriptahub_task_batch_settle', 'scriptahub_task_batch_close', 'scriptahub_task_claim', 'scriptahub_task_status', 'scriptahub_task_document_read', 'scriptahub_task_finish', 'scriptahub_task_package_prepare', 'scriptahub_task_package_upload', 'scriptahub_task_publish', 'scriptahub_skills_preflight', 'scriptahub_skill_job_prepare', 'scriptahub_skill_job_upload', 'scriptahub_skill_job_start', 'scriptahub_skill_job_status', 'scriptahub_skill_job_result', 'scriptahub_skill_job_read', 'scriptahub_skill_job_cancel', 'scriptahub_skill_job_release']);
 
 // The envelope is supplied by AgentServer only after secure-wire verification.
@@ -82,15 +86,16 @@ export class TaskExecution {
     return batch || fail('Task batch not found',404);
   }
   snapshot(executor,{batchId,taskType}={}) {
-    if(!identifier(batchId)||!['manuscript','edit'].includes(taskType))fail('Invalid task batch');
+    if(!identifier(batchId)||!taskKinds.has(taskType))fail('Invalid task batch');
+    const [firstKind, secondKind = firstKind] = taskKinds.get(taskType);
     return this.store.transaction(()=>{
       let batch=this.store.db.prepare('SELECT * FROM task_batches WHERE id=?').get(batchId);
       if(batch){if(batch.executor!==executor||batch.task_type!==taskType)fail('Task batch identity mismatch',409);}
       else {
         this.store.db.prepare('INSERT INTO task_batches(id,executor,task_type,created_at) VALUES(?,?,?,?)').run(batchId,executor,taskType,timestamp());
         const tasks=this.store.db.prepare(`SELECT t.id FROM tasks t JOIN changes c ON c.id=t.change_id
-          WHERE t.state='queued' AND c.state='accepted' AND t.kind=? AND NOT EXISTS
-          (SELECT 1 FROM task_batch_items i WHERE i.task_id=t.id AND i.released=0) ORDER BY t.created_at,t.id`).all(taskType);
+          WHERE t.state='queued' AND c.state='accepted' AND t.kind IN (?,?) AND NOT EXISTS
+          (SELECT 1 FROM task_batch_items i WHERE i.task_id=t.id AND i.released=0) ORDER BY t.created_at,t.id`).all(firstKind,secondKind);
         const insert=this.store.db.prepare('INSERT INTO task_batch_items(batch_id,task_id,position) VALUES(?,?,?)');
         tasks.forEach((task,index)=>insert.run(batchId,task.id,index));
         batch=this.batch(executor,batchId);
@@ -127,7 +132,8 @@ export class TaskExecution {
     });
   }
   claim(executor, { runId, taskId, taskType = 'manuscript', batchId } = {}) {
-    if (!['manuscript','edit'].includes(taskType)) fail('Invalid task type');
+    if (!taskKinds.has(taskType)) fail('Invalid task type');
+    const [firstKind, secondKind = firstKind] = taskKinds.get(taskType);
     if (!identifier(runId) || (taskId !== undefined && !identifier(taskId))) fail('Invalid run or task ID');
     return this.store.transaction(() => {
       if(batchId!==undefined){
@@ -140,12 +146,12 @@ export class TaskExecution {
       if (existing) {
         if (taskId && taskId !== existing.task_id) fail('Run already belongs to another task', 409);
         const task = this.present(this.execution(executor, existing.id));
-        if (task.type !== `scriptahub.${taskType}`) fail('Run already belongs to another task type',409);
+        if (!taskKinds.get(taskType).some(kind => task.type === `scriptahub.${kind}`)) fail('Run already belongs to another task type',409);
         return {task};
       }
       const task = this.store.db.prepare(`SELECT t.* FROM tasks t JOIN changes c ON c.id=t.change_id JOIN books b ON b.id=c.book_id
-        WHERE t.state='queued' AND c.state='accepted' AND t.kind=? AND (? IS NULL OR t.id=?) AND NOT EXISTS (SELECT 1 FROM task_batch_items i WHERE i.task_id=t.id AND i.released=0 AND (? IS NULL OR i.batch_id<>?))
-        ORDER BY t.created_at,t.id LIMIT 1`).get(taskType, taskId ?? null, taskId ?? null, batchId ?? null, batchId ?? null);
+        WHERE t.state='queued' AND c.state='accepted' AND t.kind IN (?,?) AND (? IS NULL OR t.id=?) AND NOT EXISTS (SELECT 1 FROM task_batch_items i WHERE i.task_id=t.id AND i.released=0 AND (? IS NULL OR i.batch_id<>?))
+        ORDER BY t.created_at,t.id LIMIT 1`).get(firstKind, secondKind, taskId ?? null, taskId ?? null, batchId ?? null, batchId ?? null);
       if (!task) return { task: null };
       const id = crypto.randomUUID(), time = timestamp();
       const changed = this.store.db.prepare("UPDATE tasks SET state='running',updated_at=? WHERE id=? AND state='queued'").run(time, task.id);

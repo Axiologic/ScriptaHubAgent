@@ -18,7 +18,7 @@ import { sha256 } from '../publication-transfer.mjs';
 import { sealRecord } from '../record-integrity.mjs';
 const exec = promisify(execFile), agent = 'agent:test/processor';
 process.env.SCRIPTA_RECORD_KEY = 'publication-tests-record-key-012345678901234567890';
-async function fixture(t, { schemaVersion = 1 } = {}) {
+async function fixture(t, { schemaVersion = 1, kind = 'manuscript' } = {}) {
   const root = await fs.mkdtemp(path.join(os.tmpdir(),'scripta-publication-'));
   const remote = path.join(root,'remote.git'), seed = path.join(root,'seed'), data = path.join(root,'data');
   const git = async (cwd,...args) => (await exec('git',args,{cwd,env:{...process.env,GIT_CONFIG_GLOBAL:'/dev/null',GIT_CONFIG_NOSYSTEM:'1',GIT_AUTHOR_NAME:'Test',GIT_AUTHOR_EMAIL:'test@example.test',GIT_COMMITTER_NAME:'Test',GIT_COMMITTER_EMAIL:'test@example.test'}})).stdout.trim();
@@ -32,9 +32,9 @@ async function fixture(t, { schemaVersion = 1 } = {}) {
   store.remember({id:'user:owner',email:'owner@example.test',displayName:'Owner'});
   const source = Buffer.from('%PDF-1.7\nOriginal manuscript\n');
   const submitted = store.submit(sealRecord({id:crypto.randomUUID(),owner:'user:owner',contact:{email:'owner@example.test'},
-    metadata:{kind:'manuscript',language:'en',values:{instructions:'Process the original manuscript'}},
-    files:[{name:crypto.randomUUID()+'.pdf',originalName:'source.pdf',sha256:sha256(source)}],createdAt:new Date().toISOString(),state:'received',task:null}));
-  const task = service.claim(agent,{runId:'run-publication'}).task;
+    metadata:{kind,language:'en',values:{description:kind==='book-proposal'?'A book about gardens':'Process the original manuscript'}},
+    files:kind==='manuscript'?[{name:crypto.randomUUID()+'.pdf',originalName:'source.pdf',sha256:sha256(source)}]:[],createdAt:new Date().toISOString(),state:'received',task:null}));
+  const task = service.claim(agent,{runId:'run-publication',taskType:kind}).task;
   const catalogue = 'https://github.com/example/books/blob/main/collection.json';
   const config = {repositories:[catalogue],publication:{authorName:'Publisher',authorEmail:'publisher@example.test'}};
   let pushes = 0, losePushResponse = false;
@@ -66,6 +66,21 @@ async function fixture(t, { schemaVersion = 1 } = {}) {
   };
   return {root,remote,seed,git,service,store,publisher,task,config,files,input,upload,submitted,previous,pushes:() => pushes, loseNextPushResponse:() => { losePushResponse = true; }};
 }
+
+test('a generated book publishes its validated HTML and PDF without an uploaded manuscript', async t => {
+  const f = await fixture(t, { kind: 'book-proposal' });
+  const target = publicationTarget(f.input.catalogue, f.input.branch);
+  const manifest = { taskType:f.task.type, bookId:f.task.bookId, sourceHashes:[] };
+  const invalid = new Map(f.files);
+  const pdf = [...invalid.keys()].find(name => name.endsWith('/book.pdf'));
+  invalid.set(pdf,Buffer.from('Not a PDF'));
+  assert.throws(() => checkPublicationPackage(manifest,target,invalid,f.previous),/HTML edition and its PDF/);
+  assert.throws(() => checkPublicationPackage({...manifest,sourceHashes:['0'.repeat(64)]},target,f.files,f.previous),/uploaded source/);
+  f.upload();
+  const result = await f.publisher.publish(agent,{executionId:f.task.executionId},f.config);
+  assert.equal(result.state,'completed');
+  assert.equal(f.pushes(),1);
+});
 
 test('only the owning executor can register a successful validated package for an authorized catalogue', async t => {
   const f = await fixture(t), {publisher,input,config} = f;
