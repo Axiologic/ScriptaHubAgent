@@ -26,7 +26,17 @@ export async function publicationGit(directory, token, author) {
       // Never serialize exec errors: their command/env/stderr can contain credentials.
       let detail = String(error.stderr || '').replaceAll(token, '[redacted]').replaceAll(basic, '[redacted]');
       detail = detail.replace(/https:\/\/[^\s/@]+:[^\s/@]+@/g, 'https://[redacted]@').slice(-1500);
-      fail(`Publication Git ${args[0]} failed${detail ? ': ' + detail.trim() : ''}`, 502);
+      const ref = args.at(-1).split(':').at(-1);
+      const rejection = args[0] === 'push' && String(error.stdout || '').split('\n').find(line => {
+        const [flag, refs, summary] = line.split('\t');
+        return flag === '!' && refs?.endsWith(':' + ref) && /^\[(?:remote )?rejected\]/.test(summary || '');
+      });
+      throw Object.assign(new Error(`Publication Git ${args[0]} failed${detail ? ': ' + detail.trim() : ''}`), {
+        status: 502,
+        gitExitCode: error.code,
+        pushRejected: Boolean(rejection),
+        pushContended: Boolean(rejection && /\[rejected\] \((?:fetch first|non-fast-forward)\)/.test(rejection))
+      });
     }
   };
 }

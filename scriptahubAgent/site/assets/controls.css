@@ -1,0 +1,157 @@
+/* Shared control geometry. Page components retain their semantic colors. */
+:root {
+  --control-height: max(40px, 2rem);
+  --control-radius: 8px;
+  --control-font-size: max(16px, .82rem);
+  --control-font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  --control-gap: 8px;
+  --action-font-size: var(--control-font-size);
+}
+:root body :is(.site-shell, dialog, [role="dialog"], [popover], .reader-app) :is(
+  button:not(.cover-link), .button, .button-link, .form-file-button, .keyword-clear,
+  .edition-downloads a, .book-card-actions a, .library-categories a,
+  .book-card-details, .featured-book-actions a, .book-side-actions a, .librarian-result-action, .librarian-feedback-link,
+  .reader-back, .reader-virtual-page, .reader-language select,
+  .header-home, .header-create, .header-all-books, .header-account,
+  input:not([type="checkbox"], [type="radio"], [type="range"], [type="file"], [type="hidden"], [type="image"], [type="color"]),
+  select:not([multiple])
+) {
+  box-sizing: border-box;
+  height: var(--control-height);
+  min-height: var(--control-height);
+  border-radius: var(--control-radius);
+  padding-block: 0;
+  padding-inline: 12px;
+  font-family: var(--control-font-family);
+  font-size: var(--control-font-size);
+  font-weight: 500;
+  line-height: 1.25;
+  letter-spacing: normal;
+  vertical-align: middle;
+}
+:root body :is(.site-shell, dialog, [role="dialog"], [popover], .reader-app) :is(button, .button, .button-link, .form-file-button) {
+  align-items: center;
+  justify-content: center;
+  gap: var(--control-gap);
+}
+:root body :is(.site-shell, dialog, [role="dialog"], [popover], .reader-app) :is(
+  input:not([type="checkbox"], [type="radio"], [type="range"], [type="file"], [type="hidden"], [type="image"], [type="color"]),
+  select, textarea
+) {
+  min-width: 0;
+  max-width: 100%;
+  border: 1px solid var(--line, var(--reader-line));
+  border-radius: var(--control-radius);
+  background: var(--field, var(--reader-control));
+  color: var(--ink, var(--reader-ui-ink));
+  font-family: var(--control-font-family);
+  font-size: var(--control-font-size);
+  font-weight: 400;
+  letter-spacing: normal;
+}
+:root body :is(.site-shell, dialog, [role="dialog"], [popover], .reader-app) :is(textarea, select[multiple]) {
+  box-sizing: border-box;
+  padding: 10px 12px;
+  line-height: 1.5;
+}
+:root body :is(.site-shell, dialog, [role="dialog"], [popover]) :is(textarea, select[multiple]) { min-height: calc(2 * var(--control-height)); }
+:root body :is(.site-shell, dialog, [role="dialog"], [popover], .reader-app) :is(button, input, select, textarea, .button, .button-link, [role="tab"]):focus-visible {
+  outline: 2px solid var(--green, var(--reader-accent));
+  outline-offset: 3px;
+}
+:root body :is(.site-shell, dialog, [role="dialog"], [popover], .reader-app) :is(button, input, select, textarea):disabled {
+  color: var(--muted, var(--reader-muted));
+  background: var(--field, var(--reader-control));
+  border-color: var(--line, var(--reader-line));
+  box-shadow: none;
+  opacity: 1;
+  cursor: default;
+}
+:root body :is(.site-shell, dialog, [role="dialog"], [popover]) :is(.site-icon-button, .instruction-close, .dictation-button, .site-toast-close, .cover-preview-close, .keyword-cloud-modal-close) {
+  width: var(--control-height);
+  min-width: var(--control-height);
+  padding: 0;
+}
+:root body :is(.site-shell, dialog, [role="dialog"], [popover]) :is(.instruction-trigger, .instruction-custom .instruction-add, .instruction-custom input) {
+  height: var(--control-height);
+  min-height: var(--control-height);
+  border-radius: var(--control-radius);
+  font-size: var(--control-font-size);
+}
+:root body .instruction-choice {
+  min-height: var(--control-height);
+  border-radius: var(--control-radius);
+  font-size: var(--control-font-size);
+}
+:root body .instruction-pills { gap: var(--control-gap); }
+:root body .instruction-pills li { padding: 0 0 0 12px; border-radius: var(--control-radius); font-size: var(--control-font-size); }
+:root body .instruction-pills button { width: var(--control-height); min-width: var(--control-height); padding: 0; }
+:root body .form-file-button { display: inline-flex; }
+:root body .site-toast:popover-open { grid-template-columns: 22px minmax(0, 1fr) var(--control-height); }
+:root body :is(.form-field, .account-points label, .dashboard-card label) { gap: 6px; font-size: var(--control-font-size); }
+:root body :is(.dashboard-actions, .instruction-custom, .intro-controls) { gap: var(--control-gap); align-items: center; }
+:root body .instruction-custom { align-items: end; }
+
+/* Header groups use the same dimensions as the form controls. */
+:root body .site-header.header-unified :is(.header-navigation, .header-actions, .header-preferences) :is(a, button, select, .header-create, .header-account, .header-home) {
+  height: var(--control-height);
+  min-height: var(--control-height);
+  border-radius: var(--control-radius);
+  font-family: var(--control-font-family);
+  font-size: var(--control-font-size);
+  font-weight: 500;
+}
+:root body .site-header.header-unified :is(.header-navigation > a, .header-account, .header-text-toggle, .theme-switcher button) {
+  width: var(--control-height);
+  min-width: var(--control-height);
+  padding: 0;
+}
+:root body .site-header.header-unified .header-text-size .site-scale,
+:root body .site-header.header-unified .header-preferences .theme-switcher {
+  box-sizing: border-box;
+  height: var(--control-height);
+  border-radius: var(--control-radius);
+}
+:root body .site-header.header-unified .header-preferences .site-scale { border: 0; gap: 2px; }
+:root body .site-header.header-unified .header-preferences .site-scale button {
+  min-width: var(--control-height);
+  padding-inline: 6px;
+}
+:root body .site-header.header-unified .header-preferences .site-scale [data-site-size] { min-width: 56px; font-size: var(--control-font-size); }
+:root body .site-header.header-unified .header-preferences .language-picker select { width: auto; max-width: 132px; padding-inline: 10px; }
+
+/* Reader controls share geometry without affecting the book's typography. */
+:root body [data-reader-app][data-appearance] :is(.reader-button, .reader-icon-button, .reader-back, .reader-language select, .reader-virtual-page) {
+  height: var(--control-height);
+  min-height: var(--control-height);
+  border-radius: var(--control-radius);
+  font-family: var(--control-font-family);
+  font-size: var(--control-font-size);
+  font-weight: 500;
+  line-height: 1.25;
+}
+:root body [data-reader-app][data-appearance] :is(.reader-icon-button, .reader-back) { width: var(--control-height); min-width: var(--control-height); padding: 0; }
+:root body [data-reader-app][data-appearance] .reader-control-group { border: 0; gap: 2px; }
+:root body [data-reader-app][data-appearance] .reader-control-group .reader-button { border-radius: var(--control-radius); }
+:root body [data-reader-app][data-appearance] .reader-language { height: var(--control-height); }
+:root body [data-reader-app][data-appearance] .reader-language select { width: auto; max-width: 132px; padding-inline: 10px; }
+:root body .reader-header { grid-template-columns: var(--control-height) minmax(100px, 1fr) auto; }
+@media (max-width: 720px), (pointer: coarse) {
+  :root { --control-height: max(44px, 2rem); }
+}
+@media (max-width: 480px) {
+  :root body .site-header.header-unified .header-preferences .language-picker select { width: 76px; padding-inline: 6px; }
+  :root body .site-header.header-unified .header-preferences { gap: 4px; }
+}
+
+/* Tabs use an underline to indicate selection. */
+:root body .site-shell [role="tab"] { border-radius: 0; background: transparent; }
+
+/* Compact removable values are preview tags, as in the Bizanso project editor. */
+:root body .instruction-preview .instruction-pills li { flex: none; min-height: 32px; max-width: 100%; padding: 2px 4px 2px 10px; gap: 6px; border: 0; border-radius: var(--control-radius); background: var(--field); font-size: var(--control-font-size); line-height: 1.5; }
+:root body .instruction-preview .instruction-pills li span { min-width: 0; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+:root body .instruction-preview .instruction-pills button { display: grid; place-items: center; flex: none; width: 28px; min-width: 28px; height: 28px; min-height: 28px; padding: 0; border: 0; border-radius: var(--control-radius); background: transparent; color: inherit; font-size: 18px; line-height: 1; }
+:root body .instruction-preview .instruction-view-all { flex: none; height: var(--control-height); min-height: var(--control-height); padding: 0 4px; border: 0; border-radius: var(--control-radius); background: transparent; color: var(--green); box-shadow: none; font-size: var(--control-font-size); white-space: nowrap; text-decoration: underline; text-underline-offset: 3px; }
+:root body .instruction-preview .instruction-pills button:hover { background: color-mix(in srgb, var(--ink) 10%, transparent); }
+:root body .instruction-picker .instruction-trigger { justify-content: space-between; background: var(--field); border-color: transparent; box-shadow: 0 1px 3px color-mix(in srgb, var(--ink) 8%, transparent); text-align: start; font-weight: 400; }
+:root body .instruction-picker .instruction-trigger:hover { background: color-mix(in srgb, var(--ink) 6%, var(--field)); color: var(--ink); }

@@ -1,7 +1,8 @@
 import path from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { publicationAuthentication, publicPublication } from '../publication-auth.mjs';
-import { loadSourceConfig, saveSourceConfig, assertSettingsAdmin } from '../settings.mjs';
+import { loadPointsPolicy, savePointsPolicy } from '../points-policy.mjs';
+import { loadSourceConfig, saveSourceConfig, assertSettingsAdmin, settingsFile } from '../settings.mjs';
 
 try {
   const chunks = [];
@@ -21,7 +22,7 @@ try {
   if (process.env.TOOL_NAME === 'scriptahub_config_get') {
     const settings = await loadSourceConfig();
     const status = await publicationAuthentication(auth,{action:'status'});
-    result = { settings: {...settings,publication:status.publication} };
+    result = { settings: {...settings,publication:status.publication,points:await loadPointsPolicy(path.dirname(settingsFile()))} };
   }
   else if (process.env.TOOL_NAME === 'scriptahub_config_set') {
     const status = await publicationAuthentication(auth,{action:'status'});
@@ -30,6 +31,7 @@ try {
       publication:args.publication || status.publication});
     result.settings.publication = publicPublication(result.settings);
   }
+  else if (process.env.TOOL_NAME === 'scriptahub_points_config_set') result = {points:await savePointsPolicy(path.dirname(settingsFile()),args)};
   else if (process.env.TOOL_NAME === 'scriptahub_publication_auth') result = await publicationAuthentication(auth,args);
   else throw new Error('Unknown settings tool');
   process.stdout.write(JSON.stringify(result));

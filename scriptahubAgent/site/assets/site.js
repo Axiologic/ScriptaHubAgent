@@ -2,6 +2,7 @@
   "use strict";
 
   import(new URL("notifications.js", document.currentScript.src));
+  import(new URL("book-covers.js", document.currentScript.src));
 
   const collection = globalThis.SCRIPTA_COLLECTION;
   if (!collection) return;
@@ -165,7 +166,7 @@
     }
     return pool;
   })();
-  const missionStripBooks = featuredBooks.filter((book) => Object.values(book.thumbnailUrl || {}).some(Boolean));
+  const missionStripBooks = featuredBooks;
   let catalogueRefreshTimer;
   function watchCatalogueChanges() {
     if (catalogueRefreshTimer) return;
@@ -534,8 +535,7 @@
 
   function missionBookIconMarkup(book, language, index) {
     const data = ScriptaBookView.model(book, language);
-    if (!data.thumbnail) return "";
-    return `<a class="mission-book-icon" href="${escape(data.href)}" aria-label="${escape(`${data.details}: ${data.title}`)}" data-mission-book data-book-id="${escape(data.id)}" data-book-title="${escape(data.title)}" data-book-description="${escape(data.description)}" data-book-action="${escape(data.details)}" style="--book-tilt:${((index % 7) - 3) * .42}deg"><img src="${escape(data.thumbnail)}" alt="" loading="lazy" decoding="async"></a>`;
+    return `<a class="mission-book-icon" href="${escape(data.href)}" aria-label="${escape(`${data.details}: ${data.title}`)}" data-mission-book data-book-id="${escape(data.id)}" data-book-title="${escape(data.title)}" data-book-description="${escape(data.description)}" data-book-action="${escape(data.details)}" style="--book-tilt:${((index % 7) - 3) * .42}deg"><img data-book-cover ${data.thumbnail ? `src="${escape(data.thumbnail)}"` : ""} alt="" loading="lazy" decoding="async"></a>`;
   }
 
   function setupMissionBookStrip(container, language, details) {

@@ -1,15 +1,18 @@
 /* Shared book presentation: one metadata model, structure and textShow lifecycle. */
 (() => {
   'use strict';
+  import(new URL('book-covers.js', document.currentScript.src));
   const rootURL = new URL('../', document.currentScript.src);
   const escape = value => String(value ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
   const detailsLabels = {en:'View Book',fr:'Voir le livre',de:'Buch ansehen',es:'Ver libro',pt:'Ver detalhes',it:'Vedi il libro',ro:'Vezi cartea',pl:'Zobacz książkę'};
   const localized = (value, language) => value?.[language] || value?.en || Object.values(value || {}).find(Boolean) || '';
   const url = (path, language) => {
     if (!path) return '';
-    const result = new URL(path, rootURL);
-    if (language) result.searchParams.set('lang', language);
-    return result.href;
+    try {
+      const result = new URL(path, rootURL);
+      if (language) result.searchParams.set('lang', language);
+      return result.href;
+    } catch { return ''; }
   };
   function model(book, language = document.documentElement.lang) {
     return {
@@ -17,7 +20,7 @@
       description: localized(book.shortDescription, language), category: book.category || '',
       status: localized(book.publicationLabel, language), keywords: book.keywords?.[language] || book.keywords?.en || [],
       href: url(book.editions?.[language]?.book || book.editions?.en?.book || Object.values(book.editions || {}).find(edition => edition.book)?.book, language),
-      thumbnail: url(localized(book.thumbnailUrl, language)), details: detailsLabels[language] || detailsLabels.en,
+      thumbnail: url(localized(book.thumbnailUrl, language) || localized(book.coverUrl, language)), details: detailsLabels[language] || detailsLabels.en,
     };
   }
   const disclosureLabels = {en:['Show full book description','Show less'],fr:['Afficher la description complète du livre','Réduire'],de:['Vollständige Buchbeschreibung anzeigen','Weniger anzeigen'],es:['Mostrar la descripción completa del libro','Mostrar menos'],pt:['Mostrar a descrição completa do livro','Mostrar menos'],it:['Mostra la descrizione completa del libro','Mostra meno'],ro:['Afișează descrierea completă a cărții','Arată mai puțin'],pl:['Pokaż pełny opis książki','Pokaż mniej']};
@@ -60,7 +63,7 @@
   const title = (data, tag = 'h2', link = true) => `<${tag}>${link ? `<a href="${escape(data.href)}">${escape(data.title)}</a>` : escape(data.title)}</${tag}>`;
   const status = data => data.status ? `<p class="publication-status">${escape(data.status)}</p>` : '';
   const action = (data, className = 'book-card-details') => `<a class="${className}" href="${escape(data.href)}">${className === 'librarian-result-action-cell' ? `<span>${escape(data.details)}</span>` : escape(data.details)}</a>`;
-  const cover = (data, className = '') => `<a class="${className}" href="${escape(data.href)}" aria-label="${escape(`${data.details}: ${data.title}`)}"><img src="${escape(data.thumbnail)}" alt="${escape(data.title)}" loading="lazy" decoding="async"></a>`;
+  const cover = (data, className = '') => `<a class="${className}" href="${escape(data.href)}" aria-label="${escape(`${data.details}: ${data.title}`)}"><img data-book-cover data-book-id="${escape(data.id)}" ${data.thumbnail ? `src="${escape(data.thumbnail)}"` : ""} alt="${escape(data.title)}" loading="lazy" decoding="async"></a>`;
   const keywords = (data, className, values = data.keywords.slice(0, 5), label = '') => `<div class="${className}"${label ? ` aria-label="${escape(label)}"` : ''}>${values.map(value => `<span>${escape(value)}</span>`).join('')}</div>`;
 
   function markup(book, options = {}) {
@@ -76,7 +79,7 @@
       case 'librarian':
         return `<article class="librarian-result" ${identity}>${cover(data, 'librarian-result-cover')}${action(data, 'librarian-result-action-cell')}<div class="librarian-result-copy"><div class="librarian-result-meta"><span class="librarian-rank">${String(options.rank).padStart(2,'0')}</span><span>${escape(data.category)}</span><span>${escape(options.relevance)}% ${escape(options.scoreLabel)}</span></div>${status(data)}${title(data)}${keywords(data, 'librarian-result-keywords', options.keywords, options.keywordsLabel)}${description(data)}${action(data, 'button librarian-result-action')}</div></article>`;
       case 'context':
-        return `<aside class="workflow-context" ${identity}><img src="${escape(data.thumbnail)}" alt="">${title(data, 'h2', false)}${description(data)}${action(data, 'button button-quiet')}</aside>`;
+        return `<aside class="workflow-context" ${identity}><img data-book-cover data-book-id="${escape(data.id)}" ${data.thumbnail ? `src="${escape(data.thumbnail)}"` : ""} alt="">${title(data, 'h2', false)}${description(data)}${action(data, 'button button-quiet')}</aside>`;
       case 'compact-context':
         return `<aside class="workflow-context workflow-book-compact" ${identity}>${cover(data)}<div>${title(data, 'h2', false)}${options.showCategory ? `<p class="category">${escape(data.category)}</p>` : ''}${options.showDescription === false ? '' : options.expandDescription ? expandableDescription(data) : description(data)}</div></aside>`;
       default:

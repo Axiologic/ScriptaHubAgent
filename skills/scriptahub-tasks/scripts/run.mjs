@@ -1,3 +1,4 @@
+import {uploadBlockSize} from './callback-budget.mjs';
 import {withExecutionLock} from './anchored-files.mjs';
 import fs from 'node:fs/promises';
 import {runBatchOperation} from './task-batch.mjs';
@@ -137,7 +138,7 @@ export async function publishPackage(call, input, {hook=async()=>{}}={}) {
         try {
             let offset = 0;
             while (offset < entry.size) {
-                const buffer = Buffer.alloc(Math.min(65536,entry.size-offset));
+                const buffer = Buffer.alloc(uploadBlockSize('scriptahub_task_package_upload',{executionId:input.executionId,file:entry.path,offset},entry.size-offset));
                 const {bytesRead} = await handle.read(buffer,0,buffer.length,offset);
                 if (bytesRead !== buffer.length) throw new Error('Package changed during transfer');
                 const result = await call('scriptahub_task_package_upload',{executionId:input.executionId,file:entry.path,offset,data:buffer.toString('base64')});

@@ -1,3 +1,4 @@
+import {ProcessingInputCache,inputCacheBytes} from './processing-input-cache.mjs';
 import crypto from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
@@ -110,7 +111,7 @@ export class ProcessingService {
       if(old && processIdentity(old.pid)===old.identity) fail('Processing supervisor is already running',503);
       this.store.db.prepare('INSERT OR REPLACE INTO processing_supervisor(id,pid,identity) VALUES(1,?,?)').run(process.pid,this.owner);
     });} catch(error) {this.store.close();throw error;}
-    try {this.store.transaction(()=>{
+    try {this.cache=new ProcessingInputCache(dataDir,this.store.db);this.store.transaction(()=>{
       const rows=this.store.db.prepare('SELECT * FROM task_processing_jobs').all();
       const expected=new Set(rows.map(row=>path.basename(this.directory(row))));
       for(const item of fs.readdirSync(this.root,{withFileTypes:true})) {
@@ -131,9 +132,10 @@ export class ProcessingService {
       this.store.db.prepare("UPDATE task_processing_jobs SET state='interrupted',reason='Supervisor restarted',updated_at=? WHERE state IN ('starting','running','stopping')").run(time());
     });this.recoverReceipts();this.resumeCleanup();} catch(error) {
       try {this.store.db.prepare('DELETE FROM processing_supervisor WHERE id=1 AND pid=? AND identity=?').run(process.pid,this.owner);} finally {this.store.close();}
+      console.error('Processing storage reconciliation failed:',error.message);
       fail('Retained processing storage cannot be reconciled',503);
     }
-    this.cleanupTimer=setInterval(()=>{try{this.expireUploads();this.resumeCleanup();}catch{console.error('Processing cleanup retry failed');}},60000);this.cleanupTimer.unref();
+    this.cleanupTimer=setInterval(()=>{try{this.expireUploads();this.resumeCleanup();this.cache.prune();}catch{console.error('Processing cleanup retry failed');}},60000);this.cleanupTimer.unref();
     this.uploadMonitor=setInterval(()=>this.cancelStoppedUploads(),250);this.uploadMonitor.unref();
   }
   // Measures a retained job directory. A directory that stays unreadable after repair must not stop other jobs or startup:
@@ -219,7 +221,11 @@ export class ProcessingService {
     if(row.state!=='uploading'||this.tasks.execution(executor,input.executionId).state!=='running')fail('Job is not accepting uploads',409);
     if(this.available(this.root)<FLOOR+65536)fail('Processing storage unavailable',503);
     const directory=this.directory(row);
-    if(input.kind==='manifest' && input.path===undefined) {const nextOffset=uploadProcessingChunk(directory,'manifest',request.manifestSize,input.offset,input.data);this.store.db.prepare('UPDATE task_processing_jobs SET updated_at=? WHERE execution_id=? AND job_id=?').run(time(),input.executionId,input.jobId);return {nextOffset};}
+    if(input.kind==='manifest' && input.path===undefined) {
+      const nextOffset=uploadProcessingChunk(directory,'manifest',request.manifestSize,input.offset,input.data);
+      this.store.db.prepare('UPDATE task_processing_jobs SET updated_at=? WHERE execution_id=? AND job_id=?').run(time(),input.executionId,input.jobId);
+      return {nextOffset,...(nextOffset===request.manifestSize?{availableFiles:this.reuseInputs(row)}:{})};
+    }
     if(input.kind!=='file'||typeof input.path!=='string')fail('Invalid processing upload');
     const {entries,total}=this.manifest(row), entry=entries.find(value=>value.path===input.path);
     if(!entry)fail('Processing file not found',404);
@@ -228,12 +234,29 @@ export class ProcessingService {
       if(current.state!=='uploading')fail('Job is not accepting uploads',409);
       const reserved=total+request.manifestSize;
       const other=this.store.db.prepare('SELECT COALESCE(SUM(reserved_bytes),0) AS bytes FROM task_processing_jobs WHERE NOT (execution_id=? AND job_id=?)').get(input.executionId,input.jobId).bytes;
-      if(other+reserved>MAX_STORED || this.available(this.root)<FLOOR+Math.max(0,reserved-current.reserved_bytes))fail('Processing storage unavailable',503);
+      if(other+reserved+inputCacheBytes(this.store.db)>MAX_STORED || this.available(this.root)<FLOOR+Math.max(0,reserved-current.reserved_bytes))fail('Processing storage unavailable',503);
       this.store.db.prepare('UPDATE task_processing_jobs SET reserved_bytes=? WHERE execution_id=? AND job_id=?').run(reserved,input.executionId,input.jobId);
     });
     const nextOffset=uploadProcessingChunk(path.join(directory,'task'),entry.path,entry.size,input.offset,input.data);
     this.store.db.prepare('UPDATE task_processing_jobs SET updated_at=? WHERE execution_id=? AND job_id=?').run(time(),input.executionId,input.jobId);
     return {nextOffset};
+  }
+  reuseInputs(row) {
+    const {entries,total}=this.manifest(row),request=JSON.parse(row.request),root=path.join(this.directory(row),'task');
+    this.store.transaction(()=>{
+      const current=this.jobs.row(row.executor_agent_id,row.execution_id,row.job_id);
+      if(current.state!=='uploading')fail('Job is not accepting uploads',409);
+      const other=this.store.db.prepare('SELECT COALESCE(SUM(reserved_bytes),0) AS bytes FROM task_processing_jobs WHERE NOT (execution_id=? AND job_id=?)').get(row.execution_id,row.job_id).bytes;
+      this.cache.prune(Math.max(0,MAX_STORED-other-total-request.manifestSize));
+      if(other+total+request.manifestSize+inputCacheBytes(this.store.db)>MAX_STORED || this.available(this.root)<FLOOR+total)fail('Processing storage unavailable',503);
+      this.store.db.prepare('UPDATE task_processing_jobs SET reserved_bytes=? WHERE execution_id=? AND job_id=?').run(total+request.manifestSize,row.execution_id,row.job_id);
+    });
+    const available=[];
+    entries.forEach((entry,index)=>{
+      try {verifyProcessingFile(root,entry);available.push(index);return;}catch(error){if(error.code!=='ENOENT' && error.status!==409)throw error;}
+      if(this.cache.restore(row.executor_agent_id,row.execution_id,root,entry))available.push(index);
+    });
+    return available;
   }
   async start(executor,input) {
     required(input,['executionId','jobId']);
@@ -255,7 +278,7 @@ export class ProcessingService {
       const current=this.jobs.row(executor,input.executionId,input.jobId);
       if(current.state!=='uploading')fail('Processing job changed',409);
       const other=this.store.db.prepare('SELECT COALESCE(SUM(reserved_bytes),0) AS bytes FROM task_processing_jobs WHERE NOT (execution_id=? AND job_id=?)').get(input.executionId,input.jobId).bytes;
-      if(other+total+request.manifestSize>MAX_STORED)fail('Processing storage unavailable',503);
+      if(other+total+request.manifestSize+inputCacheBytes(this.store.db)>MAX_STORED)fail('Processing storage unavailable',503);
       this.store.db.prepare('UPDATE task_processing_jobs SET reserved_bytes=? WHERE execution_id=? AND job_id=?').run(total+request.manifestSize,input.executionId,input.jobId);
     });
     const execution=this.tasks.execution(executor,input.executionId);
@@ -293,7 +316,7 @@ export class ProcessingService {
     const reserved=new Map(this.store.db.prepare('SELECT execution_id,job_id,reserved_bytes FROM task_processing_jobs').all().map(row=>[path.basename(this.directory(row)),row.reserved_bytes]));
     let total=0; for(const entry of fs.readdirSync(this.root,{withFileTypes:true})) {
       if(entry.name.startsWith('job-')) {if(!entry.isDirectory()||entry.isSymbolicLink()) throw new Error('Invalid retained workspace');const directory=path.join(this.root,entry.name);total+=running.has(entry.name)?usedBytes(directory):this.measureRetained(directory,reserved.get(entry.name)??0);}
-    } return total;
+    } this.cache.checkRoot();return total+inputCacheBytes(this.store.db);
   }
   // Frees the worker slot when the normal terminal record cannot be written; the receipt is marked incomplete.
   fallbackTerminal(row,reason,code,states="('starting','running','stopping')",inventory=[]) {
@@ -400,6 +423,14 @@ export class ProcessingService {
       const current=this.jobs.row(executor,input.executionId,input.jobId);
       if(!terminalStates.has(current.state)||this.children.has(input.executionId+'\0'+input.jobId))fail('Processing job is not terminal',409);
       if(current.result_digest!==input.resultDigest)fail('Processing result digest does not match',409);
+      if(!current.cleanup_requested && current.state==='succeeded' && current.diagnostics_complete===1 && this.tasks.execution(executor,input.executionId).state==='running') {
+        try {
+          const files=JSON.parse(fs.readFileSync(path.join(this.directory(current),'result.json'),'utf8'));
+          const used=this.store.db.prepare('SELECT COALESCE(SUM(reserved_bytes),0) AS bytes FROM task_processing_jobs').get().bytes;
+          const budget=Math.max(0,Math.min(MAX_STORED-used,this.available(this.root)-FLOOR));
+          this.cache.retain(executor,input.executionId,path.join(this.directory(current),'task'),files,budget);
+        } catch {console.error('Processing input cache unavailable; later jobs will upload their inputs.');}
+      }
       if(!current.cleanup_requested)this.store.db.prepare('UPDATE task_processing_jobs SET cleanup_requested=1,updated_at=? WHERE execution_id=? AND job_id=?')
         .run(time(),input.executionId,input.jobId);
       return this.jobs.row(executor,input.executionId,input.jobId);

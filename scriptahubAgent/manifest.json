@@ -96,7 +96,16 @@
             "key": "identity",
             "targetAgentId": "agent:AchillesIDE/userPersistoAgent",
             "tools": [
-              "userpersisto_profile_get"
+              "userpersisto_profile_get",
+              "userpersisto_credits_balance",
+              "userpersisto_credits_ledger",
+              "userpersisto_credits_grant",
+              "userpersisto_user_list",
+              "userpersisto_billing_checkout_create",
+              "userpersisto_billing_checkout_verify",
+              "userpersisto_billing_credits_offer",
+              "userpersisto_billing_credit_price_get",
+              "userpersisto_billing_credit_price_set"
             ],
             "scopes": [
               "identity:read"

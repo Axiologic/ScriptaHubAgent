@@ -13,7 +13,7 @@ const identifier = value => typeof value === 'string' && /^[A-Za-z0-9][A-Za-z0-9
 const timestamp = () => new Date().toISOString();
 const taskKinds = new Map([
   ['manuscript', ['manuscript']], ['book-proposal', ['book-proposal']],
-  ['add-book', ['manuscript', 'book-proposal']], ['edit', ['edit']],
+  ['add-book', ['manuscript', 'book-proposal', 'fork']], ['edit', ['edit']],
 ]);
 export const executionTools = new Set(['scriptahub_task_batch_snapshot', 'scriptahub_task_batch_settle', 'scriptahub_task_batch_close', 'scriptahub_task_claim', 'scriptahub_task_status', 'scriptahub_task_document_read', 'scriptahub_task_finish', 'scriptahub_task_package_prepare', 'scriptahub_task_package_upload', 'scriptahub_task_publish', 'scriptahub_skills_preflight', 'scriptahub_skill_job_prepare', 'scriptahub_skill_job_upload', 'scriptahub_skill_job_start', 'scriptahub_skill_job_status', 'scriptahub_skill_job_result', 'scriptahub_skill_job_read', 'scriptahub_skill_job_cancel', 'scriptahub_skill_job_release']);
 
@@ -61,7 +61,7 @@ export class TaskExecution {
       let fileIndex = 0;
       const requests = this.store.editionRequests(row.task_id).map(request => {
         const input=JSON.parse(request.payload);
-        return {id:request.id,authorId:request.author,kind:request.kind,baseRevision:request.base_revision,language:input.metadata.language,
+        return {id:request.id,authorId:request.author,kind:input.metadata.kind,baseRevision:request.base_revision,language:input.metadata.language,
           values:Object.fromEntries(Object.entries(input.metadata.values).filter(([key])=>!['annotations','annotationDraftKey','baseRevision'].includes(key))),
           annotations:approvedAnnotations(input),
           files:input.files.map(file=>({index:fileIndex++,originalName:file.originalName,sha256:file.sha256}))};
@@ -76,7 +76,7 @@ export class TaskExecution {
     return { executionId: row.id, runId: row.run_id, taskId: row.task_id, state: row.state,
       bookId: book.id, ownerId: book.owner, authorId: change.author, type: `scriptahub.${row.kind}`,
       values: Object.fromEntries(Object.entries(payload.metadata.values).filter(([key]) => !['annotations','annotationDraftKey'].includes(key))), language: payload.metadata.language,
-      baseRevision:change.base_revision, annotations:approvedAnnotations(payload),
+      baseRevision:change.base_revision, ...(payload.source ? {source:payload.source} : {}), annotations:approvedAnnotations(payload),
       files: payload.files.map((file, index) => ({ index, originalName: file.originalName, sha256: file.sha256 })),
       result: row.result, error: row.error };
   }
@@ -87,22 +87,24 @@ export class TaskExecution {
   }
   snapshot(executor,{batchId,taskType}={}) {
     if(!identifier(batchId)||!taskKinds.has(taskType))fail('Invalid task batch');
-    const [firstKind, secondKind = firstKind] = taskKinds.get(taskType);
+    const [firstKind, secondKind = firstKind, thirdKind = firstKind] = taskKinds.get(taskType);
     return this.store.transaction(()=>{
       let batch=this.store.db.prepare('SELECT * FROM task_batches WHERE id=?').get(batchId);
       if(batch){if(batch.executor!==executor||batch.task_type!==taskType)fail('Task batch identity mismatch',409);}
       else {
         this.store.db.prepare('INSERT INTO task_batches(id,executor,task_type,created_at) VALUES(?,?,?,?)').run(batchId,executor,taskType,timestamp());
         const tasks=this.store.db.prepare(`SELECT t.id FROM tasks t JOIN changes c ON c.id=t.change_id
-          WHERE t.state='queued' AND c.state='accepted' AND t.kind IN (?,?) AND NOT EXISTS
-          (SELECT 1 FROM task_batch_items i WHERE i.task_id=t.id AND i.released=0) ORDER BY t.created_at,t.id`).all(firstKind,secondKind);
+          WHERE t.state='queued' AND c.state='accepted' AND t.kind IN (?,?,?)
+          AND NOT EXISTS (SELECT 1 FROM approval_cycles ac WHERE ac.task_id=t.id AND ac.phase<>'active') AND NOT EXISTS
+          (SELECT 1 FROM task_batch_items i WHERE i.task_id=t.id AND i.released=0) ORDER BY t.created_at,t.id`).all(firstKind,secondKind,thirdKind);
         const insert=this.store.db.prepare('INSERT INTO task_batch_items(batch_id,task_id,position) VALUES(?,?,?)');
         tasks.forEach((task,index)=>insert.run(batchId,task.id,index));
         batch=this.batch(executor,batchId);
       }
-      const items = this.store.db.prepare(`SELECT i.task_id AS taskId,i.released,t.state,e.run_id AS runId
+      const items = this.store.db.prepare(`SELECT i.task_id AS taskId,i.released,t.state,e.run_id AS runId,e.id AS executionId,
+        CASE WHEN e.finished_at IS NULL AND (p.retry_at IS NOT NULL OR p.commit_id IS NOT NULL OR p.receipt IS NOT NULL) THEN 1 ELSE 0 END AS publicationPending
         FROM task_batch_items i JOIN tasks t ON t.id=i.task_id LEFT JOIN task_executions e ON e.task_id=t.id
-        WHERE i.batch_id=? ORDER BY i.position`).all(batchId);
+        LEFT JOIN task_publications p ON p.execution_id=e.id WHERE i.batch_id=? ORDER BY i.position`).all(batchId);
       return {batchId,taskType,closed:Boolean(batch.closed_at),taskIds:items.map(item=>item.taskId),items};
     });
   }
@@ -133,13 +135,13 @@ export class TaskExecution {
   }
   claim(executor, { runId, taskId, taskType = 'manuscript', batchId } = {}) {
     if (!taskKinds.has(taskType)) fail('Invalid task type');
-    const [firstKind, secondKind = firstKind] = taskKinds.get(taskType);
+    const [firstKind, secondKind = firstKind, thirdKind = firstKind] = taskKinds.get(taskType);
     if (!identifier(runId) || (taskId !== undefined && !identifier(taskId))) fail('Invalid run or task ID');
     return this.store.transaction(() => {
       if(batchId!==undefined){
         const batch=this.batch(executor,batchId);
         if(batch.closed_at||batch.task_type!==taskType||!taskId||!this.store.db.prepare('SELECT 1 FROM task_batch_items WHERE batch_id=? AND task_id=? AND released=0').get(batchId,taskId))fail('Task is not reserved for this batch',409);
-        const first = this.store.db.prepare('SELECT task_id FROM task_batch_items WHERE batch_id=? AND released=0 ORDER BY position LIMIT 1').get(batchId);
+        const first = this.store.db.prepare(`SELECT task_id FROM task_batch_items WHERE batch_id=? AND released=0 ORDER BY position LIMIT 1`).get(batchId);
         if (first?.task_id !== taskId) fail('Finish the preceding task before claiming the next batch item',409);
       }
       const existing = this.store.db.prepare('SELECT id,task_id FROM task_executions WHERE executor_agent_id=? AND run_id=?').get(executor, runId);
@@ -150,8 +152,9 @@ export class TaskExecution {
         return {task};
       }
       const task = this.store.db.prepare(`SELECT t.* FROM tasks t JOIN changes c ON c.id=t.change_id JOIN books b ON b.id=c.book_id
-        WHERE t.state='queued' AND c.state='accepted' AND t.kind IN (?,?) AND (? IS NULL OR t.id=?) AND NOT EXISTS (SELECT 1 FROM task_batch_items i WHERE i.task_id=t.id AND i.released=0 AND (? IS NULL OR i.batch_id<>?))
-        ORDER BY t.created_at,t.id LIMIT 1`).get(firstKind, secondKind, taskId ?? null, taskId ?? null, batchId ?? null, batchId ?? null);
+        WHERE t.state='queued' AND c.state='accepted' AND t.kind IN (?,?,?)
+          AND NOT EXISTS (SELECT 1 FROM approval_cycles ac WHERE ac.task_id=t.id AND ac.phase<>'active') AND (? IS NULL OR t.id=?) AND NOT EXISTS (SELECT 1 FROM task_batch_items i WHERE i.task_id=t.id AND i.released=0 AND (? IS NULL OR i.batch_id<>?))
+        ORDER BY t.created_at,t.id LIMIT 1`).get(firstKind, secondKind, thirdKind, taskId ?? null, taskId ?? null, batchId ?? null, batchId ?? null);
       if (!task) return { task: null };
       const id = crypto.randomUUID(), time = timestamp();
       const changed = this.store.db.prepare("UPDATE tasks SET state='running',updated_at=? WHERE id=? AND state='queued'").run(time, task.id);
@@ -176,7 +179,9 @@ export class TaskExecution {
   }
   status(executor, { executionId } = {}) {
     const row = this.execution(executor, executionId);
-    return { executionId: row.id, taskId: row.task_id, state: row.state, result: row.result, taskError: row.error };
+    const pending = !row.finished_at && this.store.db.prepare('SELECT 1 AS pending FROM task_publications WHERE execution_id=? AND (retry_at IS NOT NULL OR commit_id IS NOT NULL OR receipt IS NOT NULL)').get(executionId)?.pending;
+    return { executionId: row.id, taskId: row.task_id, state: row.state, result: row.result, taskError: row.error,
+      ...(pending ? { publicationPending: true } : {}) };
   }
   async document(executor, { executionId, index, offset = 0, length = 196608 } = {}) {
     const row = this.execution(executor, executionId);
@@ -193,7 +198,7 @@ export class TaskExecution {
     if (!source) fail('Document not found',404);
     const {change,payload,file} = source;
     if (!file || !/^[0-9a-f-]{36}$/.test(change.id) || typeof file.name !== 'string'
-      || file.name !== path.basename(file.name) || !/^[0-9a-f-]{36}\.(pdf|doc|docx)$/.test(file.name)) fail('Document not found', 404);
+      || file.name !== path.basename(file.name) || !/^[0-9a-f-]{36}\.(pdf|doc|docx|html)$/.test(file.name)) fail('Document not found', 404);
     const root = await fs.realpath(this.dataDir);
     const folder = path.join(root, 'inbox', change.id);
     // Reject symlinked directories/files before opening private input.
@@ -205,6 +210,7 @@ export class TaskExecution {
     if (!(await fs.lstat(recordPath)).isFile()) fail('Invalid submission record');
     const record = verifyRecord(JSON.parse(await fs.readFile(recordPath, 'utf8')));
     if (record.id !== change.id || record.owner !== change.author || JSON.stringify(record.metadata) !== JSON.stringify(payload.metadata)
+      || JSON.stringify(record.source) !== JSON.stringify(payload.source)
       || JSON.stringify(record.files) !== JSON.stringify(payload.files)) fail('Submission integrity check failed');
     const filename = path.join(folder, file.name);
     const handle = await fs.open(filename, constants.O_RDONLY | constants.O_NOFOLLOW);
@@ -223,7 +229,7 @@ export class TaskExecution {
     return { originalName: file.originalName, sha256: file.sha256, size: bytes.length,
       offset, nextOffset: offset + chunk.length, eof: offset + chunk.length === bytes.length, encoding: 'base64', data: chunk.toString('base64') };
   }
-  finish(executor, { executionId, state, result = '', error = '' } = {}, { publication = false } = {}) {
+  finish(executor, { executionId, state, result = '', error = '' } = {}, { publication = false, publicationOwner } = {}) {
     if (!['completed','failed','cancelled'].includes(state) || typeof result !== 'string' || result.length > 32768
       || typeof error !== 'string' || error.length > 16000 || (state === 'failed' && !error.trim())
       || (state === 'completed' && (!result.trim() || error))) fail('Invalid execution result');
@@ -235,16 +241,24 @@ export class TaskExecution {
         return this.status(executor, { executionId });
       }
       requireNoActiveProcessing(this.store, executionId);
-      const packageRow = this.store.db.prepare('SELECT commit_id,receipt,lease_until FROM task_publications WHERE execution_id=?').get(executionId);
+      const packageRow = this.store.db.prepare('SELECT commit_id,push_state,receipt,lease_until,lease_owner,retry_at FROM task_publications WHERE execution_id=?').get(executionId);
       if (state === 'completed' && (!publication || !packageRow?.receipt)) fail('Only ScriptaHub can complete a confirmed publication', 409);
-      if (state !== 'completed' && packageRow && (packageRow.receipt || packageRow.commit_id || packageRow.lease_until > Date.now())) fail('Publication must be reconciled before finishing the task', 409);
+      const ownsPublication = publicationOwner && packageRow?.lease_owner === publicationOwner;
+      if (state !== 'completed' && packageRow && (packageRow.receipt
+        || (packageRow.commit_id && packageRow.push_state !== 'prepared')
+        || (!ownsPublication && (packageRow.retry_at !== null || packageRow.lease_until > Date.now())))) {
+        fail('Publication must be reconciled before finishing the task', 409);
+      }
       if (row.state === 'stop_requested' && state !== 'cancelled' && !publication) fail('Task has a pending stop request', 409);
       if (!['running','stop_requested'].includes(row.state) || (state === 'cancelled' && row.state !== 'stop_requested')) fail('Invalid task transition', 409);
       const time = timestamp();
       this.store.db.prepare('UPDATE tasks SET state=?,result=?,error=?,updated_at=? WHERE id=?').run(state,result,error || null,time,row.task_id);
       this.store.db.prepare('UPDATE task_executions SET finished_at=?,finish_digest=? WHERE id=?').run(time,digest,executionId);
       const change = this.store.db.prepare('SELECT book_id FROM changes WHERE id=?').get(row.change_id);
-      if (state === 'completed') this.store.db.prepare('UPDATE books SET revision=revision+1 WHERE id=?').run(change.book_id);
+      if (state === 'completed') {
+        this.store.db.prepare('UPDATE books SET revision=revision+1 WHERE id=?').run(change.book_id);
+        this.store.cycles.rewardPublishedEdition(row.task_id,change.book_id,this.store.book(change.book_id).revision);
+      }
       this.store.event(executor, `task.${state}`, change.book_id, row.change_id, row.task_id);
       return this.status(executor, { executionId });
     });

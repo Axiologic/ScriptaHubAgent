@@ -181,3 +181,190 @@ test('absence and transient errors cross the real tool wrapper and supervisor co
  assert.equal(await run(),1);
  assert.ok(service.jobs.row(agent,'e','job').released_at);await assert.rejects(fs.stat(pending),{code:'ENOENT'});
 });
+
+
+test('large remote uploads fit the callback envelope and resume the same pending job after interruption',async t=>{
+ const f=await fixture(t),original=crypto.randomBytes(150000);
+ await fs.writeFile(path.join(f.task,'input'),original);
+ let interrupt=true;const jobs=new Set(),accepted=new Map();
+ const call=async(tool,args)=>{
+   assert.ok(Buffer.byteLength(JSON.stringify({agent:'scriptahubAgent',tool,payload:args}))<=65536,'request including base64 and routing must fit 64 KiB');
+   if(tool.endsWith('_prepare'))jobs.add(args.jobId);
+   if(tool.endsWith('_upload')&&args.path==='input'){
+     if(interrupt&&args.offset>0){interrupt=false;throw Error('Lost callback');}
+     const bytes=Buffer.from(args.data,'base64');
+     if(accepted.has(args.offset))assert.deepEqual(bytes,accepted.get(args.offset));
+     accepted.set(args.offset,bytes);
+   }
+   return f.call(tool,args);
+ };
+ const run=()=>runRemoteSkill({executionId:'e',taskDirectory:'tasks/a',skill:'pdf2html',args:['prepare']},call,{root:f.root,sourceRoot:f.sources,stdout:f.sink,stderr:f.sink});
+ await assert.rejects(run(),/Lost callback/);
+ const pending=path.join(f.task,'run-state/remote-processing/pending.json');
+ assert.equal(JSON.parse(await fs.readFile(pending,'utf8')).phase,'uploading');
+ assert.equal(await run(),0);
+ assert.equal(jobs.size,1,'resume must keep the same job identity');
+ assert.deepEqual(Buffer.concat([...accepted].sort((a,b)=>a[0]-b[0]).map(entry=>entry[1])),original);
+ await assert.rejects(fs.stat(pending),{code:'ENOENT'});
+});
+
+test('successful jobs reuse unchanged task files without downloading or replacing their inodes',async t=>{
+ const f=await fixture(t),stable=crypto.randomBytes(150000);
+ await fs.writeFile(path.join(f.task,'book.pdf'),stable);
+ const before=await fs.stat(path.join(f.task,'book.pdf')),reads=[];
+ const unchanged={path:'book.pdf',size:stable.length,sha256:hash(stable)};
+ const call=async(tool,arg)=>{
+   if(tool.endsWith('_result'))return {state:'succeeded',resultDigest:'b'.repeat(64),diagnosticsComplete:true,files:[unchanged,{path:'input',size:5,sha256:hash('after')}],nextCursor:null};
+   if(tool.endsWith('_read')&&arg.kind==='file'){reads.push(arg.path);assert.notEqual(arg.path,'book.pdf','unchanged bytes must not cross the callback');}
+   return f.call(tool,arg);
+ };
+ assert.equal(await runRemoteSkill({executionId:'e',taskDirectory:'tasks/a',skill:'pdf2html',args:['prepare']},call,{root:f.root,sourceRoot:f.sources,stdout:f.sink,stderr:f.sink}),0);
+ assert.deepEqual(reads,['input']);
+ assert.equal((await fs.stat(path.join(f.task,'book.pdf'))).ino,before.ino);
+ assert.deepEqual(await fs.readFile(path.join(f.task,'book.pdf')),stable);
+ assert.equal(await fs.readFile(path.join(f.task,'input'),'utf8'),'after');
+ const dir=path.join(remoteDir(f),await jobName(f)),receipt=JSON.parse(await fs.readFile(path.join(dir,'result.json'),'utf8'));
+ assert.deepEqual(receipt.reusedFiles,['book.pdf']);
+ assert.equal(receipt.files.length,2);
+ await assert.rejects(fs.stat(path.join(dir,hash('book.pdf'))),{code:'ENOENT'});
+});
+
+test('an interrupted result download retries the same job and still skips verified unchanged files',async t=>{
+ const f=await fixture(t),stable=Buffer.from('unchanged book');
+ await fs.writeFile(path.join(f.task,'book.html'),stable);
+ const jobs=new Set();let lose=true,unchangedReads=0;
+ const call=async(tool,arg)=>{
+   if(tool.endsWith('_prepare'))jobs.add(arg.jobId);
+   if(tool.endsWith('_result'))return {state:'succeeded',resultDigest:'b'.repeat(64),diagnosticsComplete:true,files:[{path:'book.html',size:stable.length,sha256:hash(stable)},{path:'input',size:5,sha256:hash('after')}],nextCursor:null};
+   if(tool.endsWith('_read')&&arg.kind==='file'){
+     if(arg.path==='book.html')unchangedReads++;
+     if(arg.path==='input'&&lose){lose=false;throw Error('Download interrupted');}
+   }
+   return f.call(tool,arg);
+ };
+ const run=()=>runRemoteSkill({executionId:'e',taskDirectory:'tasks/a',skill:'pdf2html',args:['prepare']},call,{root:f.root,sourceRoot:f.sources,stdout:f.sink,stderr:f.sink});
+ await assert.rejects(run(),/Download interrupted/);
+ assert.ok(await fs.stat(path.join(remoteDir(f),'pending.json')));
+ assert.equal(await run(),0);assert.equal(jobs.size,1);assert.equal(unchangedReads,0);
+});
+
+for(const mutation of ['edit','delete','symlink'])test('reused results refuse a local '+mutation+' before merge and retain remote evidence',async t=>{
+ const f=await fixture(t),name='book.html',stable='original book';
+ await fs.writeFile(path.join(f.task,name),stable);
+ let released=false,changed=false;
+ const call=async(tool,arg)=>{
+   if(tool.endsWith('_release'))released=true;
+   if(tool.endsWith('_result'))return {state:'succeeded',resultDigest:'b'.repeat(64),diagnosticsComplete:true,files:[{path:name,size:stable.length,sha256:hash(stable)},{path:'input',size:5,sha256:hash('after')}],nextCursor:null};
+   return f.call(tool,arg);
+ };
+ const hook=async stage=>{
+   if(stage!=='reused-output'||changed)return;changed=true;
+   if(mutation==='edit')await fs.writeFile(path.join(f.task,name),'editor changes');
+   else {await fs.unlink(path.join(f.task,name));if(mutation==='symlink'){await fs.writeFile(path.join(f.root,'outside'),'private');await fs.symlink(path.join(f.root,'outside'),path.join(f.task,name));}}
+ };
+ await assert.rejects(runRemoteSkill({executionId:'e',taskDirectory:'tasks/a',skill:'pdf2html',args:['prepare']},call,{root:f.root,sourceRoot:f.sources,stdout:f.sink,stderr:f.sink,hook}),/conflicts|ELOOP|symbolic link/);
+ assert.equal(released,false);assert.ok(await fs.stat(path.join(remoteDir(f),'pending.json')));
+ if(mutation==='edit')assert.equal(await fs.readFile(path.join(f.task,name),'utf8'),'editor changes');
+ if(mutation==='symlink')assert.equal(await fs.readFile(path.join(f.root,'outside'),'utf8'),'private');
+});
+
+test('server-confirmed inputs skip upload but are still checked against the immutable local snapshot',async t=>{
+ const f=await fixture(t),book=crypto.randomBytes(150000);await fs.writeFile(path.join(f.task,'book.pdf'),book);
+ let index,bookUploads=0;
+ const call=async(tool,arg)=>{
+   if(tool.endsWith('_upload')&&arg.kind==='manifest'){
+     const entries=JSON.parse(Buffer.from(arg.data,'base64').toString());index=entries.findIndex(e=>e.path==='book.pdf');
+     return {nextOffset:arg.offset+Buffer.from(arg.data,'base64').length,availableFiles:[index]};
+   }
+   if(tool.endsWith('_upload')&&arg.path==='book.pdf')bookUploads++;
+   return f.call(tool,arg);
+ };
+ const run=hook=>runRemoteSkill({executionId:'e',taskDirectory:'tasks/a',skill:'pdf2html',args:['prepare']},call,{root:f.root,sourceRoot:f.sources,stdout:f.sink,stderr:f.sink,hook});
+ const hook=async(stage,name)=>{if(stage==='before-upload'&&name==='book.pdf')await fs.writeFile(path.join(f.task,'book.pdf'),Buffer.alloc(book.length));};
+ await assert.rejects(run(hook),/Workspace changed during upload/);assert.equal(bookUploads,0);
+ await fs.writeFile(path.join(f.task,'book.pdf'),book);
+ assert.equal(await run(),0);assert.equal(bookUploads,0);
+});
+
+test('runtime doctor with no arguments sends no book files and preserves the local task',async t=>{
+ const f=await fixture(t),book=Buffer.from('book content');await fs.writeFile(path.join(f.task,'book.html'),book);
+ let uploads=0;
+ const call=async(tool,arg)=>{
+   if(tool.endsWith('_upload')&&arg.kind==='file')uploads++;
+   if(tool.endsWith('_result'))return {state:'succeeded',resultDigest:'b'.repeat(64),diagnosticsComplete:true,files:[],nextCursor:null};
+   return f.call(tool,arg);
+ };
+ assert.equal(await runRemoteSkill({executionId:'e',taskDirectory:'tasks/a',skill:'pdf2html',args:['doctor']},call,{root:f.root,sourceRoot:f.sources,stdout:f.sink,stderr:f.sink}),0);
+ assert.equal(uploads,0);
+ assert.deepEqual(await fs.readFile(path.join(f.task,'book.html')),book);
+ assert.equal(await fs.readFile(path.join(f.task,'input'),'utf8'),'before');
+});
+
+test('workflow handoffs may change during a skill job without becoming inputs or being deleted by merge',async t=>{
+ const f=await fixture(t),handoff=path.join(f.task,'run-state/handoff.json');await fs.writeFile(handoff,'original coordinator state');
+ const call=async(tool,arg)=>{
+   if(tool.endsWith('_upload')&&arg.kind==='manifest')assert.equal(JSON.parse(Buffer.from(arg.data,'base64')).some(e=>['run-state/handoff.json','run-state/claimed.json'].includes(e.path)),false);
+   if(tool.endsWith('_upload')&&arg.path==='run-state/handoff.json')assert.fail('handoff must not be uploaded');
+   return f.call(tool,arg);
+ };
+ const hook=async(stage,name)=>{if(stage==='before-upload'&&name==='input')await fs.writeFile(handoff,'new pending-job coordinator state');};
+ assert.equal(await runRemoteSkill({executionId:'e',taskDirectory:'tasks/a',skill:'pdf2html',args:['prepare']},call,{root:f.root,sourceRoot:f.sources,stdout:f.sink,stderr:f.sink,hook}),0);
+ assert.equal(await fs.readFile(handoff,'utf8'),'new pending-job coordinator state');
+});
+
+test('processing never uploads other package books and sparse output cannot delete their local files',async t=>{
+ const f=await fixture(t),root=path.join(f.task,'package/books');
+ await fs.mkdir(path.join(root,'current'),{recursive:true});await fs.mkdir(path.join(root,'other'));
+ await fs.writeFile(path.join(root,'current','book.json'),JSON.stringify({id:'book-one'}));
+ await fs.writeFile(path.join(root,'current','full.html'),'<p>Current book</p>');
+ await fs.writeFile(path.join(root,'other','book.json'),JSON.stringify({id:'book-other'}));
+ await fs.writeFile(path.join(root,'other','full.html'),'OTHER PRIVATE CONTENT');
+ await fs.writeFile(path.join(f.task,'package/collection.json'),'catalogue');
+ const claimed=JSON.parse(await fs.readFile(path.join(f.task,'run-state/claimed.json')));claimed.task.bookId='book-one';await fs.writeFile(path.join(f.task,'run-state/claimed.json'),JSON.stringify(claimed));
+ let files=[];const call=async(tool,arg)=>{
+   if(tool.endsWith('_upload')&&arg.kind==='manifest')files=JSON.parse(Buffer.from(arg.data,'base64'));
+   if(tool.endsWith('_upload')&&arg.kind==='file')assert.ok(!arg.path.startsWith('package/books/other')&&arg.path!=='package/collection.json');
+   if(tool.endsWith('_result'))return {state:'succeeded',resultDigest:'b'.repeat(64),diagnosticsComplete:true,files,nextCursor:null};
+   if(tool.endsWith('_read')&&arg.kind==='file')assert.fail('unchanged scoped inputs need no download');
+   return f.call(tool,arg);
+ };
+ assert.equal(await runRemoteSkill({executionId:'e',taskDirectory:'tasks/a',skill:'pdf2html',args:['check','tasks/a/package/books/current/full.html']},call,{root:f.root,sourceRoot:f.sources,stdout:f.sink,stderr:f.sink}),0);
+ assert.ok(files.some(e=>e.path==='package/books/current/full.html'));
+ assert.equal(files.some(e=>e.path.startsWith('package/books/other')),false);
+ assert.equal(await fs.readFile(path.join(root,'other','full.html'),'utf8'),'OTHER PRIVATE CONTENT');
+ assert.equal(await fs.readFile(path.join(f.task,'package/collection.json'),'utf8'),'catalogue');
+});
+
+test('checkouts outside the publication package cannot become processing inputs',async t=>{
+ const f=await fixture(t);await fs.mkdir(path.join(f.task,'sources/checkout/.git'),{recursive:true});
+ await assert.rejects(runRemoteSkill({executionId:'e',taskDirectory:'tasks/a',skill:'pdf2html',args:['prepare']},()=>assert.fail('No service call expected'),{root:f.root,sourceRoot:f.sources,stdout:f.sink,stderr:f.sink}),/Repository checkouts are not skill inputs/);
+});
+
+test('invalid automatic validation source overrides are rejected before job admission',async t=>{
+ const f=await fixture(t);
+ await assert.rejects(runRemoteSkill({executionId:'e',taskDirectory:'tasks/a',skill:'validate-book',args:['prepare','tasks/a/sources/book','--pdf','tasks/a/sources/book.pdf','--english','tasks/a/sources/book.html','--auto-correct']},()=>assert.fail('No service call expected'),{root:f.root,sourceRoot:f.sources,stdout:f.sink,stderr:f.sink}),/overrides are audit-only/);
+});
+
+test('a pending snapshot outside the current scope is rejected without migration or service calls',async t=>{
+ const f=await fixture(t);
+ const command={executionId:'e',taskDirectory:'tasks/a',virtualCwd:await fs.realpath(f.root),skill:'pdf2html',args:['prepare'],input:''};
+ const control=path.join(f.task,'run-state/remote-processing');await fs.mkdir(control);
+ for(const name of ['package/books/other/full.html','run-state/handoff.json']){
+  const files=[{path:name,size:3,sha256:hash('old')}],manifest=Buffer.from(JSON.stringify(files));
+  const pending=JSON.stringify({commandHash:hash(JSON.stringify(command)),command,jobId:'pending-job',phase:'uploading',files,sourceDigest:'a'.repeat(64),manifest:manifest.toString('base64')});
+  await fs.writeFile(path.join(control,'pending.json'),pending);
+  await assert.rejects(runRemoteSkill({executionId:'e',taskDirectory:'tasks/a',skill:'pdf2html',args:['prepare']},()=>assert.fail('No service call or automatic migration expected'),{root:f.root,sourceRoot:f.sources,stdout:f.sink,stderr:f.sink}),/outside the current input scope/);
+  assert.equal(await fs.readFile(path.join(control,'pending.json'),'utf8'),pending);
+ }
+});
+
+test('out-of-scope result entries are rejected even when unchanged',async t=>{
+ const f=await fixture(t);
+ const outside={path:'package/books/other/full.html',size:3,sha256:hash('old')};
+ const call=async(tool,arg)=>{
+  if(tool.endsWith('_result'))return {state:'succeeded',resultDigest:'b'.repeat(64),diagnosticsComplete:true,files:[outside],nextCursor:null};
+  if(tool.endsWith('_release'))assert.fail('Invalid outputs must not be released');
+  return f.call(tool,arg);
+ };
+ await assert.rejects(runRemoteSkill({executionId:'e',taskDirectory:'tasks/a',skill:'pdf2html',args:['prepare']},call,{root:f.root,sourceRoot:f.sources,stdout:f.sink,stderr:f.sink}),/out-of-scope book resource/);
+});

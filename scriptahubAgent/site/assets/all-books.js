@@ -93,8 +93,10 @@
       sections.innerHTML = activeShelves.length ? activeShelves.map(({shelf, books}) => `<section class="library-section" id="${shelf[0]}"><h2>${escape(label(shelf, language))}</h2><div class="library-list">${books.map(book => {
         const path = book.editions?.[language]?.book || book.editions?.en?.book;
         const href = new URL(`../${path}?lang=${language}`, location.href).href;
-        const thumbnail = new URL(`../${local(book.thumbnailUrl, language)}`, location.href).href;
-        return `<article class="library-item"><a href="${escape(href)}" tabindex="-1" aria-hidden="true"><img src="${escape(thumbnail)}" alt="" loading="lazy"></a><div><h3><a href="${escape(href)}">${escape(local(book.title, language))}</a></h3><p>${escape(local(book.subtitle, language) || book.category)}</p></div></article>`;
+        const artwork = local(book.thumbnailUrl, language) || local(book.coverUrl, language);
+        let thumbnail = "";
+        try { if (artwork) thumbnail = new URL(`../${artwork}`, location.href).href; } catch { /* Invalid artwork uses the shared cover fallback. */ }
+        return `<article class="library-item"><a href="${escape(href)}" tabindex="-1" aria-hidden="true"><img data-book-cover data-book-id="${escape(book.id)}" ${thumbnail ? `src="${escape(thumbnail)}"` : ""} alt="" loading="lazy"></a><div><h3><a href="${escape(href)}">${escape(local(book.title, language))}</a></h3><p>${escape(local(book.subtitle, language) || book.category)}</p></div></article>`;
       }).join("")}</div></section>`).join("") : `<p class="library-empty">${escape(words[5])}</p>`;
     };
     input.addEventListener("input", draw);

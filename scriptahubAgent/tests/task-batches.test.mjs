@@ -95,6 +95,11 @@ test('the flow helper drains its fixed batch sequentially, preserving claims, ev
   assert.deepEqual(await run('batch-next'),first,'a lost response or repeated selection must recover the same execution');
   assert.throws(()=>f.service.claim(executor,{batchId:batch.batchId,runId:'out-of-order',taskType:'add-book',taskId:batch.taskIds[1]}),/preceding task/);
   await fs.writeFile(path.join(f.root,first.taskDirectory,'evidence.txt'),'original evidence');
+  f.store.db.prepare('INSERT INTO task_publications(execution_id,manifest,digest,retry_at) VALUES(?,?,?,?)').run(first.task.executionId,'{}','digest',0);
+  assert.deepEqual(await run('batch-next'),{batchId:batch.batchId,publicationPending:true,executionId:first.task.executionId,taskDirectory:first.taskDirectory});
+  assert.equal((await run('batch-status')).items.find(item=>item.taskId===batch.taskIds[1]).state,'queued');
+  f.store.db.prepare('UPDATE task_publications SET retry_at=NULL WHERE execution_id=?').run(first.task.executionId);
+
   f.service.finish(executor,{executionId:first.task.executionId,state:'failed',error:'Conversion failed'});
   const second=await run('batch-next');
   assert.equal(second.task.taskId,batch.taskIds[1]);

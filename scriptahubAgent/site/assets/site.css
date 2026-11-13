@@ -475,7 +475,7 @@ button, select { cursor: pointer; }
 .publication-status { margin: 0; padding: 12px var(--tower-gutter, 24px); background: var(--field); color: var(--content); border-left: 3px solid var(--green); font-weight: 600; }
 .book-card .publication-status { padding: 6px 10px; font-size: .8rem; }
 @media (max-width: 680px) {
-  .book-actions [data-reading-format] { white-space: normal !important; height: auto !important; min-height: 22px; padding: 3px !important; }
+  .book-actions [data-reading-format] { white-space: normal; }
 }
 .button { display: inline-flex; box-sizing: border-box; padding: 11px 14px; align-items: center; justify-content: center; border: 1px solid var(--green); border-radius: 6px; background: var(--button-bg); color: var(--button-ink); font-size: var(--action-font-size); font-weight: 750; line-height: 1.2; text-align: center; text-decoration: none; }
 .button:hover { background: var(--button-hover); }
@@ -763,15 +763,7 @@ button, select { cursor: pointer; }
   :root[data-theme] .site-header, :root:not([data-theme]) .site-header { margin-inline: calc(-1 * var(--tower-gutter)); padding: 8px var(--tower-gutter); }
 }
 
-:root button:not(.header-unified button),
-:root .button,
-:root .header-create:not(.header-unified .header-create),
-:root .site-scale:not(.header-unified .site-scale),
-:root .theme-switcher:not(.header-unified .theme-switcher),
-:root .book-card-actions a,
-:root .featured-book-actions a,
-:root .edition-downloads a,
-:root .librarian-feedback-link { border-radius: 3px !important; }
+
 
 :root:not(:is([data-theme="dark"],[data-theme="dark-orange"])) .librarian-home .mission-librarian button,
 :root:not(:is([data-theme="dark"],[data-theme="dark-orange"])) .librarian-home .mission-librarian .librarian-dictate { border: 1px solid rgba(0, 128, 105, .24); background: #e7eaed; color: #008069; }
@@ -1056,7 +1048,7 @@ html[lang] [data-workflow-page="create"] .workflow-hero h1 {
 }
 .create-title-field { grid-area: title; }
 .create-instructions-field { grid-area: instructions; }
-[data-workflow-page="create"] .create-form-grid { grid-template-areas: "title files" "description files" "instructions instructions"; }
+[data-workflow-page="create"] .create-form-grid { grid-template-areas: "title files" "description files" "instructions instructions" "cover cover"; }
 .create-description-field { grid-area: description; }
 .create-description-field textarea { min-height: 144px; }
 .create-instructions { min-width: 0; margin: 0; padding: 20px 0 0; border: 0; }
@@ -1146,7 +1138,7 @@ html[lang] [data-workflow-page="create"] .workflow-hero h1 {
 .create-workflow-form .workflow-status:empty { display: none; }
 @media (max-width: 900px) {
   .create-form-grid { grid-template-columns: minmax(0, 1fr); grid-template-areas: "title" "instructions" "files"; }
-  [data-workflow-page="create"] .create-form-grid { grid-template-areas: "title" "description" "instructions" "files"; }
+  [data-workflow-page="create"] .create-form-grid { grid-template-areas: "title" "description" "instructions" "cover" "files"; }
   .form-file-picker { min-height: 0; }
 }
 @media (max-width: 590px) {
@@ -1775,3 +1767,47 @@ body[data-book-workflow] .animation-contribution>.workflow-hero{padding-bottom:8
 @media (max-width: 600px) { :root .site-toast:popover-open { grid-template-columns: 22px minmax(0, 1fr) 44px; } :root .site-toast-close { width: 44px; height: 44px; min-height: 44px; } }
 :root .site-toast[data-state="error"] { border-inline-start-color: var(--ink); }
 :root .site-toast[data-state="error"] > svg { color: var(--ink); }
+
+/* Book editing follows Bizanso's project rows and compact selection preview. */
+[data-workflow-page="create"] .create-workflow-form.workflow-form { padding: 0; border: 0; border-radius: 0; background: transparent; }
+[data-workflow-page="create"] .create-form-grid {
+  grid-template-columns: minmax(0, 1fr);
+  grid-template-areas: "title" "description" "instructions" "cover" "files";
+  gap: 0;
+}
+[data-workflow-page="create"] .create-form-grid > :is(.form-field, .form-file-field),
+[data-workflow-page="create"] .instruction-picker {
+  margin: 0;
+  padding: 16px 0;
+  border-bottom: 1px solid var(--line);
+}
+[data-workflow-page="create"] .create-instructions { padding: 16px 0 0; }
+[data-workflow-page="create"] .create-instructions legend { font-size: var(--action-font-size); font-weight: 650; }
+[data-workflow-page="create"] .create-instructions-grid { grid-template-columns: minmax(0, 1fr); gap: 0; }
+[data-workflow-page="create"] .instruction-caption,
+[data-workflow-page="create"] .form-field > span,
+[data-workflow-page="create"] .form-file-label { font-size: var(--action-font-size); font-weight: 550; color: var(--ink); }
+[data-workflow-page="create"] .form-file-picker { padding: 12px; gap: 12px; border-style: solid; border-color: var(--line); border-radius: var(--control-radius); background: var(--field); }
+[data-workflow-page="create"] .form-file-hint { font-size: var(--action-font-size); line-height: 1.5; }
+.instruction-preview { display: flex; align-items: center; gap: 8px; min-width: 0; width: 100%; }
+.instruction-preview[hidden] { display: none; }
+.instruction-preview .instruction-pills { flex: 1 1 0; min-width: 0; flex-wrap: nowrap; overflow: hidden; gap: 6px; }
+.instruction-preview .instruction-pills li[hidden] { display: none; }
+.instruction-selection-count { margin: 4px 0 0; color: var(--muted); font-size: var(--action-font-size); font-weight: 400; }
+.instruction-dialog { width: min(620px, calc(100% - 32px)); height: min(760px, calc(100dvh - 32px)); border-radius: 16px; overflow: hidden; }
+.instruction-dialog[open] { display: grid; grid-template-rows: auto minmax(0, 1fr) auto; }
+.instruction-dialog-body { min-height: 0; overflow-y: auto; overscroll-behavior: contain; }
+.instruction-dialog header, .instruction-dialog footer { padding: 16px 20px; }
+.instruction-dialog footer { border-top: 1px solid var(--line); }
+.instruction-dialog header > div { min-width: 0; }
+.instruction-dialog .instruction-choice { border: 0; }
+@media (max-width: 650px) {
+  .instruction-dialog .instruction-choices { grid-template-columns: minmax(0, 1fr); }
+  .instruction-dialog { width: calc(100% - 24px); height: min(760px, calc(100dvh - 24px)); }
+}
+
+/* Cover preferences use the same editorial rows and selection dialogs. */
+.create-cover-field { grid-area: cover; }
+.create-cover-field .cover-note { margin: 0; padding: 8px 0; line-height: 1.5; }
+.create-cover-field .cover-description-field { padding: 16px 0; border-bottom: 1px solid var(--line); }
+.create-cover-field .cover-description-field textarea { min-height: 112px; resize: vertical; }

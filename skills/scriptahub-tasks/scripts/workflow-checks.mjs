@@ -88,9 +88,10 @@ export async function verifyPackage(input,{hook=async()=>{}}={}) {
     bytes+=value.length;
   }
   const runGit=async args=>(await execute('git',['-c','core.hooksPath=/dev/null','-c','credential.helper=',...args],{cwd:root,timeout:30000,maxBuffer:8*1024*1024,env:{PATH:process.env.PATH,HOME:os.homedir(),GIT_TERMINAL_PROMPT:'0',GIT_ALLOW_PROTOCOL:'https',GIT_CONFIG_NOSYSTEM:'1',GIT_CONFIG_GLOBAL:'/dev/null'}})).stdout.trim();
+  if(inventory.baseCommit!==null && !/^[a-f0-9]{40}$/.test(inventory.baseCommit || ''))throw new Error('Invalid base commit');
   if(inventory.baseCommit){
-    if(!/^[a-f0-9]{40}$/.test(inventory.baseCommit))throw new Error('Invalid base commit');
-    if(await runGit(['rev-parse','HEAD'])!==inventory.baseCommit)throw new Error('Package checkout baseline changed');
+    const checkout=await fs.lstat(path.join(root,'.git')).catch(error=>{if(error.code!=='ENOENT')throw error;return null;});
+    if(checkout && await runGit(['rev-parse','HEAD'])!==inventory.baseCommit)throw new Error('Package checkout baseline changed');
   }
   // Remote reads remain credential-free and restricted to the actual configured catalogue.
   const catalogue=new URL(input.catalogue);
@@ -104,13 +105,30 @@ export async function verifyPackage(input,{hook=async()=>{}}={}) {
   const remote=`https://github.com/${match[1]}/${match[2]}.git`;
   const refs=await runGit(['ls-remote',remote]);
   const head=refs.split('\n').find(line=>line.split('\t')[1]==='refs/heads/'+input.branch)?.split('\t')[0]||null;
-  if(head!==inventory.baseCommit||(!head&&refs))throw new Error('Publication baseline changed; do not merge or overwrite');
-  const report={ok:true,executionId:input.executionId,bookId:input.bookId,fileCount:names.size,bytes,baseCommit:head,checkedAt:new Date().toISOString()};
+  if(!head&&(refs||inventory.baseCommit))throw new Error('The selected destination branch is missing');
+  // Keep the validated baseline pinned. ScriptaHub checks whether the current
+  // remote tip can accept the package when it actually publishes.
+  const report={ok:true,executionId:input.executionId,bookId:input.bookId,fileCount:names.size,bytes,baseCommit:inventory.baseCommit,checkedAt:new Date().toISOString()};
   if(input.audit){
     const audit=await jsonArtifact(input.audit);
-    if(audit.scope!=='layout_and_structure'||!['passed','passed_with_warnings'].includes(audit.status)||!Array.isArray(audit.findings)||audit.findings.some(f=>f.severity==='error'))throw new Error('Independent book audit has not passed');
-    if(!Array.isArray(audit.documents)||!audit.documents.length||audit.documents.some(doc=>!names.has(path.relative(root,doc.file).split(path.sep).join('/'))))throw new Error('Audit documents are outside the verified package');
-    report.audit={status:audit.status,errorFindings:0,warningFindings:audit.findings.length};
+    if(!['passed','passed_with_warnings'].includes(audit.status)||!Array.isArray(audit.findings)||audit.findings.some(f=>f.severity==='error'))throw Error('Independent book audit has not passed');
+    let scope=audit.scope;
+    if(audit.scope==='edition_layout_regression') {
+      const claimed=await jsonArtifact(itemArtifact(input.directory,'claimed.json'));
+      const generated=['scriptahub.book-proposal','scriptahub.fork'].includes(claimed.task?.type);
+      if(claimed.task?.executionId!==input.executionId||claimed.task?.bookId!==input.bookId)throw Error('HTML audit belongs to another task');
+      if(generated) {
+        if(audit.autoCorrect!==false||audit.errorFindings!==0||audit.existingFindings!==0)throw Error('Generated HTML must pass all integrity checks; baseline defects cannot be accepted as warnings');
+        scope='html_layout_integrity';
+      } else if(claimed.task?.type!=='scriptahub.edit')throw Error('An uploaded manuscript requires its source-based audit');
+      if(!audit.candidate?.file||!names.has(path.relative(root,audit.candidate.file).split(path.sep).join('/')))throw Error('HTML audit candidate is outside the verified package');
+      const candidate=await insideRun(path.relative(process.cwd(),audit.candidate.file));
+      if(hash(await fs.readFile(candidate))!==audit.candidate.sha256)throw Error('HTML changed after its independent audit');
+    } else {
+      if(audit.scope!=='layout_and_structure')throw Error('Independent book audit has not passed');
+      if(!Array.isArray(audit.documents)||!audit.documents.length||audit.documents.some(doc=>!names.has(path.relative(root,doc.file).split(path.sep).join('/'))))throw Error('Audit documents are outside the verified package');
+    }
+    report.audit={scope,...(scope==='html_layout_integrity'?{nativeScope:audit.scope,existingFindings:0}:{}),status:audit.status,errorFindings:0,warningFindings:audit.findings.length};
   }
   await atomicJson(itemArtifact(input.directory,'package-check.json'),report);
   return report;

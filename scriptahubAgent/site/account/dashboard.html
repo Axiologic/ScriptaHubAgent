@@ -4,7 +4,9 @@
   <script data-site-theme-bootstrap>try{const t=localStorage.getItem("scripta-site-theme");document.documentElement.dataset.theme=["light","orange","nord","dark","dark-orange"].includes(t)?t:"light"}catch{document.documentElement.dataset.theme="light"}try{const s=Number(localStorage.getItem("scripta-site-scale-v2")||1);document.documentElement.style.setProperty("--site-scale",String(Number.isFinite(s)?Math.max(.8,Math.min(1.5,s)):1));document.documentElement.dataset.largeText=String(Number.isFinite(s)&&s>=1.25)}catch{}</script>
   <meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="robots" content="noindex"><title>Dashboard · ScriptaHub</title>
-  <link rel="stylesheet" href="../assets/site.css"><link rel="stylesheet" href="../assets/dashboard.css">
+  <link rel="stylesheet" href="../assets/site.css?v=uniform-controls-2"><link rel="stylesheet" href="../assets/dashboard.css?v=scroll-panels-1">
+  <link rel="stylesheet" href="../assets/account.css?v=credit-payment-feedback-10">
+  <link rel="stylesheet" href="../assets/controls.css?v=uniform-controls-2">
 </head>
 <body data-app-page="true">
   <main class="site-shell dashboard-page">
@@ -12,18 +14,20 @@
       <a class="wordmark" href="../index.html">ScriptaHub<span>.com</span></a>
       <div class="header-tools"><a class="header-home" data-account-link href="./index.html">My account</a><a class="header-create" data-create-link href="../create/index.html">Create</a></div>
     </header>
-    <header class="dashboard-heading dashboard-title">
-      <h1 data-dashboard-text="Dashboard">Dashboard</h1>
-      <button id="refresh" class="site-icon-button" type="button" data-dashboard-label="Refresh dashboard" aria-label="Refresh dashboard" title="Refresh dashboard"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 11a8 8 0 1 1-2.4-5.7M20 4v5h-5"/></svg></button>
-    </header>
-    <nav class="dashboard-tabs" role="tablist" data-dashboard-label="Dashboard sections" aria-label="Dashboard sections">
+<div class="dashboard-heading dashboard-toolbar">
+      <nav class="dashboard-tabs" role="tablist" data-dashboard-label="Dashboard sections" aria-label="Dashboard sections">
       <button id="dashboard-books-tab" type="button" role="tab" data-view="books" data-dashboard-text="My books" aria-selected="true" aria-controls="dashboard-content">My books</button>
-      <button id="dashboard-changes-tab" type="button" role="tab" data-view="changes" data-dashboard-text="Change requests" aria-selected="false" aria-controls="dashboard-content" tabindex="-1">Change requests</button>
+      <button id="dashboard-changes-tab" type="button" role="tab" data-view="changes" data-dashboard-text="Editorial requests" aria-selected="false" aria-controls="dashboard-content" tabindex="-1">Editorial requests</button>
       <button id="dashboard-tasks-tab" type="button" role="tab" data-view="tasks" data-dashboard-text="Tasks" aria-selected="false" aria-controls="dashboard-content" tabindex="-1" hidden>Tasks</button>
+      <button id="dashboard-points-tab" type="button" role="tab" data-view="points" data-dashboard-text="Credits" aria-selected="false" aria-controls="dashboard-content" tabindex="-1">Credits</button>
+      <button id="dashboard-admin-tab" type="button" role="tab" data-view="admin" data-dashboard-text="Administration" aria-selected="false" aria-controls="dashboard-content" tabindex="-1" hidden>Administration</button>
+      <button id="dashboard-users-tab" type="button" role="tab" data-view="users" data-dashboard-text="Users" aria-selected="false" aria-controls="dashboard-content" tabindex="-1" hidden>Users</button>
     </nav>
+      <button id="refresh" class="site-icon-button" type="button" data-dashboard-label="Refresh dashboard" aria-label="Refresh dashboard" title="Refresh dashboard"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 11a8 8 0 1 1-2.4-5.7M20 4v5h-5"/></svg></button>
+    </div>
     <section id="dashboard-content" role="tabpanel" aria-labelledby="dashboard-books-tab" tabindex="0" aria-busy="true"><p class="dashboard-empty" data-dashboard-text="Loading dashboard…">Loading dashboard…</p></section>
   </main>
-  <script src="../collection.js"></script><script src="../assets/site.js"></script>
-  <script type="module" src="../assets/dashboard.js"></script>
+  <script src="../collection.js"></script><script src="../assets/site.js?v=cover-fallback-1"></script>
+  <script type="module" src="../assets/dashboard.js?v=credit-payment-feedback-10"></script>
 </body>
 </html>

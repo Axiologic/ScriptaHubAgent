@@ -33,10 +33,14 @@ dialog.modal.scriptahub-settings-dialog {
 }
 .scriptahub-settings-modal { display: flex; flex-direction: column; width: 100%; height: 100%; min-width: 0; min-height: 0; }
 .scripta-settings-tabs { margin: 0; padding: 0; gap: 24px; flex-wrap: nowrap; border-bottom: 1px solid var(--border); }
-.scripta-settings-tabs .settings-tab {
+.scriptahub-settings-modal .scripta-settings-tabs .settings-tab {
   margin-bottom: -1px;
-  padding: 10px 2px;
-  min-height: 44px;
+  padding: 0 2px;
+  height: var(--scripta-control-height, 40px);
+  min-height: var(--scripta-control-height, 40px);
+  font-family: inherit;
+  font-size: var(--scripta-control-font-size, 16px);
+  font-weight: 500;
   border: 0;
   border-bottom: 2px solid transparent;
   border-radius: 0;
@@ -46,9 +50,9 @@ dialog.modal.scriptahub-settings-dialog {
   white-space: normal;
   text-align: center;
 }
-.scripta-settings-tabs .settings-tab:hover { color: var(--text); background: transparent; }
-.scripta-settings-tabs .settings-tab.active { color: var(--accent); border-bottom-color: var(--accent); background: transparent; }
-.scripta-settings-tabs .settings-tab:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.scriptahub-settings-modal .scripta-settings-tabs .settings-tab:hover { color: var(--text); background: transparent; }
+.scriptahub-settings-modal .scripta-settings-tabs .settings-tab.active { font-weight: 650; color: var(--accent); border-bottom-color: var(--accent); background: transparent; }
+.scriptahub-settings-modal .scripta-settings-tabs .settings-tab:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 .scripta-settings-panel { display: grid; align-content: start; gap: 24px; min-width: 0; }
 .scripta-settings-panel[hidden] { display: none; }
 .scripta-settings-panel h3 { margin: 0; font-size: 16px; }
@@ -359,4 +363,27 @@ dialog.modal.scriptahub-settings-dialog {
   .scripta-publication-settings .git-credentials-group { padding: 8px; border-radius: 0; }
   .scripta-publication-settings .git-github-auth { padding: 8px; border-radius: 0; box-sizing: border-box; }
   .scripta-publication-settings .git-auth-methods { width: 100%; }
+}
+
+.scriptahub-settings-modal {
+  --scripta-control-height: 40px;
+  --scripta-control-radius: 8px;
+  --scripta-control-font-size: 16px;
+}
+:root .scriptahub-settings-modal :is(button:not([role="tab"]), .form-input, select) {
+  box-sizing: border-box;
+  min-height: var(--scripta-control-height);
+  height: var(--scripta-control-height);
+  border-radius: var(--scripta-control-radius);
+  padding-block: 0;
+  font-family: inherit;
+  font-size: var(--scripta-control-font-size);
+  font-weight: 500;
+  line-height: 1.25;
+}
+.scriptahub-settings-modal .form-input { font-weight: 400; }
+.scriptahub-settings-modal :is(button, input, select):focus-visible { outline: 2px solid var(--button-primary-background, currentColor); outline-offset: 3px; }
+.scriptahub-settings-modal button:disabled { opacity: 1; }
+@media (max-width: 720px), (pointer: coarse) {
+  .scriptahub-settings-modal { --scripta-control-height: 44px; }
 }

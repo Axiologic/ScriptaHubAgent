@@ -24,7 +24,7 @@ try {
   const dataDir = process.env.SCRIPTA_DATA_DIR || path.resolve(import.meta.dirname, '../data');
   const configuredTools = new Set(['scriptahub_task_claim','scriptahub_task_package_prepare','scriptahub_task_publish']);
   const config = configuredTools.has(tool) ? validateSourceConfig(await loadSourceConfig({ dataDir, includePublication:true })) : null;
-  store = new DashboardStore(dataDir);
+  store = new DashboardStore(dataDir,{manageApprovals:true});
   const service = new TaskExecution(store, dataDir);
   const methods = { scriptahub_task_batch_snapshot:'snapshot', scriptahub_task_batch_settle:'settle', scriptahub_task_batch_close:'closeBatch', scriptahub_task_claim: 'claim', scriptahub_task_status: 'status', scriptahub_task_document_read: 'document', scriptahub_task_finish: 'finish' };
   const args = envelope.input ?? envelope.arguments ?? {};

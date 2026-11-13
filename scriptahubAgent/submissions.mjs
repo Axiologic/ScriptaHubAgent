@@ -44,7 +44,7 @@ function fileKind(filename, bytes) {
   throw new Error('Only PDF, DOC and DOCX manuscripts are accepted');
 }
 
-export async function saveSubmission({ body, contentType, user, dataDir, store }) {
+export async function saveSubmission({ body, contentType, user, dataDir, store, policy, forkSource }) {
   if (!user?.id || !user.email) throw Object.assign(new Error('Sign in to submit'), { status: 401 });
   const request = new Request('http://localhost/upload', { method: 'POST', body, headers: { 'content-type': contentType || '' } });
   const form = await request.formData();
@@ -53,11 +53,15 @@ export async function saveSubmission({ body, contentType, user, dataDir, store }
   store.validateSubmission(user, meta);
   const uploads = form.getAll('documents');
   validateDocuments(uploads);
+  if (meta.kind === 'fork' && (uploads.length || meta.targetBookId || !meta.values.titles?.trim() || !meta.values.prompt?.trim() || !meta.values.sourceEdition)) {
+    throw new Error('A derived book requires a source edition, a new title and instructions.');
+  }
   if (meta.kind === 'manuscript' && !uploads.length) throw new Error('A manuscript is required');
   if (meta.kind === 'book-proposal' && (uploads.length || !(meta.values.description?.trim() || meta.values.prompt?.trim()))) {
     throw new Error('A book proposal without a manuscript requires a description or editorial instructions');
   }
   const files = [];
+  let source;
   for (const upload of uploads) {
     if (typeof upload === 'string') throw new Error('Invalid document');
     const bytes = Buffer.from(await upload.arrayBuffer());
@@ -70,23 +74,33 @@ export async function saveSubmission({ body, contentType, user, dataDir, store }
   await fs.mkdir(inbox, { recursive: true, mode: 0o700 });
   const existingReceipt = async () => {
     const existing = verifyRecord(JSON.parse(await fs.readFile(path.join(directory, 'record.json'), 'utf8')));
-    if (existing.owner !== user.id || JSON.stringify(existing.metadata) !== JSON.stringify(meta) || existing.files.length !== files.length || existing.files.some((file, i) => file.sha256 !== files[i].sha256)) {
+    if (existing.owner !== user.id || JSON.stringify(existing.metadata) !== JSON.stringify(meta) || (meta.kind !== 'fork' && (existing.files.length !== files.length || existing.files.some((file, i) => file.sha256 !== files[i].sha256)))) {
       throw Object.assign(new Error('Submission ID already used'), { status: 409 });
     }
-    return store.submit(existing);
+    return store.submit(existing,policy);
   };
   if (await fs.stat(directory).then(() => true, error => error.code === 'ENOENT' ? false : Promise.reject(error))) return existingReceipt();
+  if (meta.kind === 'fork') {
+    if (meta.confirmedCost !== (policy?.forkCost || 0)) {
+      throw Object.assign(new Error('The points cost has changed. Review it before continuing.'), {status:409});
+    }
+    if (!forkSource) throw Object.assign(new Error('Source catalogue is unavailable.'), {status:503});
+    const pinned = await forkSource(meta.bookId, meta.language, meta.values.sourceEdition);
+    source = pinned.source;
+    files.push({ originalName: 'source-edition.html', name: crypto.randomUUID() + '.html',
+      sha256: crypto.createHash('sha256').update(pinned.bytes).digest('hex'), bytes:pinned.bytes });
+  }
   await fs.mkdir(staging, { mode: 0o700 });
   try {
     for (const file of files) await fs.writeFile(path.join(staging, file.name), file.bytes, { flag: 'wx', mode: 0o600 });
-    const record = sealRecord({ id: meta.submissionId, owner: user.id, contact: { email: user.email, displayName: user.displayName || '' }, metadata: meta, files: files.map(({ bytes, ...rest }) => rest), createdAt: new Date().toISOString(), state: 'received', task: null });
+    const record = sealRecord({ id: meta.submissionId, owner: user.id, contact: { email: user.email, displayName: user.displayName || '' }, metadata: meta, ...(source ? {source} : {}), files: files.map(({ bytes, ...rest }) => rest), createdAt: new Date().toISOString(), state: 'received', task: null });
     await fs.writeFile(path.join(staging, 'record.json'), JSON.stringify(record, null, 2) + '\n', { flag: 'wx', mode: 0o600 });
     try { await fs.rename(staging, directory); }
     catch (error) {
       if (error.code !== 'EEXIST' && error.code !== 'ENOTEMPTY') throw error;
       return existingReceipt();
     }
-    return store.submit(record);
+    return store.submit(record,policy);
   } finally { await fs.rm(staging, { recursive: true, force: true }); }
 }
 

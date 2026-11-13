@@ -70,6 +70,10 @@ export async function runBatchOperation(call,operation,input,{root=process.cwd()
       continue;
     }
     const taskDirectory = 'tasks/' + item.taskId;
+    if (item.publicationPending) {
+      if (!identifier(item.executionId)) throw new Error('Invalid pending publication identity');
+      return {batchId:state.batchId,publicationPending:true,executionId:item.executionId,taskDirectory};
+    }
     await directory(root,taskDirectory);
     const claimed = await call('scriptahub_task_claim',{...state,taskId:item.taskId,runId});
     if (!claimed.task) throw new Error('Reserved task could not be claimed');

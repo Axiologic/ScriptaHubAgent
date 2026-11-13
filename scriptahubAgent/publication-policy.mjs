@@ -59,12 +59,26 @@ export function checkPublicationPackage(manifest, target, bytes, oldCollection, 
   const ids = collection.books.map(book => book.id);
   if (ids.some(id => typeof id !== 'string') || new Set(ids).size !== ids.length || !ids.includes(manifest.bookId)) fail('Invalid catalogue identities');
   const editing = manifest.taskType === 'scriptahub.edit';
-  const generated = manifest.taskType === 'scriptahub.book-proposal';
+  const fork = manifest.taskType === 'scriptahub.fork';
+  const generated = fork || manifest.taskType === 'scriptahub.book-proposal';
+  if(generated && [...bytes.keys()].some(name=>/\.(?:pdf|docx?)$/i.test(name))) fail('Generated HTML books do not publish DOCX/PDF intermediates or exports');
+  const checkArtwork = (metadata, resolve) => {
+    if (manifest.coverRequired) for (const language of Object.keys(metadata.editions || {})) {
+      if (!metadata.coverUrl?.[language] || !metadata.thumbnailUrl?.[language]) fail('Each published language requires its generated cover and thumbnail');
+    }
+    for (const field of ['coverUrl', 'thumbnailUrl']) for (const value of Object.values(metadata[field] || {})) {
+      const name = resolve(value);
+      if (!name || !bytes.get(name)?.length) fail('Missing or unrelated book artwork');
+    }
+  };
+  const requireForkSource = source => {
+    if (fork && (!manifest.source || !isDeepStrictEqual(source,manifest.source))) fail('The derived book must preserve the verified source edition and attribution');
+  };
   const hasGeneratedEdition = (editions, resourcePath) => Object.values(editions || {}).some(edition => {
-    if (!edition?.pdf || !edition.fullContent) return false;
-    const pdf = bytes.get(resourcePath(edition.pdf));
+    if (!edition?.fullContent) return false;
+    const pdf = edition.pdf ? bytes.get(resourcePath(edition.pdf)) : null;
     const html = bytes.get(resourcePath(edition.fullContent));
-    return pdf?.subarray(0, 5).toString() === '%PDF-' && Boolean(html?.toString('utf8').trim());
+    return (!edition.pdf || pdf?.subarray(0,5).toString()==='%PDF-') && Boolean(html?.toString('utf8').trim());
   });
   const previousBook = oldCollection?.books?.find(book => book.id === manifest.bookId);
   if (editing && !previousBook) fail('The edited book must already exist at this destination',409);
@@ -95,6 +109,7 @@ export function checkPublicationPackage(manifest, target, bytes, oldCollection, 
     if (!directory.startsWith('books/') || !directory.endsWith('/' + manifest.bookId)) fail('Book directory does not match the claimed task');
     const full = target.root + directory + '/';
     const metadata=parse(full+'manifest.json'),history=parse(full+'editions.json');
+    requireForkSource(metadata.provenance?.fork);
     if (metadata.id !== manifest.bookId) fail('Book manifest identity mismatch');
     if (editing) {
       preserveEditionHistory(previousDocument,{metadata,history},manifest.bookId);
@@ -106,17 +121,19 @@ export function checkPublicationPackage(manifest, target, bytes, oldCollection, 
       const name = target.root + packagePath(value);
       if (!name.startsWith(full) || !bytes.has(name)) fail('Missing or unrelated edition resource');
     }
-    for (const field of ['coverUrl','thumbnailUrl']) for (const value of Object.values(book[field] || {})) {
+    checkArtwork(book, value => {
       const name = target.root + packagePath(value);
-      if (!name.startsWith(full) || !bytes.has(name)) fail('Missing or unrelated book artwork');
-    }
+      if (!name.startsWith(full)) fail('Missing or unrelated book artwork');
+      return name;
+    });
     if (generated && !hasGeneratedEdition(book.editions, value => target.root + packagePath(value))) {
-      fail('A generated book must include a full HTML edition and its PDF');
+      fail('A generated book requires full HTML; any declared PDF must be a valid PDF');
     }
     allowed = name => name.startsWith(full);
   } else {
     const metadataPath = target.root + packagePath(book.path);
     const document = validateContentBook(parse(metadataPath));
+    requireForkSource(document.provenance?.fork);
     if (editing) {
       preserveEditionHistory(previousDocument,document,manifest.bookId);
       preserveEditionFormats(previousDocument.metadata.editions,document.metadata.editions);
@@ -124,15 +141,17 @@ export function checkPublicationPackage(manifest, target, bytes, oldCollection, 
     if (editing && !Object.values(document.resources).every(value => Object.values(previousDocument.resources || {}).includes(value) || (target.root + packagePath(value)).startsWith(metadataPath.slice(0,metadataPath.lastIndexOf('/')+1)))) fail('Edited resources must stay inside the book directory');
     if (document.id !== manifest.bookId || sha256(bytes.get(metadataPath)) !== book.sha256) fail('Book metadata integrity mismatch');
     if (document.contentDirectory && target.root + document.contentDirectory + '/book.json' !== metadataPath) fail('Book metadata path mismatch');
+    checkArtwork(document.metadata, value => document.resources[value] && target.root + packagePath(document.resources[value]));
     const resources = new Set(Object.values(document.resources).map(value => target.root + packagePath(value)));
     for (const name of resources) if (!bytes.has(name)) fail(`Missing book resource: ${name}`);
     if (generated && !hasGeneratedEdition(document.metadata.editions, value => target.root + packagePath(document.resources[value]))) {
-      fail('A generated book must include a full HTML edition and its PDF');
+      fail('A generated book requires full HTML; any declared PDF must be a valid PDF');
     }
     allowed = name => name === metadataPath || resources.has(name);
   }
   for (const name of bytes.keys()) if (name !== target.collection && !allowed(name)) fail(`File is outside the claimed book: ${name}`, 403);
-  if (generated && manifest.sourceHashes.length) fail('A book proposal cannot replace an uploaded source manuscript');
+  if (generated && !fork && manifest.sourceHashes.length) fail('A book proposal cannot replace an uploaded source manuscript');
+  if (fork && manifest.sourceHashes.some(hash => [...bytes.values()].some(value => sha256(value) === hash))) fail('Publish the derived edition without copying the source HTML as a separate resource');
   if (!editing && !generated && !manifest.sourceHashes.some(hash => [...bytes.values()].some(value => sha256(value) === hash))) fail('The package does not contain the verified source manuscript');
   return collection;
 }

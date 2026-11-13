@@ -7,7 +7,7 @@ function key() {
 }
 
 function digest(record) {
-  const payload = JSON.stringify([record.id, record.owner, record.contact, record.metadata, record.files, record.createdAt, record.state, record.task]);
+  const payload = JSON.stringify([record.id, record.owner, record.contact, record.metadata, record.files, record.createdAt, record.state, record.task, ...(record.source ? [record.source] : [])]);
   return crypto.createHmac('sha256', key()).update(payload).digest('hex');
 }
 

@@ -73,3 +73,34 @@ html body :is(#save-profile,.up-enrollment button):disabled { background: var(--
 input { accent-color: var(--scripta-green); }
 ::selection { background: var(--scripta-button-bg); color: var(--scripta-button-ink); }
 @media (max-width: 740px) { .account-card { padding: 16px; } }
+
+/* Use the parent application's control dimensions throughout My Account. */
+:root[data-scripta-embedded] {
+  --control-height: var(--scripta-control-height, 40px);
+  --control-radius: var(--scripta-control-radius, 8px);
+  --control-font-size: var(--scripta-control-font-size, 16px);
+}
+:root[data-scripta-embedded] body :is(button, #save-profile, .button-link, .general-button, .gray-button,
+  input:not([type="checkbox"], [type="radio"], [type="hidden"], [type="range"], [type="file"]), select:not([multiple])) {
+  box-sizing: border-box;
+  height: var(--control-height);
+  min-height: var(--control-height);
+  border-radius: var(--control-radius);
+  padding: 0 12px;
+  font-family: var(--scripta-font-family);
+  font-size: var(--control-font-size);
+  font-weight: 500;
+  line-height: 1.25;
+}
+:root[data-scripta-embedded] body :is(input:not([type="checkbox"], [type="radio"], [type="hidden"], [type="range"], [type="file"]), select, textarea) {
+  border: 1px solid var(--scripta-line);
+  border-radius: var(--control-radius);
+  background: var(--scripta-field);
+  color: var(--scripta-ink);
+  font-family: var(--scripta-font-family);
+  font-size: var(--control-font-size);
+  font-weight: 400;
+}
+:root[data-scripta-embedded] body textarea { min-height: calc(2 * var(--control-height)); padding: 10px 12px; line-height: 1.5; }
+:root[data-scripta-embedded] body :is(button, #save-profile):disabled { opacity: 1; }
+:root[data-scripta-embedded] body :is(button, input, select, textarea, .button-link):focus-visible { outline: 2px solid var(--scripta-green); outline-offset: 3px; }

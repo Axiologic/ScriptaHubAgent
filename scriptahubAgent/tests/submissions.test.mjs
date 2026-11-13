@@ -71,7 +71,7 @@ test('a description without attachments reaches the Add book executor with its i
     if (withFile) body.set('documents', new File(['%PDF-1.7\npage'], 'test.pdf'));
     return fetch(endpoint, { method: 'POST', body });
   };
-  const values = { titles: 'Grădini de cartier', description: 'O carte despre grădini comunitare.', audience: 'Începători', structure: 'Ghid pas cu pas' };
+  const values = { titles: 'Grădini de cartier', description: 'O carte despre grădini comunitare.', audience: 'Începători', structure: 'Ghid pas cu pas', coverMode: 'generate', coverStyle: 'Botanic; Minimalist', coverPalette: 'Verde de pădure', coverComposition: 'Titlu mare', coverDescription: 'Frunze și grădini pe acoperișuri, fără oameni.' };
   assert.equal((await send({ description: ' ' })).status, 400);
   assert.equal((await send(values, true)).status, 400);
   const response = await send(values);

@@ -104,7 +104,7 @@ Configure Git author identity and GitHub sign-in or a personal access token in *
 
 The RoboTeam workflow definition belongs to this agent: [`flows/add-book.json`](flows/add-book.json). RoboTeam's existing workspace discovery reads `<repository>/flows/`; no separate `scripta-flow` repository or duplicate definition is needed. The workflow ID is `add-book`, derived from its filename. Schedules must select that workflow ID. Existing runs retain their captured graph; new runs read the current definition.
 
-The Create form can submit a description and optional editorial instructions without an attachment. For these proposals, RoboTeam writes a private generation brief, generates the full book in HTML and renders a PDF. With an attachment, the workflow continues from the uploaded manuscript. The same `add-book` schedule picks up both kinds of task and runs them through the existing editorial and publication checks.
+The Create form can submit a description and optional editorial instructions without an attachment. For these proposals, RoboTeam writes a private generation brief, generates the full book in HTML without DOCX/PDF conversion. Generated books and forks use strict native HTML/reader integrity checks; a supplied PDF manuscript remains the authoritative source for PDF-to-HTML checks. With an attachment, the workflow continues from the uploaded manuscript. The same `add-book` schedule picks up both kinds of task and runs them through the existing editorial and publication checks.
 
 ## Agent-owned skill runtime
 

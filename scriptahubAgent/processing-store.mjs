@@ -1,3 +1,4 @@
+import {createInputCacheTable,inputCacheBytes} from './processing-input-cache.mjs';
 import crypto from 'node:crypto';
 import { validateVirtualCwd } from './processing-sandbox.mjs';
 
@@ -6,6 +7,7 @@ const fail = (message, status = 400) => { throw Object.assign(new Error(message)
 const identifier = value => typeof value === 'string' && /^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$/.test(value);
 
 export function createProcessingTables(store) {
+  createInputCacheTable(store.db);
   store.db.exec(`CREATE TABLE IF NOT EXISTS task_processing_jobs (
     execution_id TEXT NOT NULL REFERENCES task_executions(id), job_id TEXT NOT NULL,
     executor_agent_id TEXT NOT NULL, request TEXT NOT NULL, digest TEXT NOT NULL,
@@ -57,7 +59,7 @@ export class ProcessingStore {
       if (prior && JSON.parse(prior.request).virtualCwd !== request.virtualCwd) fail('Virtual working directory changed',409);
       const usage = this.store.db.prepare(`SELECT COALESCE(SUM(reserved_bytes),0) AS bytes,
         SUM(CASE WHEN state IN (${active}) THEN 1 ELSE 0 END) AS active_count FROM task_processing_jobs`).get();
-      if (usage.bytes + reservedBytes > 4 * 1024 * 1024 * 1024 + 48 * 1024 * 1024 || usage.active_count >= 4) fail('Processing capacity unavailable',503);
+      if (usage.bytes + inputCacheBytes(this.store.db) + reservedBytes > 4 * 1024 * 1024 * 1024 + 48 * 1024 * 1024 || usage.active_count >= 4) fail('Processing capacity unavailable',503);
       const time = new Date().toISOString();
       this.store.db.prepare(`INSERT INTO task_processing_jobs
         (execution_id,job_id,executor_agent_id,request,digest,state,reserved_bytes,runtime_id,created_at,updated_at)

@@ -5,9 +5,10 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="robots" content="noindex">
   <title>My account · ScriptaHub</title>
-  <link rel="stylesheet" href="../assets/site.css">
-  <link rel="stylesheet" href="../assets/account.css">
+  <link rel="stylesheet" href="../assets/site.css?v=uniform-controls-2">
+  <link rel="stylesheet" href="../assets/account.css?v=admin-pricing-1">
   <link rel="icon" href="../favicon.ico">
+  <link rel="stylesheet" href="../assets/controls.css?v=uniform-controls-2">
 </head>
 <body data-app-page="true">
   <main class="site-shell account-page">
@@ -18,12 +19,12 @@
         <a class="header-create" data-create-link href="../create/index.html">Create</a>
       </div>
     </header>
-    <section class="account-content" aria-label="My account">
+    <section id="account-security-panel" class="account-content">
       <iframe class="account-security-frame" title="UserPersisto My Account" src="/base-agent-additional-server/userPersistoAgent/7000/service/dashboard/?view=account"></iframe>
     </section>
   </main>
   <script src="../collection.js"></script>
-  <script type="module" src="../assets/account.js"></script>
-  <script src="../assets/site.js"></script>
+  <script type="module" src="../assets/account.js?v=account-only-1"></script>
+  <script src="../assets/site.js?v=cover-fallback-1"></script>
 </body>
 </html>

@@ -11,8 +11,12 @@ import { bridgeBookHtml, publishedFileUrl, responseText } from './published-cont
 import { renderAnimationPage, renderBookPage, validateContentBook } from './content-v2.mjs';
 import { readBody, readSubmission, saveSubmission, verifyRouterUser } from './submissions.mjs';
 import { startNotificationWorker } from './notifications.mjs';
+import { startCycleWorker } from './cycle-worker.mjs';
+import { defaultPoints, loadPointsPolicy } from './points-policy.mjs';
 import { DashboardStore } from './dashboard-store.mjs';
 import { handleDashboard } from './dashboard-http.mjs';
+import { TaskExecution } from './task-execution.mjs';
+import { TaskPublication } from './task-publication.mjs';
 
 const port = Number(process.env.SCRIPTA_PORT || 3002);
 const dataDir = process.env.SCRIPTA_DATA_DIR || path.join(import.meta.dirname, 'data');
@@ -117,13 +121,36 @@ async function serveContentBook(req, res, relative, route) {
   await serveRemoteBook(req, res, relative, route, resource);
 }
 
-export function createSiteServer(siteRoot, { dataDir: submissionDataDir = dataDir, verifyUser = verifyRouterUser, liveSiteRoot = null } = {}) {
+async function loadForkSource(catalogue, routes, bookId, language, editionId) {
+  const book = catalogue.find(item => item.id === bookId);
+  const route = book && routes.find(item => item.directory === book.directory);
+  const currentEdition = book?.currentEdition || book?.animation?.edition || 'edition-1';
+  if (!route || currentEdition !== editionId) throw Object.assign(new Error('The source edition changed. Open the book again.'), {status:409});
+  const license = book.license || book.licence || route.document?.license || route.document?.licence;
+  if (!license || !/^(?:CC[- ]BY[- ]4\.0|https:\/\/creativecommons\.org\/licenses\/by\/4\.0\/?)$/i.test(license)) {
+    throw Object.assign(new Error('A derived edition requires an explicit CC BY 4.0 licence on the source book.'), {status:403});
+  }
+  const code = [language,'en',...Object.keys(book.editions || {})].find(key => book.editions?.[key]?.fullContent);
+  const full = code && book.editions[code].fullContent;
+  if (!full) throw Object.assign(new Error('The source edition has no full HTML.'), {status:409});
+  const target = route.document ? route.document.resources[full.slice(route.directory.length + 1)] : full;
+  if (!target) throw new Error('The source edition resource is unavailable.');
+  const upstream = await fetch(publishedFileUrl(route.baseUrl,target), {cache:'no-store',signal:AbortSignal.timeout(30000)});
+  if (!upstream.ok) { await upstream.body?.cancel(); throw Object.assign(new Error('Source edition is unavailable.'), {status:502}); }
+  const html = await responseText(upstream, 32 * 1024 * 1024);
+  if (!html.trim()) throw new Error('The source edition is empty.');
+  return { bytes:Buffer.from(html), source:{bookId,edition:editionId,language:code,
+    title:typeof book.title === 'string' ? book.title : book.title?.[code] || book.title?.en || bookId,license:'CC-BY-4.0'} };
+}
+
+export function createSiteServer(siteRoot, { dataDir: submissionDataDir = dataDir, verifyUser = verifyRouterUser, liveSiteRoot = null, manageApprovals = false } = {}) {
   let currentSiteRoot = siteRoot;
   let canonicalRoot = fs.realpathSync(siteRoot);
   let bookRoutes = remoteRoutes(siteRoot);
   const canonicalLiveRoot = liveSiteRoot ? fs.realpathSync(liveSiteRoot) : null;
   let store;
-  const getStore = () => store ||= new DashboardStore(submissionDataDir);
+  const getStore = () => store ||= new DashboardStore(submissionDataDir, { manageApprovals });
+  const pointsPolicy = async () => manageApprovals ? loadPointsPolicy(submissionDataDir) : defaultPoints;
   const catalogue = () => {
     try { return JSON.parse(fs.readFileSync(path.join(currentSiteRoot, 'collection.json'), 'utf8')).books || []; }
     catch (error) { if (error.code === 'ENOENT') return []; throw error; }
@@ -132,10 +159,19 @@ export function createSiteServer(siteRoot, { dataDir: submissionDataDir = dataDi
     try {
       const url = new URL(req.url, 'http://localhost');
       let pathname = url.pathname;
+      // The Router forwards both /3002 and /3002/ as /. Use an explicit
+      // document URL so relative assets retain the complete public mount.
+      const mountRoot = pathname === base || pathname === `${base}/`
+        || (pathname === '/' && req.headers['x-forwarded-prefix'] === base);
+      if (mountRoot && ['GET','HEAD'].includes(req.method)) {
+        res.writeHead(308, {location: `${base}/index.html${url.search}`, 'cache-control': 'no-store'});
+        res.end();return;
+      }
+      const publicMount = pathname.startsWith(`${base}/`) || req.headers['x-forwarded-prefix'] === base ? base : '';
       if (pathname === base) pathname = '/';
       else if (pathname.startsWith(`${base}/`)) pathname = pathname.slice(base.length);
       if (pathname.startsWith('/api/dashboard')) {
-        await handleDashboard({ req, res, url, pathname, verifyUser, getStore, catalogue, dataDir: submissionDataDir });
+        await handleDashboard({ req, res, url, pathname, verifyUser, getStore, catalogue, pointsPolicy, dataDir: submissionDataDir, publicMount });
         return;
       }
       if (pathname === '/api/submissions' && req.method === 'POST') {
@@ -143,7 +179,8 @@ export function createSiteServer(siteRoot, { dataDir: submissionDataDir = dataDi
         const user = await verifyUser(req, url, body);
         if (!user) { res.writeHead(401); res.end(); return; }
         getStore().remember(user, catalogue());
-        const received = await saveSubmission({ body, contentType: req.headers['content-type'], user, dataDir: submissionDataDir, store: getStore() });
+        const received = await saveSubmission({ body, contentType: req.headers['content-type'], user, dataDir: submissionDataDir, store: getStore(), policy: await pointsPolicy(),
+          forkSource: (bookId, language, edition) => loadForkSource(catalogue(),bookRoutes,bookId,language,edition) });
         const payload = JSON.stringify(received);
         res.writeHead(202, { 'content-type': 'application/json', 'content-length': Buffer.byteLength(payload), 'cache-control': 'no-store' });
         res.end(payload);
@@ -164,7 +201,7 @@ export function createSiteServer(siteRoot, { dataDir: submissionDataDir = dataDi
         const user = await verifyUser(req, url, Buffer.alloc(0));
         if (!user) { res.writeHead(401); res.end(); return; }
         getStore().remember(user, catalogue());
-        const payload = JSON.stringify({ user: { id: user.id, email: user.email, displayName: user.displayName || '' } });
+        const payload = JSON.stringify({ user: { id: user.id, email: user.email, displayName: user.displayName || '' }, canManageUsers: user.roles?.includes('admin') === true });
         res.writeHead(200, { 'content-type': 'application/json', 'cache-control': 'private, no-store' });
         res.end(payload);
         return;
@@ -207,6 +244,7 @@ export function createSiteServer(siteRoot, { dataDir: submissionDataDir = dataDi
     currentSiteRoot = nextRoot;
     bookRoutes = nextRoutes;
   };
+  server.getDashboardStore = getStore;
   server.once('close', () => store?.close());
   return server;
 }
@@ -220,9 +258,21 @@ export async function main({ onShutdown = async () => {} } = {}) {
   catch (error) {
     site = (await buildSnapshot({ dataDir, config: { schemaVersion: 1, repositories: [] } })).site;
   }
-  const server = createSiteServer(site, { dataDir, liveSiteRoot: process.env.SCRIPTA_DEV_LIVE === '1' ? path.join(import.meta.dirname, 'site') : null });
+  const server = createSiteServer(site, { dataDir, manageApprovals: true, liveSiteRoot: process.env.SCRIPTA_DEV_LIVE === '1' ? path.join(import.meta.dirname, 'site') : null });
   server.listen(port, '0.0.0.0', () => console.log(`ScriptaHub on ${port}`));
   const stopNotifications = startNotificationWorker({ dataDir });
+  const stopCycles = startCycleWorker(server.getDashboardStore,()=>loadPointsPolicy(dataDir));
+  const publisher = new TaskPublication(new TaskExecution(server.getDashboardStore(),dataDir));
+  const publicationConfig = () => loadSourceConfig({configPath,dataDir,includePublication:true});
+  let publishing;
+  const resumePublication = () => {
+    if (!publishing) publishing = publisher.resume(publicationConfig)
+      .catch(error => console.error(`ScriptaHub publication worker: ${error.message}`))
+      .finally(() => { publishing = null; });
+  };
+  const publicationTimer = setInterval(resumePublication,3000);
+  publicationTimer.unref();
+  resumePublication();
   let stopping = false;
   let timer;
   let settingsWatcher;
@@ -233,9 +283,10 @@ export async function main({ onShutdown = async () => {} } = {}) {
     refresh.abort();
     clearInterval(timer);
     stopNotifications();
+    clearInterval(publicationTimer);
     settingsWatcher?.close();
     settingsServer?.kill('SIGTERM');
-    try { await onShutdown(); } catch { code = 1; console.error('Processing supervisor drain failed'); }
+    try { await Promise.all([stopCycles(),publishing]); await onShutdown(); } catch { code = 1; console.error('Processing supervisor drain failed'); }
     server.close();
     process.exitCode = code;
   };

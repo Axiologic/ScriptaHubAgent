@@ -17,6 +17,7 @@ test('package submission uses exact inventoried bytes and refuses modification o
     const input = {executionId:'execution-one',catalogue:'https://github.com/example/books/blob/main/collection.json',branch:'main',packageRoot:'package',inventory:'inventory.json',validation:'validation.json'};
     let prepared = false, published = false; const received = [];
     const call = async (tool,args) => {
+      assert.ok(Buffer.byteLength(JSON.stringify({agent:'scriptahubAgent',tool,payload:args}))<=65536,'complete base64 upload request must fit RoboWork callback limit');
       if (tool === 'scriptahub_task_package_prepare') { assert.deepEqual(args.files,inventory.files); prepared = true; return {}; }
       if (tool === 'scriptahub_task_package_upload') {
         assert.equal(prepared,true); assert.equal(args.offset,Buffer.concat(received).length);

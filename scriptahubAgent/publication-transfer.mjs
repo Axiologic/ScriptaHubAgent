@@ -1,6 +1,6 @@
 import crypto from 'node:crypto';
 import path from 'node:path';
-import { createProcessingTables, requireNoActiveProcessing } from './processing-store.mjs';
+import { requireNoActiveProcessing } from './processing-store.mjs';
 
 export const publicationError = (message, status = 400) => { throw Object.assign(new Error(message), { status }); };
 export const sha256 = bytes => crypto.createHash('sha256').update(bytes).digest('hex');
@@ -17,9 +17,16 @@ export function createPublicationTables(store) {
     CREATE TABLE IF NOT EXISTS task_publication_chunks (
     execution_id TEXT NOT NULL REFERENCES task_publications(execution_id), file_path TEXT NOT NULL,
     byte_offset INTEGER NOT NULL, data BLOB NOT NULL, PRIMARY KEY(execution_id,file_path,byte_offset));`);
+  store.transaction(() => {
+    const columns = new Set(store.db.prepare('PRAGMA table_info(task_publications)').all().map(column => column.name));
+    for (const [name, type] of Object.entries({ target_key: 'TEXT', retry_at: 'INTEGER', commit_base: 'TEXT', push_state: 'TEXT' })) {
+      if (!columns.has(name)) store.db.exec(`ALTER TABLE task_publications ADD COLUMN ${name} ${type}`);
+    }
+    store.db.exec('CREATE INDEX IF NOT EXISTS task_publication_target ON task_publications(target_key,lease_until)');
+  });
 }
 export class PublicationTransfer {
-  constructor(service) { this.service = service; this.store = service.store; createPublicationTables(this.store); createProcessingTables(this.store); }
+  constructor(service) { this.service = service; this.store = service.store; }
   row(executionId) { return this.store.db.prepare('SELECT * FROM task_publications WHERE execution_id=?').get(executionId); }
   running(executor, executionId) {
     const execution = this.service.execution(executor, executionId);
@@ -38,6 +45,7 @@ export class PublicationTransfer {
     if (!validation || validation.executionId !== executionId || validation.runId !== task.runId || validation.bookId !== task.bookId
       || validation.publicationPermitted !== true || validation.audit?.autoCorrect !== false
       || !['passed','passed_with_warnings'].includes(validation.audit?.status) || validation.audit.errorFindings !== 0) publicationError('A successful independent final validation is required');
+    if(['scriptahub.book-proposal','scriptahub.fork'].includes(task.type) && (validation.audit.scope!=='html_layout_integrity'||validation.audit.nativeScope!=='edition_layout_regression'||validation.audit.existingFindings!==0)) publicationError('Generated HTML requires independent HTML integrity validation without existing layout defects');
     if(task.type==='scriptahub.edit'&&validation.audit.scope!=='edition_layout_regression')
       publicationError('Edited editions require a layout regression check against the original edition');
     if (!Array.isArray(files) || files.length < 2 || files.length > 500) publicationError('Provide between 2 and 500 validated files');
@@ -49,8 +57,8 @@ export class PublicationTransfer {
       seen.add(file.path); bytes += file.size;
     }
     if (bytes > 512000000) publicationError('Publication package exceeds 512 MB');
-    const manifest = { executionId, catalogue, branch, baseCommit, bookId: task.bookId, taskType:task.type,
-      sourceHashes: task.files.map(file => file.sha256), files: [...files].sort((a,b) => a.path.localeCompare(b.path)), validation };
+    const manifest = { executionId, catalogue, branch, baseCommit, bookId: task.bookId, taskType:task.type, coverRequired:task.values?.coverMode === 'generate',
+      ...(task.source ? {source:task.source} : {}), sourceHashes: task.files.map(file => file.sha256), files: [...files].sort((a,b) => a.path.localeCompare(b.path)), validation };
     const text = JSON.stringify(manifest);
     if (Buffer.byteLength(text) > 100000) publicationError('Publication inventory is too large');
     const digest = sha256(text);
@@ -67,7 +75,7 @@ export class PublicationTransfer {
     return this.store.transaction(() => {
       this.running(executor, executionId);
       const row = this.row(executionId);
-      if (!row || row.commit_id || row.receipt || row.lease_until > Date.now()) publicationError('Package is not accepting uploads', 409);
+      if (!row || row.commit_id || row.receipt || row.retry_at !== null || row.lease_until > Date.now()) publicationError('Package is not accepting uploads', 409);
       const entry = JSON.parse(row.manifest).files.find(entry => entry.path === file);
       if (!entry || !Number.isSafeInteger(offset) || offset < 0 || typeof data !== 'string' || data.length > 87384
         || !/^(?:[A-Za-z0-9+/]{4})*(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=)?$/.test(data)) publicationError('Invalid publication chunk');

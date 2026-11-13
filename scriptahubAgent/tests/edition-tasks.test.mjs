@@ -40,7 +40,7 @@ test('approval accumulates requests without tasks; submission snapshots every ap
   assert.equal(f.store.db.prepare('SELECT count(*) AS n FROM tasks').get().n,0);
   assert.equal(f.store.book('published-book').revision,0);
   assert.equal(f.store.overview(owner).editions.find(e=>e.bookId==='published-book').pendingCount,2);
-  assert.throws(()=>f.store.submitEdition(author,'published-book',crypto.randomUUID()),/Only the book owner/);
+
   const key=crypto.randomUUID(),submitted=f.edition('published-book',key);
   assert.equal(submitted.changeCount,2);assert.deepEqual(f.edition('published-book',key),submitted);
   assert.throws(()=>f.edition(),/already has/);

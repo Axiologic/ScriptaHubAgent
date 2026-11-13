@@ -1,3 +1,5 @@
+import {bookInputScope} from './book-input-scope.mjs';
+import {uploadBlockSize} from './callback-budget.mjs';
 import fs from 'node:fs/promises';
 import path from 'node:path';
 import crypto from 'node:crypto';
@@ -8,16 +10,20 @@ import {openRoot,openDir,withParent,executionLock,at} from './anchored-files.mjs
 const digest = value => crypto.createHash('sha256').update(value).digest('hex');
 const id = value => typeof value === 'string' && /^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$/.test(value);
 const validPath = value => typeof value === 'string' && value && !value.startsWith('/') && !/[\\\0]/.test(value) && value.split('/').every(p => p && p !== '.' && p !== '..');
+const localControlPath=name=>['run-state/handoff.json','run-state/claimed.json'].includes(name);
 const excluded = new Set(['.git','.apikeys','credentials','credential','node_modules']);
 const protectedPath = name => name.split('/').some(part=>excluded.has(part)||part==='.env'||part.startsWith('.env.')) || name === 'run-state/remote-processing' || name.startsWith('run-state/remote-processing/');
 const sourceExcluded = new Set(['node_modules','.cache','.venv','__pycache__','.pytest_cache','target','output','cache','.theatrical-audio','hf-cache','.DS_Store','.idea','.git','.apikeys','audio.config.json']);
 const sourceSkip = name => { const part=name.split('/').at(-1); return part === '.env' || part.startsWith('.env.') && part !== '.env.example' || sourceExcluded.has(part) || part.endsWith('.pyc') || part.endsWith('.actual.html') || /\/external\/(?:browser|tools|docling-source)(?:\/|$)/.test('/'+name) || /\/external\/native\/(?:licenses|models|linux-[^/]+|darwin-[^/]+|win32-[^/]+)(?:\/|$)/.test('/'+name) || name.endsWith('.zip') || /theatrical-audio\/(?:models|runtime\/(?:qwen|kokoro|piper))(?:\/|$)/.test(name) || /theatrical-audio\/runtime\/(?:qwen|kokoro|piper)(?:\.resolved\.txt|\.json)$/.test(name); };
-async function inventory(root,{source=false,skill='',hook=async()=>{}}={}) {
+async function inventory(root,{source=false,skill='',hook=async()=>{},scope}={}) {
   const result=[];let bytes=0;
   async function visit(dir,relative='') {
-    for(const entry of await fs.readdir(at(dir,'.'),{withFileTypes:true})) {
+    const children=await fs.readdir(at(dir,'.'),{withFileTypes:true});
+    if(!source&&!(relative==='package'||relative.startsWith('package/'))&&children.some(entry=>entry.name==='.git'))throw Error('Repository checkouts are not skill inputs; stage only the current book.');
+    for(const entry of children) {
       const name=relative?relative+'/'+entry.name:entry.name;
-      if(source?sourceSkip(skill+'/'+name):protectedPath(name))continue;
+      if(!source&&scope&&!(entry.isDirectory()?scope.traverse(name):scope.allows(name)))continue;
+      if(source?sourceSkip(skill+'/'+name):protectedPath(name)||localControlPath(name))continue;
       if(!validPath(name))throw new Error('Invalid workspace path');
       if(entry.isDirectory()){await hook('inventory-directory',name);const child=await openDir(dir,entry.name);try{await visit(child,name);}finally{await child.close();}}
       else {const handle=await fs.open(at(dir,entry.name),constants.O_RDONLY|constants.O_NOFOLLOW|constants.O_NONBLOCK);try{const stat=await handle.stat();if(!stat.isFile()||stat.nlink!==1)throw new Error('Unsupported workspace entry: '+name);bytes+=stat.size;if(stat.size>512*1024*1024||bytes>4*1024*1024*1024||result.length>=10000)throw new Error('Workspace limit exceeded');const h=crypto.createHash('sha256');for await(const chunk of handle.createReadStream({autoClose:false}))h.update(chunk);result.push({path:name,size:stat.size,sha256:h.digest('hex')});}finally{await handle.close();}}
@@ -68,7 +74,12 @@ export async function mergeRemoteOutput({taskRoot,jobDir,journalPath,controlDir,
   const control=controlDir || await openRoot(path.dirname(journalPath));const journalName=path.basename(journalPath);
   try {
     const save=()=>atomic(control,journalName,journal);
+    const inScope=name=>!localControlPath(name)&&(!journal.inputScope||!name.startsWith('package/')||!!journal.inputScope.bookRoot&&(name===journal.inputScope.bookRoot||name.startsWith(journal.inputScope.bookRoot+'/'))||journal.inputScope.assets.includes(name));
+    if([...journal.files,...journal.output].some(e=>!inScope(e.path)))throw new Error('Processing snapshot contains resources outside the current input scope');
     const before=new Map(journal.files.map(e=>[e.path,e])),after=new Map(journal.output.map(e=>[e.path,e]));
+    if(journal.items?.some(item=>localControlPath(item.name)))throw new Error('An orchestration handoff merge already started; reconcile its retained originals first');
+    const verifyUnchanged=async()=>{for(const [name,next] of after)if(equal(before.get(name)||null,next)&&!equal(await current(task,name),next))throw new Error('Local edit conflicts with unchanged remote result: '+name);};
+    await verifyUnchanged();
     journal.items ||= [...new Set([...before.keys(),...after.keys()])].sort().filter(name=>!equal(before.get(name)||null,after.get(name)||null)).map(name=>({name,old:before.get(name)||null,next:after.get(name)||null,backup:'backup-'+crypto.randomUUID(),temp:'install-'+crypto.randomUUID(),stage:'new'}));
     await save();
     for(const item of journal.items) {
@@ -101,6 +112,7 @@ export async function mergeRemoteOutput({taskRoot,jobDir,journalPath,controlDir,
       if(old&&!equal(await current(job,backup),old))throw new Error('Retained original changed: '+name);
       if(!equal(await current(task,name),next))throw new Error('Local edit conflicts with remote result: '+name);
     }
+    await verifyUnchanged();
     await atomic(job,'retained.json',{executionId:journal.command?.executionId,items:journal.items.map(({name,old,backup})=>({name,old,backup}))});
     for(const item of journal.items) {if(item.old&&!equal(await current(job,item.backup),item.old))throw new Error('Retained original changed: '+item.name);if(!equal(await current(task,item.name),item.next))throw new Error('Local edit conflicts with remote result: '+item.name);}
   } finally {if(!controlDir)await control.close();if(ownedTask)await task.close();if(ownedJob)await job.close();}
@@ -136,7 +148,7 @@ async function fetchInto(jobDir,name,download) {
   try {const result=await download(at(jobDir,temp));await fs.rename(at(jobDir,temp),at(jobDir,name));return result;}
   finally {await fs.rm(at(jobDir,temp),{force:true});}
 }
-async function retainEvidence(call,executionId,jobId,status,control,{stdout,stderr,incomplete=false}={}) {
+async function retainEvidence(call,executionId,jobId,status,control,{stdout,stderr,incomplete=false,reuse,scope,hook=async()=>{}}={}) {
   let cursor, output=[], inventoryUnavailable=false, outputsUnretrievable=false, prior=null;
   if(incomplete) {try {const earlier=await openDir(control,jobId);try {prior=await readJson(earlier,'result.json');} finally {await earlier.close();}} catch(e) {if(e.code!=='ENOENT')throw e;}
     if(prior&&prior.resultDigest!==status.resultDigest)prior=null;}
@@ -151,9 +163,18 @@ async function retainEvidence(call,executionId,jobId,status,control,{stdout,stde
   const logs={};for(const kind of ['stdout','stderr']) {const target=at(jobDir,kind);
     try {logs[kind]=await fetchInto(jobDir,kind,temp=>download(call,executionId,jobId,kind,null,temp));} catch(error) {if(!incomplete||!isAbsent(error)||!absentReply(error.reply,status))throw error;logs[kind]=await current(jobDir,kind);continue;}
     if(stream(kind,stdout,stderr))for await(const chunk of createReadStream(target))stream(kind,stdout,stderr).write(chunk);}
-  for(const e of output) {if(!equal(await current(jobDir,digest(e.path)),e)) await fetchInto(jobDir,digest(e.path),temp=>download(call,executionId,jobId,'file',e.path,temp,e));}
+  const reusedFiles=[],before=new Map((reuse?.files||[]).map(e=>[e.path,e]));
+  for(const e of output) {
+    if(!incomplete&&scope&&!scope.allows(e.path))throw new Error('Remote output contains an out-of-scope book resource: '+e.path);
+    if(!incomplete&&localControlPath(e.path))throw new Error('Remote output contains workflow coordinator state: '+e.path);
+    if(reuse && !incomplete && status.state==='succeeded' && status.diagnosticsComplete && equal(before.get(e.path)||null,e)) {
+      if(!equal(await current(reuse.taskRoot,e.path),e))throw new Error('Local edit conflicts with unchanged remote result: '+e.path);
+      reusedFiles.push(e.path);await hook('reused-output',e);continue;
+    }
+    if(!equal(await current(jobDir,digest(e.path)),e)) await fetchInto(jobDir,digest(e.path),temp=>download(call,executionId,jobId,'file',e.path,temp,e));
+  }
   const exitCode=status.state==='succeeded'?0:Number.isInteger(status.exitCode)&&status.exitCode>0&&status.exitCode<=255?status.exitCode:1;
-  await atomic(jobDir,'result.json',{state:status.state,exitCode:status.exitCode,reason:status.reason??null,resultDigest:status.resultDigest,diagnosticsComplete:status.diagnosticsComplete,files:output,logs,...(inventoryUnavailable?{inventoryUnavailable:true}:{}),...(outputsUnretrievable?{outputsUnretrievable:true}:{})});
+  await atomic(jobDir,'result.json',{state:status.state,exitCode:status.exitCode,reason:status.reason??null,resultDigest:status.resultDigest,diagnosticsComplete:status.diagnosticsComplete,files:output,logs,...(reusedFiles.length?{reusedFiles}:{}),...(inventoryUnavailable?{inventoryUnavailable:true}:{}),...(outputsUnretrievable?{outputsUnretrievable:true}:{})});
   return {jobDir,output,exitCode};
   } catch(error) {await jobDir.close();throw error;}
 }
@@ -207,24 +228,37 @@ export async function runRemoteSkill(input,call,{root=process.cwd(),sourceRoot=p
   if(journal?.phase==='release_pending')return await releaseJournal(call,executionId,journal,journalPath);
   const claimed=JSON.parse(await withParent(taskRoot,'run-state/claimed.json',async p=>{const h=await fs.open(p,constants.O_RDONLY|constants.O_NOFOLLOW|constants.O_NONBLOCK);try{const st=await h.stat();if(!st.isFile()||st.nlink!==1||st.size>1024*1024)throw new Error('Invalid claimed task');return await h.readFile('utf8');}finally{await h.close();}}));
   if(claimed.task?.executionId!==executionId || claimed.task?.taskId!==taskDirectory.slice(6) || claimed.taskDirectory!==taskDirectory)throw new Error('Task directory does not belong to this execution');
+  let savedScope;try{savedScope=await readJson(control,'book-scope.json');}catch(error){if(error.code!=='ENOENT')throw error;}
+  if(savedScope&&(savedScope.executionId!==executionId||savedScope.bookId!==claimed.task.bookId))throw Error('Saved book scope belongs to another execution');
+  const scope=await bookInputScope(taskRoot,{args,taskDirectory,virtualCwd:root,bookId:claimed.task.bookId,bookRootHint:savedScope?.bookRoot});
+  if(scope.bookRoot&&!savedScope)await atomic(control,'book-scope.json',{executionId,bookId:claimed.task.bookId,bookRoot:scope.bookRoot});
+  if(journal){
+    if(journal.files.some(entry=>localControlPath(entry.path)||!scope.allows(entry.path)))throw Error('Pending snapshot contains resources outside the current input scope');
+    journal.inputScope={bookRoot:scope.bookRoot,assets:scope.assets};
+  }
   await guardRemoteBackups(base,executionId,{ignorePending:journal?taskDirectory.slice(6):undefined});
   if(!journal) {
+    if(skill==='validate-book'&&(args[0]==='complete'||args.includes('--auto-correct'))&&args.some(arg=>arg==='--pdf'||arg.startsWith('--pdf=')||arg==='--english'||arg.startsWith('--english=')))throw Error('Source overrides are audit-only: use prepare without --auto-correct, or complete with sources declared inside the current book.');
     const skillDir=await findSkill(sourceRoot,skill);let source;try{source=await inventory(skillDir,{source:true,skill});}finally{await skillDir.close();}
     const sourceMap=Object.fromEntries(source.map(e=>[skill+'/'+e.path,e.sha256]));if(!source.length)throw new Error('Selected skill source is empty');
-    const files=await inventory(taskRoot,{hook}),manifest=Buffer.from(JSON.stringify(files));if(manifest.length>8*1024*1024)throw new Error('Manifest too large');
-    journal={commandHash,command,jobId:crypto.randomUUID(),sourceDigest:digest(JSON.stringify(sourceMap)),files,manifest:manifest.toString('base64'),phase:'uploading'};await atomic(control,'pending.json',journal,{exclusive:true});
+    const files=args.length===1&&args[0]==='doctor'&&!stdin?[]:await inventory(taskRoot,{hook,scope}),manifest=Buffer.from(JSON.stringify(files));if(manifest.length>8*1024*1024)throw new Error('Manifest too large');
+    journal={commandHash,command,jobId:crypto.randomUUID(),sourceDigest:digest(JSON.stringify(sourceMap)),inputScope:{bookRoot:scope.bookRoot,assets:scope.assets},files,manifest:manifest.toString('base64'),phase:'uploading'};await atomic(control,'pending.json',journal,{exclusive:true});
   }
   const {jobId,files}=journal, manifest=Buffer.from(journal.manifest,'base64');
   let status=await call('scriptahub_skill_job_prepare',{executionId,jobId,virtualCwd:root,skill,args,input:stdin,sourceDigest:journal.sourceDigest,manifestSha256:digest(manifest),manifestSize:manifest.length});
   if (status.state === 'uploading') {
-  async function upload(kind,name,buffer) {for(let offset=0;offset<buffer.length;) {const data=buffer.subarray(offset,offset+65536); const reply=await call('scriptahub_skill_job_upload',{executionId,jobId,kind,...(name?{path:name}:{}),offset,data:data.toString('base64')}); if(reply.nextOffset!==offset+data.length)throw new Error('Invalid upload acknowledgement');offset=reply.nextOffset;}}
-  await upload('manifest',null,manifest);
-  for(const entry of files) {await hook('before-upload',entry.path);await withParent(taskRoot,entry.path,async filename=>{const handle=await fs.open(filename,constants.O_RDONLY|constants.O_NOFOLLOW|constants.O_NONBLOCK);const hash=crypto.createHash('sha256');try {const stat=await handle.stat();if(!stat.isFile()||stat.nlink!==1||stat.size!==entry.size)throw new Error('Workspace changed during upload: '+entry.path);for(let offset=0;offset<entry.size;) {const data=Buffer.alloc(Math.min(65536,entry.size-offset));const {bytesRead}=await handle.read(data,0,data.length,offset);if(bytesRead!==data.length)throw new Error('Workspace changed during upload: '+entry.path);hash.update(data);const reply=await call('scriptahub_skill_job_upload',{executionId,jobId,kind:'file',path:entry.path,offset,data:data.toString('base64')});if(reply.nextOffset!==offset+bytesRead)throw new Error('Invalid upload acknowledgement');offset+=bytesRead;}if(hash.digest('hex')!==entry.sha256)throw new Error('Workspace changed during upload: '+entry.path);}finally{await handle.close();}});}
+  if(files.some(entry=>!scope.allows(entry.path)))throw Error('Pending job contains other books or catalogue files. Cancel this unstarted upload through the helper before retrying with the current-book scope.');
+  async function upload(kind,name,buffer) {let last;for(let offset=0;offset<buffer.length;) {const data=buffer.subarray(offset,offset+uploadBlockSize('scriptahub_skill_job_upload',{executionId,jobId,kind,...(name?{path:name}:{}),offset},buffer.length-offset)); const reply=await call('scriptahub_skill_job_upload',{executionId,jobId,kind,...(name?{path:name}:{}),offset,data:data.toString('base64')}); if(reply.nextOffset!==offset+data.length)throw new Error('Invalid upload acknowledgement');offset=reply.nextOffset;last=reply;}return last;}
+  const manifestReply=await upload('manifest',null,manifest);
+  const available=manifestReply?.availableFiles ?? [];
+  if(!Array.isArray(available)||available.length>files.length||new Set(available).size!==available.length||available.some(index=>!Number.isSafeInteger(index)||index<0||index>=files.length))throw new Error('Invalid reusable input inventory');
+  const present=new Set(available);
+  for(const [index,entry] of files.entries()) {await hook('before-upload',entry.path);await withParent(taskRoot,entry.path,async filename=>{const handle=await fs.open(filename,constants.O_RDONLY|constants.O_NOFOLLOW|constants.O_NONBLOCK);const hash=crypto.createHash('sha256');try {const stat=await handle.stat();if(!stat.isFile()||stat.nlink!==1||stat.size!==entry.size)throw new Error('Workspace changed during upload: '+entry.path);for(let offset=0;offset<entry.size;) {const data=Buffer.alloc(uploadBlockSize('scriptahub_skill_job_upload',{executionId,jobId,kind:'file',path:entry.path,offset},entry.size-offset));const {bytesRead}=await handle.read(data,0,data.length,offset);if(bytesRead!==data.length)throw new Error('Workspace changed during upload: '+entry.path);hash.update(data);if(!present.has(index)){const reply=await call('scriptahub_skill_job_upload',{executionId,jobId,kind:'file',path:entry.path,offset,data:data.toString('base64')});if(reply.nextOffset!==offset+bytesRead)throw new Error('Invalid upload acknowledgement');}offset+=bytesRead;}if(hash.digest('hex')!==entry.sha256)throw new Error('Workspace changed during upload: '+entry.path);}finally{await handle.close();}});}
   status=await call('scriptahub_skill_job_start',{executionId,jobId});
   }
   while(['uploading','starting','running','stopping'].includes(status.state)) {await new Promise(resolve=>setTimeout(resolve,pollMs));status=await call('scriptahub_skill_job_status',{executionId,jobId});}
   if(!['succeeded','failed','cancelled','interrupted'].includes(status.state)||!/^[a-f0-9]{64}$/.test(status.resultDigest||'')||typeof status.diagnosticsComplete!=='boolean')throw new Error('Invalid terminal processing receipt');
-  const evidence=await retainEvidence(call,executionId,jobId,status,control,{stdout,stderr});jobDir=evidence.jobDir;const {output,exitCode}=evidence;
+  const evidence=await retainEvidence(call,executionId,jobId,status,control,{stdout,stderr,reuse:{taskRoot,files},scope,hook});jobDir=evidence.jobDir;const {output,exitCode}=evidence;
   if(!status.diagnosticsComplete)throw new Error('Processing diagnostics are incomplete; server artifacts remain retained');
   if(status.state==='succeeded') {
     if(status.exitCode!==0)throw new Error('Invalid successful processing exit code');

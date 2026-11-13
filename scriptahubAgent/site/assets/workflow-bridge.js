@@ -96,11 +96,20 @@
       received = await response.json();
       if (!response.ok) throw new Error(received.error || `Upload failed (${response.status})`);
       status.textContent = `${words()[1]} ${received.submissionId}`;
+      if (received.cycle) {
+        const link = document.createElement('a');
+        const language = lang();
+        link.href = new URL('account/dashboard.html?lang=' + encodeURIComponent(language),root);
+        link.textContent = language === 'ro' ? 'Vezi starea cererii' : 'View request status';
+        status.append(' · ',link);
+      }
       button.dataset.submissionComplete = 'true';
       try { if (metadata.values?.annotationDraftKey?.startsWith('scriptahub:suggest:')) sessionStorage.removeItem(metadata.values.annotationDraftKey); } catch { /* A confirmed submission stays successful even if local draft cleanup is unavailable. */ }
       return true;
     } catch (error) {
-      status.textContent = error.message;
+      status.textContent = error.message === 'The points cost has changed. Review it before continuing.'
+        ? (lang() === 'ro' ? 'Costul în credite s-a schimbat. Verifică-l înainte să continui.' : 'The credit cost has changed. Review it before continuing.')
+        : error.message;
       button.disabled = false;
       return false;
     } finally { sending.delete(button);button.form?.updateContributionState?.(); }
@@ -110,6 +119,11 @@
     const submissionPolicy=await policy;
     button.dataset.submissionId ||= submissionPolicy.newSubmissionId();
     const metadata={submissionId:button.dataset.submissionId,kind:contributionKind(draft,files.length),agreementVersion:'2026-09-10',agreementAccepted:true,values:draft.values,language:draft.language ?? lang(),...(bookId(draft)?{bookId:bookId(draft)}:{})};
+    if (metadata.kind === 'fork') {
+      metadata.values = {...metadata.values};
+      metadata.confirmedCost = Number(metadata.values.confirmedCost);
+      delete metadata.values.confirmedCost;
+    }
     return submitDirect(metadata,files,status,button);
   }
   globalThis.ScriptaContributionBridge = {bindFormValidity,loadDraftFiles,deleteDraftFiles:remove,submitContribution,submitDirect,

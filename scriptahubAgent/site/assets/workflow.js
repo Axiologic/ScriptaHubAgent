@@ -103,6 +103,12 @@
     it: ["Fatto", "Chiudi", "Rimuovi", "Opzione personalizzata", "Aggiungi"],
     pl: ["Gotowe", "Zamknij", "Usuń", "Własna opcja", "Dodaj"],
   };
+  const instructionPreviewCopy = {
+    en: ['View all', 'selected'], ro: ['Vezi toate', 'selectate'],
+    fr: ['Tout voir', 'sélectionnés'], de: ['Alle anzeigen', 'ausgewählt'],
+    es: ['Ver todas', 'seleccionadas'], pt: ['Ver todas', 'selecionadas'],
+    it: ['Mostra tutte', 'selezionate'], pl: ['Zobacz wszystkie', 'wybrano'],
+  };
   const instructionHints = {
     en: ["Who is the book for?", "What should the book achieve?", "What should it cover?", "How should it be organized?", "Whose perspectives should it include?", "What standards should it meet?"],
     ro: ["Cui îi este destinată cartea?", "Ce vrei să realizeze cartea?", "Ce ar trebui să acopere?", "Cum ar trebui organizată?", "Ale cui perspective vrei să incluzi?", "Ce standarde ar trebui să respecte?"],
@@ -206,20 +212,56 @@
   const language = () => collection.supportedLanguages.some((item) => item.code === document.documentElement.lang) ? document.documentElement.lang : "en";
   const activeBook = () => collection.books.find((book) => document.body.dataset.animationBook ? book.id === document.body.dataset.animationBook : book.directory === params().get("book"));
   const field = (label, name, type = "text", wide = false, placeholder = "", required = false, extraClass = "") => `<label class="form-field${wide ? " form-field-wide" : ""}${extraClass ? ` ${extraClass}` : ""}"><span>${escape(label)}</span><input type="${type}" name="${name}" placeholder="${escape(placeholder)}"${required ? " required" : ""}></label>`;
-  const textarea = (label, name, placeholder, required = false, extraClass = "") => `<label class="form-field form-field-wide${extraClass ? ` ${extraClass}` : ""}"><span>${escape(label)}</span><textarea name="${name}" placeholder="${escape(placeholder)}"${required ? " required" : ""}></textarea></label>`;
-  function bookInstructions(title, labels, lang) {
-    const options = instructionOptions[lang];
+  const textarea = (label, name, placeholder, required = false, extraClass = "", maxLength) => `<label class="form-field form-field-wide${extraClass ? ` ${extraClass}` : ""}"><span>${escape(label)}</span><textarea name="${name}" placeholder="${escape(placeholder)}"${maxLength ? ` maxlength="${maxLength}"` : ""}${required ? " required" : ""}></textarea></label>`;
+  const coverFields = ["coverStyle", "coverPalette", "coverComposition"];
+  const pickerFields = [...instructionFields, ...coverFields];
+  // Empty selections intentionally mean automatic art direction based on the book.
+  const coverCopy = {
+    en: ["Book cover", "Optional. AI uses the title, subject and book instructions. Leave the options empty to let it choose.", "Visual style", "Color palette", "Composition", "Choose a style, or let AI decide", "Choose colors, or let AI decide", "Guide the layout, or let AI decide", "Your cover description", "Describe imagery, symbols, mood, elements to include or avoid…"],
+    ro: ["Coperta cărții", "Opțional. AI folosește titlul, subiectul și indicațiile cărții. Lasă opțiunile necompletate pentru alegere automată.", "Stil vizual", "Paletă de culori", "Compoziție", "Alege stilul sau lasă AI să decidă", "Alege culorile sau lasă AI să decidă", "Indică aranjarea sau lasă AI să decidă", "Descrierea copertei", "Descrie imagini, simboluri, atmosferă, elemente de inclus sau de evitat…"],
+    fr: ["Couverture du livre", "Facultatif. L’IA utilise le titre, le sujet et les consignes. Sans sélection, elle choisit automatiquement.", "Style visuel", "Palette de couleurs", "Composition", "Choisissez un style ou laissez faire l’IA", "Choisissez les couleurs ou laissez faire l’IA", "Guidez la composition ou laissez faire l’IA", "Votre description", "Décrivez les images, symboles, l’ambiance et les éléments à inclure ou éviter…"],
+    de: ["Buchcover", "Optional. Die KI nutzt Titel, Thema und Buchvorgaben. Ohne Auswahl entscheidet sie automatisch.", "Visueller Stil", "Farbpalette", "Komposition", "Stil wählen oder der KI überlassen", "Farben wählen oder der KI überlassen", "Anordnung wählen oder der KI überlassen", "Coverbeschreibung", "Beschreiben Sie Motive, Symbole, Stimmung und gewünschte oder unerwünschte Elemente…"],
+    es: ["Portada del libro", "Opcional. La IA usa el título, el tema y las instrucciones. Sin selección, elige automáticamente.", "Estilo visual", "Paleta de colores", "Composición", "Elige un estilo o deja decidir a la IA", "Elige colores o deja decidir a la IA", "Guía el diseño o deja decidir a la IA", "Descripción de la portada", "Describe imágenes, símbolos, ambiente y elementos que incluir o evitar…"],
+    pt: ["Capa do livro", "Opcional. A IA usa o título, o tema e as instruções. Sem seleção, escolhe automaticamente.", "Estilo visual", "Paleta de cores", "Composição", "Escolha um estilo ou deixe a IA decidir", "Escolha cores ou deixe a IA decidir", "Oriente a composição ou deixe a IA decidir", "Descrição da capa", "Descreva imagens, símbolos, ambiente e elementos a incluir ou evitar…"],
+    it: ["Copertina del libro", "Facoltativo. L’IA usa titolo, tema e istruzioni. Senza selezioni sceglie automaticamente.", "Stile visivo", "Palette di colori", "Composizione", "Scegli lo stile o lascia decidere all’IA", "Scegli i colori o lascia decidere all’IA", "Indica la composizione o lascia decidere all’IA", "Descrizione della copertina", "Descrivi immagini, simboli, atmosfera ed elementi da includere o evitare…"],
+    pl: ["Okładka książki", "Opcjonalnie. AI używa tytułu, tematu i wskazówek. Bez wyboru dobiera opcje automatycznie.", "Styl wizualny", "Paleta kolorów", "Kompozycja", "Wybierz styl lub pozostaw wybór AI", "Wybierz kolory lub pozostaw wybór AI", "Określ układ lub pozostaw wybór AI", "Opis okładki", "Opisz obrazy, symbole, nastrój i elementy do uwzględnienia lub pominięcia…"],
+  };
+  const coverOptions = {
+    en: ["Minimalist;Editorial illustration;Geometric;Abstract;Botanical;Vintage;Scientific;Literary", "Warm earth tones;Cool blue and teal;Forest green;Black and white;Soft pastels;Rich jewel tones;High contrast", "Large title;Central illustration;Symbolic motif;Framed composition;Generous negative space;Full-bleed illustration"],
+    ro: ["Minimalist;Ilustrație editorială;Geometric;Abstract;Botanic;Vintage;Științific;Literar", "Tonuri calde de pământ;Albastru și turcoaz;Verde de pădure;Alb și negru;Pasteluri delicate;Culori intense;Contrast puternic", "Titlu mare;Ilustrație centrală;Motiv simbolic;Compoziție în ramă;Spațiu liber generos;Ilustrație pe toată coperta"],
+    fr: ["Minimaliste;Illustration éditoriale;Géométrique;Abstrait;Botanique;Vintage;Scientifique;Littéraire", "Tons terre chauds;Bleu et turquoise;Vert forêt;Noir et blanc;Pastels doux;Couleurs intenses;Contraste élevé", "Grand titre;Illustration centrale;Motif symbolique;Composition encadrée;Espace libre généreux;Illustration pleine page"],
+    de: ["Minimalistisch;Editorial-Illustration;Geometrisch;Abstrakt;Botanisch;Vintage;Wissenschaftlich;Literarisch", "Warme Erdtöne;Blau und Türkis;Waldgrün;Schwarzweiß;Sanfte Pastelltöne;Kräftige Farben;Starker Kontrast", "Großer Titel;Zentrale Illustration;Symbolisches Motiv;Gerahmte Komposition;Viel Freiraum;Randfüllende Illustration"],
+    es: ["Minimalista;Ilustración editorial;Geométrico;Abstracto;Botánico;Vintage;Científico;Literario", "Tonos tierra cálidos;Azul y turquesa;Verde bosque;Blanco y negro;Pasteles suaves;Colores intensos;Alto contraste", "Título grande;Ilustración central;Motivo simbólico;Composición enmarcada;Espacio libre amplio;Ilustración a sangre"],
+    pt: ["Minimalista;Ilustração editorial;Geométrico;Abstrato;Botânico;Vintage;Científico;Literário", "Tons terra quentes;Azul e turquesa;Verde floresta;Preto e branco;Pastéis suaves;Cores intensas;Alto contraste", "Título grande;Ilustração central;Motivo simbólico;Composição emoldurada;Espaço livre amplo;Ilustração de ponta a ponta"],
+    it: ["Minimalista;Illustrazione editoriale;Geometrico;Astratto;Botanico;Vintage;Scientifico;Letterario", "Toni caldi della terra;Blu e turchese;Verde bosco;Bianco e nero;Pastelli delicati;Colori intensi;Alto contrasto", "Titolo grande;Illustrazione centrale;Motivo simbolico;Composizione incorniciata;Ampio spazio libero;Illustrazione a tutta pagina"],
+    pl: ["Minimalistyczny;Ilustracja redakcyjna;Geometryczny;Abstrakcyjny;Botaniczny;Vintage;Naukowy;Literacki", "Ciepłe kolory ziemi;Błękit i turkus;Leśna zieleń;Czerń i biel;Delikatne pastele;Intensywne kolory;Silny kontrast", "Duży tytuł;Centralna ilustracja;Motyw symboliczny;Kompozycja w ramie;Dużo wolnej przestrzeni;Ilustracja do krawędzi"],
+  };
+  function bookCover(lang) {
+    const copy = coverCopy[lang];
+    return bookInstructions(copy[0], copy.slice(2, 5), lang, {
+      fields: coverFields, options: coverOptions[lang].map(row => row.split(";")), hints: copy.slice(5, 8), cover: true,
+      note: copy[1], description: textarea(copy[8], "coverDescription", copy[9], false, "cover-description-field", 4000),
+    });
+  }
+
+  function bookInstructions(title, labels, lang, config = {}) {
+    const options = config.options || instructionOptions[lang];
+    const names = config.fields || instructionFields;
+    const hints = config.hints || instructionHints[lang];
     const [done, close, , custom, add] = instructionPickerCopy[lang];
-    const fields = instructionFields.map((name, index) => {
+    const fields = names.map((name, index) => {
       const id = `book-instruction-${name}`;
       const label = escape(labels[index]);
       const choices = options[index].map(option => `<label class="instruction-choice"><input type="checkbox" name="${name}" value="${escape(option)}"><span>${escape(option)}</span></label>`).join("");
-      return `<div class="instruction-picker" data-instruction-picker="${name}">
+      return `<div class="instruction-picker" data-instruction-picker="${name}" data-instruction-hint="${escape(hints[index])}">
         <span id="${id}-label" class="instruction-caption">${label}</span>
-        <button type="button" class="instruction-trigger" aria-haspopup="dialog" aria-controls="${id}-dialog" aria-expanded="false" aria-labelledby="${id}-label ${id}-trigger"><span id="${id}-trigger">${escape(instructionHints[lang][index])}</span><svg aria-hidden="true" viewBox="0 0 16 16"><path d="m4 6 4 4 4-4"/></svg></button>
-        <ul class="instruction-pills" aria-labelledby="${id}-label" hidden></ul>
+        <button type="button" class="instruction-trigger" aria-haspopup="dialog" aria-controls="${id}-dialog" aria-expanded="false" aria-labelledby="${id}-label ${id}-trigger"><span id="${id}-trigger">${escape(hints[index])}</span><svg aria-hidden="true" viewBox="0 0 16 16"><path d="m4 6 4 4 4-4"/></svg></button>
+        <div class="instruction-preview" hidden>
+          <ul class="instruction-pills" aria-labelledby="${id}-label"></ul>
+          <button type="button" class="instruction-view-all" aria-haspopup="dialog" aria-controls="${id}-dialog" hidden>${escape(instructionPreviewCopy[lang][0])}</button>
+        </div>
         <dialog class="instruction-dialog" id="${id}-dialog" aria-labelledby="${id}-title">
-          <header><h2 id="${id}-title">${label}</h2><button type="button" class="instruction-close" aria-label="${escape(close)}" autofocus>×</button></header>
+          <header><div><h2 id="${id}-title">${label}</h2><p class="instruction-selection-count" role="status" aria-live="polite"></p></div><button type="button" class="instruction-close" aria-label="${escape(close)}" autofocus>×</button></header>
           <div class="instruction-dialog-body">
             <div class="instruction-choices" role="group" aria-labelledby="${id}-title">${choices}</div>
             <div class="instruction-custom">
@@ -231,7 +273,7 @@
         </dialog>
       </div>`;
     });
-    return `<fieldset class="create-instructions-field create-instructions"><legend>${escape(title)}</legend><div class="create-instructions-grid">${fields.join("")}</div></fieldset>`;
+    return `<fieldset class="${config.cover ? "create-cover-field" : "create-instructions-field"} create-instructions"><legend>${escape(title)}</legend>${config.note ? `<p class="workflow-note cover-note">${escape(config.note)}</p>` : ""}<div class="create-instructions-grid">${fields.join("")}</div>${config.description || ""}</fieldset>`;
   }
   function bindInstructionPickers(form, lang, saved = {}) {
     const [, , remove] = instructionPickerCopy[lang];
@@ -240,6 +282,32 @@
       const panel = picker.querySelector("dialog");
       const trigger = picker.querySelector(".instruction-trigger");
       const pills = picker.querySelector(".instruction-pills");
+      const preview = picker.querySelector(".instruction-preview");
+      const more = picker.querySelector(".instruction-view-all");
+      const count = picker.querySelector(".instruction-selection-count");
+      const caption = trigger.querySelector("span");
+      const hint = picker.dataset.instructionHint;
+      const [viewAll, selectedLabel] = instructionPreviewCopy[lang];
+      let opener = trigger;
+      function fitPreview() {
+        const items = [...pills.children];
+        for (const item of items) item.hidden = false;
+        more.hidden = true;
+        if (!items.length || !preview.clientWidth) return;
+        const widths = items.map(item => item.offsetWidth);
+        const totalWidth = widths.reduce((sum, width) => sum + width, 0) + Math.max(0, items.length - 1) * 6;
+        if (items.length <= 3 && totalWidth <= preview.clientWidth) return;
+        more.textContent = `${viewAll} (+${items.length})`;
+        more.hidden = false;
+        const available = Math.max(0, preview.clientWidth - more.offsetWidth - 8);
+        let used = 0, visible = 0;
+        items.forEach((item, index) => {
+          const width = widths[index] + (visible ? 6 : 0);
+          if (visible >= 3 || used + width > available) item.hidden = true;
+          else { used += width; visible++; }
+        });
+        more.textContent = `${viewAll} (+${items.length - visible})`;
+      }
       const menu = panel.querySelector(".instruction-choices");
       const choices = [...menu.querySelectorAll("input")];
       const customInput = panel.querySelector(".instruction-custom input");
@@ -257,16 +325,17 @@
       const prior = saved[name];
       if (typeof prior === "string" && prior) {
         const selected = prior.split("; ");
-        if (selected.every(value => choices.some(choice => choice.value === value))) {
-          for (const choice of choices) choice.checked = selected.includes(choice.value);
-        } else {
-          // Retain a saved value that predates the preset list.
-          appendChoice(prior);
+        for (const value of selected) {
+          const choice = choices.find(choice => choice.value === value) || appendChoice(value);
+          choice.checked = true;
         }
       }
+
       function render() {
         const selected = choices.filter(choice => choice.checked);
-        pills.hidden = !selected.length;
+        preview.hidden = !selected.length;
+        caption.textContent = selected.length ? `${hint} (${selected.length})` : hint;
+        count.textContent = `${selected.length} ${selectedLabel}`;
         pills.replaceChildren(...selected.map(choice => {
           const pill = document.createElement("li");
           const caption = document.createElement("span");
@@ -280,12 +349,15 @@
             choice.dispatchEvent(new Event("change", { bubbles: true }));
             trigger.focus();
           });
+          pill.title = choice.value;
           pill.append(caption, button);
           return pill;
         }));
+        fitPreview();
       }
-      function open() {
+      function open(event) {
         if (panel.open) return;
+        opener = event?.currentTarget || trigger;
         panel.showModal();
         trigger.setAttribute("aria-expanded", "true");
       }
@@ -305,12 +377,21 @@
         if (!event.isComposing) addCustom();
       });
       trigger.addEventListener("click", open);
+      more.addEventListener("click", open);
+      if (typeof ResizeObserver === "function") {
+        const observer = new ResizeObserver(() => {
+          if (picker.isConnected) fitPreview();
+          else observer.disconnect();
+        });
+        observer.observe(picker);
+      }
+      document.fonts?.ready.then(() => { if (picker.isConnected) fitPreview(); });
       panel.querySelector(".instruction-close").addEventListener("click", () => panel.close());
       panel.querySelector(".instruction-done").addEventListener("click", () => { addCustom(); panel.close(); });
       panel.addEventListener("click", event => { if (event.target === panel) panel.close(); });
       panel.addEventListener("close", () => {
         trigger.setAttribute("aria-expanded", "false");
-        trigger.focus({ preventScroll: true });
+        (opener.hidden ? trigger : opener).focus({ preventScroll: true });
       });
       menu.addEventListener("change", render);
       form.addEventListener("reset", () => queueMicrotask(render));
@@ -358,7 +439,7 @@
     if (back.pathname !== location.pathname || back.searchParams.get("book") !== params().get("book")) return;
     const hasInstructionPickers = form.querySelector(".create-instructions");
     for (const [name, value] of Object.entries(draft.values)) {
-      if (hasInstructionPickers && instructionFields.includes(name)) continue;
+      if (hasInstructionPickers && pickerFields.includes(name)) continue;
       const input = form.elements.namedItem(name);
       if (input && input.type !== "file") input.value = value;
     }
@@ -401,6 +482,20 @@
     pl: ["Zaproponuj książkę pochodną", "Rozwiń tę książkę dla nowych odbiorców, w nowym kierunku lub z innej perspektywy.", "Co należy zachować, zmienić lub dodać?", "Opisz cel, odbiorców, zakres i związek z książką źródłową.", "Zaproponuj animację", "Ta książka nie ma jeszcze animacji. Pomóż zaplanować jej wprowadzenie.", "Ulepsz tę prezentację", "Jak uczynić to wprowadzenie jaśniejszym lub bardziej przekonującym?", "Twoja sugestia", "Zaproponuj początek, wyróżniające idee, oprawę wizualną lub zmiany sceny; w razie potrzeby podaj czas."],
   };
 
+  function creationData(form, lang) {
+    const data = new FormData(form);
+    const description = String(data.get("description") || "").trim();
+    data.set("description", description);
+    const sections = pickerFields.flatMap((name, index) => {
+      const value = data.getAll(name).join("; ");
+      if (!value) return [];
+      data.set(name, value);
+      return index < instructionFields.length ? [`${instructionLabels[lang][index]}:\n${value}`] : [];
+    });
+    data.set("coverDescription", String(data.get("coverDescription") || "").trim());
+    data.set("prompt", [description, ...sections].join("\n\n"));
+    return data;
+  }
   function renderCreate(lang, fork = false) {
     const book = fork ? activeBook() : null;
     const labels = proposalLabels[lang];
@@ -412,17 +507,27 @@
     document.title = `${words.createTitle} · ScriptaHub`;
 
     root.innerHTML = `${fork ? backToBook(book, lang) : ""}${pageHero(words.createKicker, words.createTitle, fork ? labels[1] : "")}${fork ? `<div class="fork-source">${compactBookContext(book, lang, words, false)}</div>` : ""}<section class="workflow-layout create-workflow-layout"><form class="workflow-form create-workflow-form" data-workflow-form><div class="form-grid create-form-grid">
-      ${field(fields.title, "titles", "text", false, fields.titleHint, false, "create-title-field")}
+      ${field(fields.title, "titles", "text", fork, fields.titleHint, false, "create-title-field")}
       ${fork ? "" : textarea(descriptionLabel, "description", descriptionHint, true, "create-description-field")}
       ${fork ? textarea(words.prompt, "prompt", words.promptHint, true, "create-instructions-field") : bookInstructions(words.prompt, instructionNames, lang)}
-      <label class="form-file-field"><input class="form-file-input" type="file" name="documents" multiple aria-label="${escape(words.files)}"><span class="form-file-label">${escape(words.files)}</span><span class="form-file-picker"><span class="form-file-hint">${escape(fields.filesHint)}</span><span class="form-file-button"><svg aria-hidden="true" viewBox="0 0 24 24"><path d="M8.5 12.8 14 7.3a3.2 3.2 0 0 1 4.5 4.5l-7.1 7.1a5 5 0 0 1-7.1-7.1l7.5-7.5"/></svg>${escape(fields.chooseFiles)}</span><span class="form-file-selection" data-file-selection aria-live="polite"></span></span></label>
+      ${fork ? "" : `<input type="hidden" name="coverMode" value="generate">${bookCover(lang)}`}
+      ${fork ? `<p data-fork-cost class="workflow-note" aria-live="polite"></p><input type="file" name="documents" hidden>` : `<label class="form-file-field"><input class="form-file-input" type="file" name="documents" multiple aria-label="${escape(words.files)}"><span class="form-file-label">${escape(words.files)}</span><span class="form-file-picker"><span class="form-file-hint">${escape(fields.filesHint)}</span><span class="form-file-button"><svg aria-hidden="true" viewBox="0 0 24 24"><path d="M8.5 12.8 14 7.3a3.2 3.2 0 0 1 4.5 4.5l-7.1 7.1a5 5 0 0 1-7.1-7.1l7.5-7.5"/></svg>${escape(fields.chooseFiles)}</span><span class="form-file-selection" data-file-selection aria-live="polite"></span></span></label>`}
       </div><div class="create-form-footer"><p class="workflow-note">${escape(ScriptaContributionBridge.note(lang))}</p><button class="workflow-submit" type="submit">${escape(submitLabels[lang])}<svg aria-hidden="true" viewBox="0 0 24 24"><path d="M4 12h16m-6-6 6 6-6 6"/></svg></button></div><p class="workflow-status" data-workflow-status aria-live="polite"></p></form></section>`;
     const form = root.querySelector("form");
     const saved = restoreDraft(form);
+    let forkCost;
+    if (fork) {
+      const notice = form.querySelector('[data-fork-cost]');
+      notice.textContent = lang === 'ro' ? 'Se încarcă prețul…' : 'Loading credit cost…';
+      fetch(new URL('api/dashboard/points-policy',siteRoot),{cache:'no-store'}).then(response=>{
+        if (!response.ok) throw new Error();
+        return response.json();
+      }).then(policy=>{
+        forkCost = policy.forkCost;
+        notice.textContent = lang === 'ro' ? `Cost: ${forkCost} ${forkCost === 1 ? 'credit' : 'credite'}` : `Cost: ${forkCost} ${forkCost === 1 ? 'credit' : 'credits'}`;
+      }).catch(()=>{notice.textContent = lang === 'ro' ? 'Costul nu este disponibil. Reîncarcă pagina.' : 'The cost is unavailable. Reload this page.';});
+    }
     if (!fork) {
-      if (saved?.prompt && !saved.description && !instructionFields.some(name => saved[name])) {
-        form.elements.description.value = saved.prompt;
-      }
       bindInstructionPickers(form, lang, saved);
     }
     prepareContributionForm(form,lang);
@@ -441,26 +546,21 @@
       });
       fileSelection.append(list);
     };
-    documents.addEventListener("change", () => { form._draftFiles = []; updateFileSelection(); });
-    updateFileSelection();
+    if (!fork) {
+      documents.addEventListener("change", () => { form._draftFiles = []; updateFileSelection(); });
+      updateFileSelection();
+    }
 
     form.addEventListener("submit", (event) => {
       event.preventDefault();
       if (!form.reportValidity()) return;
-      const data = new FormData(form);
-      if (!fork) {
-        const description = data.get("description").trim();
-        if (!description) return;
-        data.set("description", description);
-        const sections = instructionFields.flatMap((name, index) => {
-          const value = data.getAll(name).join("; ");
-          if (!value) return [];
-          data.set(name, value);
-          return [`${instructionNames[index]}:\n${value}`];
-        });
-        data.set("prompt", [description, ...sections].join("\n\n"));
+      const data = fork ? new FormData(form) : creationData(form, lang);
+      if (fork) {
+        if (!Number.isSafeInteger(forkCost)) return;
+        data.set('sourceEdition',book.currentEdition || book.animation?.edition || 'edition-1');
+        data.set('confirmedCost',String(forkCost));
       }
-      const files = form.elements.documents.files.length ? [...form.elements.documents.files].map((file) => file.name) : (form._draftFiles || []);
+      const files = fork ? [] : form.elements.documents.files.length ? [...form.elements.documents.files].map((file) => file.name) : (form._draftFiles || []);
       const lines = [
         ...(fork ? [`Source book ID: ${book.id}`, `Source book: ${book.title.en}`, `Source directory: ${book.directory}`, `Source edition: ${book.currentEdition || book.animation?.edition || "Current published edition"}`, ""] : []),
         `Selected documents: ${files.join(", ") || "None"}`, "", "PROPOSED TITLE", data.get("titles") || "", "", "BOOK INSTRUCTIONS", data.get("prompt") || "", "", `Interface language: ${lang}`,
@@ -526,7 +626,7 @@
         const readingWords = globalThis.ScriptaReading.labels[lang];
         const readers = Object.entries(edition.readers || {}).flatMap(([code, formats]) => Object.entries(formats).map(([format, path]) => `<a href="../${escape(book.directory)}/${escape(path)}">${escape(format === "shortContent" ? readingWords.short : readingWords.full)} · ${escape(collection.supportedLanguages.find((item) => item.code === code)?.name || code)}</a>`)).join("");
         const coverPath = edition.covers?.[lang] || edition.covers?.en;
-        const cover = coverPath ? `<img class="edition-history-cover" src="../${escape(book.directory)}/${escape(coverPath)}" alt="${escape(`${book.title[lang] || book.title.en} · ${label}`)}" loading="lazy">` : "";
+        const cover = `<img class="edition-history-cover" data-book-cover data-book-id="${escape(book.id)}" ${coverPath ? `src="../${escape(book.directory)}/${escape(coverPath)}"` : ""} alt="${escape(`${book.title[lang] || book.title.en} · ${label}`)}" loading="lazy">`;
         return `<article class="edition-card${cover ? "" : " edition-card-no-cover"}">${cover}<div class="edition-card-details"><div class="edition-card-meta">${current}${date ? `<time class="edition-date" datetime="${escape(edition.publishedAt)}">${escape(date)}</time>` : ""}</div><h2>${escape(label)}</h2><p class="edition-changes"><strong>${escape(words.changes)}:</strong> ${escape(changes)}</p><div class="edition-downloads">${downloads || `<span class="workflow-note">${escape(words.noPdf)}</span>`}${readers}</div></div></article>`;
       }).join("");
     } catch {

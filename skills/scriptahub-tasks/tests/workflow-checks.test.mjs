@@ -64,3 +64,39 @@ test('batch item handoffs isolate identities and reject directories outside the 
   await assert.rejects(writeHandoff({step:'prepare-manuscript',directory:'tasks/../outside',context}),/Invalid task directory/);
   await assert.rejects(writeHandoff({step:'apply-edit',directory:'tasks/task-one',context:secondContext}),/another execution/);
 }));
+
+test('a sparse non-Git publication package keeps its validated baseline when the remote advances',async()=>inRun(async root=>{
+ const originalPath=process.env.PATH;
+ try{
+  const sha='a'.repeat(40),head='b'.repeat(40),collection={schemaVersion:1,bookCount:1,books:[{id:context.bookId,directory:'books/current/'+context.bookId}]};
+  await fs.mkdir('package');await fs.mkdir('bin');
+  await fs.writeFile('package/collection.json',JSON.stringify(collection));await fs.writeFile('package/book.html','current book');
+  const files=[];for(const name of ['collection.json','book.html']){const bytes=await fs.readFile('package/'+name);files.push({path:name,size:bytes.length,sha256:crypto.createHash('sha256').update(bytes).digest('hex')});}
+  await fs.writeFile('inventory.json',JSON.stringify({executionId:context.executionId,baseCommit:sha,files}));
+  await fs.writeFile('bin/git',`#!${process.execPath}\nif(process.argv.includes('ls-remote'))process.stdout.write('${head}\\trefs/heads/main\\n');else process.exit(99);\n`,{mode:0o700});
+  process.env.PATH=path.join(root,'bin')+path.delimiter+originalPath;
+  const result=await verifyPackage({...context,packageRoot:'package',inventory:'inventory.json',catalogue:'https://github.com/example/books/blob/main/collection.json',branch:'main'});
+  assert.equal(result.ok,true);assert.equal(result.baseCommit,sha);assert.equal(result.fileCount,2);
+ }finally{process.env.PATH=originalPath;}
+}));
+
+test('generated HTML is accepted without PDF only after a strict native reader/layout audit',async()=>inRun(async root=>{
+ const savedPath=process.env.PATH;
+ try{
+  const sha='b'.repeat(40);await fs.mkdir('package');await fs.mkdir('bin');await fs.mkdir('tasks/a/run-state',{recursive:true});
+  await fs.writeFile('tasks/a/run-state/claimed.json',JSON.stringify({task:{type:'scriptahub.book-proposal',executionId:context.executionId,bookId:context.bookId}}));
+  await fs.writeFile('package/book.html','<!doctype html><html lang="ro"><body><main><p>Cartea generată.</p></main></body></html>');
+  await fs.writeFile('package/collection.json',JSON.stringify({schemaVersion:1,bookCount:1,books:[{id:context.bookId,directory:'books/current/'+context.bookId}]}));
+  const files=[];for(const name of ['collection.json','book.html']){const bytes=await fs.readFile('package/'+name);files.push({path:name,size:bytes.length,sha256:crypto.createHash('sha256').update(bytes).digest('hex')});}
+  await fs.writeFile('inventory.json',JSON.stringify({executionId:context.executionId,baseCommit:sha,files}));
+  await fs.writeFile('bin/git',`#!${process.execPath}\nif(process.argv.includes('ls-remote'))process.stdout.write('${sha}\\trefs/heads/main\\n');else process.exit(99);\n`,{mode:0o700});process.env.PATH=path.join(root,'bin')+path.delimiter+savedPath;
+  const native={scope:'edition_layout_regression',status:'passed',autoCorrect:false,errorFindings:0,existingFindings:0,findings:[],candidate:{file:path.join(root,'package/book.html'),sha256:files[1].sha256}};
+  const input={...context,directory:'tasks/a',packageRoot:'package',inventory:'inventory.json',audit:'audit.json',catalogue:'https://github.com/example/books/blob/main/collection.json',branch:'main'};
+  await fs.writeFile('audit.json',JSON.stringify(native));
+  assert.equal((await verifyPackage(input)).audit.scope,'html_layout_integrity');
+  await fs.writeFile('audit.json',JSON.stringify({...native,existingFindings:1,status:'passed_with_warnings'}));
+  await assert.rejects(verifyPackage(input),/baseline defects/);
+  await fs.writeFile('audit.json',JSON.stringify({...native,candidate:{...native.candidate,sha256:'0'.repeat(64)}}));
+  await assert.rejects(verifyPackage(input),/HTML changed/);
+ }finally{process.env.PATH=savedPath;}
+}));

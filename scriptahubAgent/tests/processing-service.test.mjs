@@ -555,3 +555,29 @@ test('an already retained tree with an unreadable directory is repaired or charg
     try {reopened.store.db.prepare('UPDATE task_processing_jobs SET reserved_bytes=? WHERE job_id=?').run(999,'job');assert.ok(reopened.diskUsage()>=999);} finally {fsSync.chmodSync=original;}
   } finally {await reopened.drain();}
 });
+
+test('later jobs reuse verified released outputs and upload only changed inputs, including an interrupted retry',async t=>{
+  const f=await fixture(t,"console.log('status checked')"),book=Buffer.from('unchanged book'),draft=Buffer.from('first draft');
+  const entries=[{path:'book.html',size:book.length,sha256:hash(book)},{path:'draft.json',size:draft.length,sha256:hash(draft)}];
+  const manifest=Buffer.from(JSON.stringify(entries));
+  const first={...f.request,manifestSha256:hash(manifest),manifestSize:manifest.length};
+  await f.service.prepare(owner,first);
+  const initial=f.service.upload(owner,{executionId:'execution',jobId:'job',kind:'manifest',offset:0,data:manifest.toString('base64')});
+  assert.deepEqual(initial.availableFiles,[]);
+  for(const [index,bytes] of [book,draft].entries())f.service.upload(owner,{executionId:'execution',jobId:'job',kind:'file',path:entries[index].path,offset:0,data:bytes.toString('base64')});
+  await f.service.start(owner,{executionId:'execution',jobId:'job'});assert.equal(await terminal(f.service),'succeeded');
+  const result=f.service.result(owner,{executionId:'execution',jobId:'job'});
+  assert.equal(f.service.release(owner,{executionId:'execution',jobId:'job',resultDigest:result.resultDigest}).artifactsReleased,true);
+  const changed=Buffer.from('updated draft'),nextEntries=[entries[0],{path:'draft.json',size:changed.length,sha256:hash(changed)}],nextManifest=Buffer.from(JSON.stringify(nextEntries));
+  const second={...first,jobId:'next',manifestSha256:hash(nextManifest),manifestSize:nextManifest.length};
+  await f.service.prepare(owner,second);
+  const upload=()=>f.service.upload(owner,{executionId:'execution',jobId:'next',kind:'manifest',offset:0,data:nextManifest.toString('base64')});
+  assert.deepEqual(upload().availableFiles,[0]);
+  assert.deepEqual(upload().availableFiles,[0],'retry keeps the verified restored input');
+  f.service.upload(owner,{executionId:'execution',jobId:'next',kind:'file',path:'draft.json',offset:0,data:changed.toString('base64')});
+  assert.deepEqual(upload().availableFiles,[0,1],'fully uploaded changed input is also reusable on retry');
+  const directory=f.service.directory(f.service.jobs.row(owner,'execution','next'));
+  assert.equal(await fs.readFile(path.join(directory,'task/book.html'),'utf8'),'unchanged book');
+  assert.equal(await fs.readFile(path.join(directory,'task/draft.json'),'utf8'),'updated draft');
+  await assert.rejects(f.service.prepare('agent:other',second),{status:404});
+});

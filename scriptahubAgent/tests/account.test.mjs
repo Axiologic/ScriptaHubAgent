@@ -20,6 +20,10 @@ test('account page requires identity and delegates settings to UserPersisto', as
   assert.equal(response.headers.get('cache-control'), 'no-store');
   const html = await response.text();
   assert.match(html, /iframe[^>]+service\/dashboard\/\?view=account"/);
+  assert.doesNotMatch(html,/data-account-(?:points|users)|data-account-tab/,'My account contains only account and sign-in settings');
+  const dashboard=await fs.readFile(new URL('../site/account/dashboard.html',import.meta.url),'utf8');
+  assert.match(dashboard,/data-view="admin"[^>]*hidden/);
+  assert.match(dashboard,/data-view="points"/);
   const session = await fetch(root + 'api/session', { headers: { 'x-test-user': 'reader' } });
   assert.deepEqual((await session.json()).user, { id: user.id, email: user.email, displayName: user.displayName });
   const manifest = JSON.parse(await fs.readFile(new URL('../manifest.json', import.meta.url)));

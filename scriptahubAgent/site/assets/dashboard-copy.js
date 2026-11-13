@@ -1,6 +1,46 @@
 export const dashboardLanguages = ['en', 'ro', 'fr', 'de', 'es', 'pt', 'it', 'pl'];
 // Columns follow dashboardLanguages. Templates are rendered as text, never HTML.
 export const dashboardMessages = [
+  ['Users','Utilizatori','Utilisateurs','Benutzer','Usuarios','Utilizadores','Utenti','Użytkownicy'],
+  ['Credits','Credite','Crédits','Guthaben','Créditos','Créditos','Crediti','Kredyty'],
+  ['Administration','Administrare','Administration','Verwaltung','Administración','Administração','Amministrazione','Administracja'],
+  ['View book', 'Vezi cartea', 'Voir le livre', 'Buch ansehen', 'Ver libro', 'Ver livro', 'Vedi il libro', 'Zobacz książkę'],
+  ['Editorial requests','Cereri editoriale','Demandes éditoriales','Redaktionelle Anfragen','Solicitudes editoriales','Pedidos editoriais','Richieste editoriali','Zgłoszenia redakcyjne'],
+  ['Create book','Creare carte','Création de livre','Buch erstellen','Crear libro','Criar livro','Creare un libro','Utworzenie książki'],
+  ['Book corrections','Corecturi carte','Corrections du livre','Buchkorrekturen','Correcciones del libro','Correções do livro','Correzioni del libro','Korekty książki'],
+  ['Create derived book','Creare carte derivată','Création de livre dérivé','Abgeleitetes Buch erstellen','Crear libro derivado','Criar livro derivado','Creare un libro derivato','Utworzenie książki pochodnej'],
+  ['Book animation','Animație carte','Animation du livre','Buchanimation','Animación del libro','Animação do livro','Animazione del libro','Animacja książki'],
+  ['Book translation','Traducere carte','Traduction du livre','Buchübersetzung','Traducción del libro','Tradução do livro','Traduzione del libro','Tłumaczenie książki'],
+  ['Other request','Altă cerere','Autre demande','Andere Anfrage','Otra solicitud','Outro pedido','Altra richiesta','Inne zgłoszenie'],
+  ['Request a new edition','Solicită o ediție nouă','Demander une nouvelle édition','Neue Ausgabe anfordern','Solicitar una nueva edición','Solicitar nova edição','Richiedi una nuova edizione','Poproś o nowe wydanie'],
+  ['Select a book','Selectează o carte','Sélectionner un livre','Buch auswählen','Seleccionar un libro','Selecionar um livro','Seleziona un libro','Wybierz książkę'],
+  ['Approved, awaiting edition publication','Aprobat, așteaptă publicarea ediției','Approuvé, en attente de publication de l’édition','Genehmigt, wartet auf Veröffentlichung der Ausgabe','Aprobado, pendiente de publicación de la edición','Aprovado, aguarda publicação da edição','Approvato, in attesa della pubblicazione dell’edizione','Zatwierdzono, oczekuje na publikację wydania'],
+  ['Edition published, applying reward','Ediție publicată, se acordă recompensa','Édition publiée, attribution de la récompense','Ausgabe veröffentlicht, Belohnung wird gutgeschrieben','Edición publicada, aplicando recompensa','Edição publicada, a atribuir recompensa','Edizione pubblicata, assegnazione del premio','Wydanie opublikowane, przyznawanie nagrody'],
+  ["Description", "Descriere", "Description", "Beschreibung", "Descripción", "Descrição", "Descrizione", "Opis"],
+  ["Cover style", "Stilul copertei", "Style de couverture", "Coverstil", "Estilo de portada", "Estilo da capa", "Stile della copertina", "Styl okładki"],
+  ["Cover colors", "Culorile copertei", "Couleurs de couverture", "Coverfarben", "Colores de portada", "Cores da capa", "Colori della copertina", "Kolory okładki"],
+  ["Cover composition", "Compoziția copertei", "Composition de couverture", "Coverkomposition", "Composición de portada", "Composição da capa", "Composizione della copertina", "Kompozycja okładki"],
+  ["Cover description", "Descrierea copertei", "Description de couverture", "Coverbeschreibung", "Descripción de portada", "Descrição da capa", "Descrizione della copertina", "Opis okładki"],
+  ["Source edition", "Ediția sursă", "Édition source", "Quellausgabe", "Edición original", "Edição de origem", "Edizione di origine", "Wydanie źródłowe"],
+  ["Quality criteria", "Criterii de calitate", "Critères de qualité", "Qualitätskriterien", "Criterios de calidad", "Critérios de qualidade", "Criteri di qualità", "Kryteria jakości"],
+  ["Viewpoints to include", "Perspective de inclus", "Points de vue à inclure", "Einzubeziehende Perspektiven", "Perspectivas a incluir", "Perspetivas a incluir", "Punti di vista da includere", "Perspektywy do uwzględnienia"],
+  ["Structure", "Structură", "Structure", "Struktur", "Estructura", "Estrutura", "Struttura", "Struktura"],
+  ["Scope", "Arie de acoperire", "Périmètre", "Umfang", "Alcance", "Âmbito", "Ambito", "Zakres"],
+  ["Purpose", "Scop", "Objectif", "Zweck", "Propósito", "Objetivo", "Scopo", "Cel"],
+  ["Audience", "Public", "Public", "Zielgruppe", "Público", "Público", "Pubblico", "Odbiorcy"],
+  ["Confirming credits", "Se confirmă creditele", "Confirmation des crédits", "Guthaben wird bestätigt", "Confirmando créditos", "A confirmar créditos", "Conferma dei crediti", "Potwierdzanie kredytów"],
+  ["Applying reward", "Se acordă recompensa", "Attribution de la récompense", "Belohnung wird gutgeschrieben", "Aplicando recompensa", "A aplicar a recompensa", "Assegnazione del premio", "Przyznawanie nagrody"],
+  ["Restoring request and credits", "Se restaurează cererea și creditele", "Restauration de la demande et des crédits", "Anfrage und Guthaben werden wiederhergestellt", "Restaurando solicitud y créditos", "A restaurar o pedido e os créditos", "Ripristino della richiesta e dei crediti", "Przywracanie wniosku i kredytów"],
+  ["Ready to try again", "Poți încerca din nou", "Vous pouvez réessayer", "Erneuter Versuch möglich", "Puedes volver a intentarlo", "Pode tentar novamente", "Puoi riprovare", "Możesz spróbować ponownie"],
+  ["Try again", "Încearcă din nou", "Réessayer", "Erneut versuchen", "Volver a intentar", "Tentar novamente", "Riprova", "Spróbuj ponownie"],
+  ["You need {count} more credits.", "Îți mai trebuie {count} credite.", "Il vous manque {count} crédits.", "Es fehlen {count} Credits.", "Te faltan {count} créditos.", "Faltam {count} créditos.", "Ti mancano {count} crediti.", "Brakuje {count} kredytów."],
+  ["Use {count} credits to create this edition?", "Folosești {count} credite pentru această ediție?", "Utiliser {count} crédits pour cette édition ?", "{count} Credits für diese Ausgabe verwenden?", "¿Usar {count} créditos para esta edición?", "Usar {count} créditos para esta edição?", "Usare {count} crediti per questa edizione?", "Użyć {count} kredytów na to wydanie?"],
+  ["New edition requested.", "Ediția nouă a fost solicitată.", "Nouvelle édition demandée.", "Neue Ausgabe angefragt.", "Nueva edición solicitada.", "Nova edição solicitada.", "Nuova edizione richiesta.", "Zamówiono nowe wydanie."],
+  ["Proposal approved and queued.", "Propunerea a fost aprobată și pusă în coadă.", "Proposition approuvée et mise en file.", "Vorschlag genehmigt und eingereiht.", "Propuesta aprobada y en cola.", "Proposta aprovada e em fila.", "Proposta approvata e in coda.", "Propozycja zatwierdzona i dodana do kolejki."],
+  ["Processing failed.", "Procesarea a eșuat.", "Le traitement a échoué.", "Verarbeitung fehlgeschlagen.", "El procesamiento falló.", "O processamento falhou.", "Elaborazione non riuscita.", "Przetwarzanie nie powiodło się."],
+  ["Processing was cancelled.", "Procesarea a fost anulată.", "Le traitement a été annulé.", "Verarbeitung wurde abgebrochen.", "Se canceló el procesamiento.", "O processamento foi cancelado.", "Elaborazione annullata.", "Anulowano przetwarzanie."],
+  ["Insufficient credits.", "Credite insuficiente.", "Crédits insuffisants.", "Nicht genügend Guthaben.", "Créditos insuficientes.", "Créditos insuficientes.", "Crediti insufficienti.", "Za mało kredytów."],
+  ["The credit cost has changed. Review it before continuing.", "Costul în credite s-a schimbat. Verifică-l înainte să continui.", "Le coût en crédits a changé. Vérifiez-le avant de continuer.", "Die Kosten in Credits haben sich geändert. Prüfe sie, bevor du fortfährst.", "El coste en créditos ha cambiado. Revísalo antes de continuar.", "O custo em créditos mudou. Verifica-o antes de continuar.", "Il costo in crediti è cambiato. Verificalo prima di continuare.", "Koszt w kredytach się zmienił. Sprawdź go przed kontynuowaniem."],
   ['Approve this proposal?','Aprobi această propunere?','Approuver cette proposition ?','Diesen Vorschlag genehmigen?','¿Aprobar esta propuesta?','Aprovar esta proposta?','Approvare questa proposta?','Zatwierdzić tę propozycję?'],
   ['Finish this review? Approved changes will wait for a new edition.','Finalizezi revizuirea? Modificările aprobate vor aștepta o ediție nouă.','Terminer cette révision ? Les modifications approuvées attendront une nouvelle édition.','Prüfung abschließen? Genehmigte Änderungen warten auf eine neue Ausgabe.','¿Finalizar esta revisión? Los cambios aprobados esperarán una nueva edición.','Concluir esta revisão? As alterações aprovadas aguardarão uma nova edição.','Terminare la revisione? Le modifiche approvate attenderanno una nuova edizione.','Zakończyć przegląd? Zatwierdzone zmiany poczekają na nowe wydanie.'],
   ['Submit new edition','Trimite ediția nouă','Soumettre une nouvelle édition','Neue Ausgabe einreichen','Enviar nueva edición','Submeter nova edição','Invia nuova edizione','Prześlij nowe wydanie'],
@@ -119,6 +159,10 @@ export const dashboardMessages = [
 const messages = new Map(dashboardMessages.map(row => [row[0], row]));
 export function dashboardText(language, key, values = {}) {
   const column = Math.max(0, dashboardLanguages.indexOf(language));
-  const template = messages.get(key)?.[column] ?? key;
+  // Existing requests and backend responses can still carry the old wording.
+  let messageKey = key;
+  if (key === 'Insufficient points.') messageKey = 'Insufficient credits.';
+  if (key === 'The points cost has changed. Review it before continuing.') messageKey = 'The credit cost has changed. Review it before continuing.';
+  const template = messages.get(messageKey)?.[column] ?? messageKey;
   return template.replace(/\{(\w+)\}/g, (_, name) => String(values[name] ?? ''));
 }

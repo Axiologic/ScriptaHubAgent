@@ -19,7 +19,6 @@ import { accountLogoutPath } from './account-context.js';
   document.title = words[0] + ' · ScriptaHub';
   const homeLabel = document.querySelector('[data-account-text="home"]');
   if (homeLabel) homeLabel.textContent = words[1];
-  document.querySelector('.account-page section').setAttribute('aria-label', words[0]);
   const frame = document.querySelector('.account-security-frame');
   function syncAccountTheme() {
     try {
@@ -37,14 +36,14 @@ import { accountLogoutPath } from './account-context.js';
       if (!stylesheet) {
         stylesheet = document.createElement('link');
         stylesheet.rel = 'stylesheet';
-        stylesheet.href = new URL('assets/account-provider.css?v=account-theme-2', root).href;
+        stylesheet.href = new URL('assets/account-provider.css?v=uniform-controls-2', root).href;
         stylesheet.dataset.scriptahubAccountTheme = '';
       }
       // The first call may run while the iframe is still parsing its own styles.
       // Restore cascade order on load and on every application theme update.
       if (document.head.lastElementChild !== stylesheet) document.head.append(stylesheet);
       const style = getComputedStyle(window.document.documentElement);
-      for (const name of ['ink', 'content', 'muted', 'panel', 'surface', 'field', 'line', 'green', 'button-bg', 'button-hover', 'button-ink', 'action-font-size']) {
+      for (const name of ['ink', 'content', 'muted', 'panel', 'surface', 'field', 'line', 'green', 'button-bg', 'button-hover', 'button-ink', 'action-font-size', 'control-height', 'control-radius', 'control-font-size']) {
         document.documentElement.style.setProperty(`--scripta-${name}`, style.getPropertyValue(`--${name}`));
       }
       document.documentElement.style.setProperty('--scripta-font-family', style.fontFamily);
@@ -56,6 +55,7 @@ import { accountLogoutPath } from './account-context.js';
     }
   }
   frame.addEventListener('load', syncAccountTheme);
+  window.addEventListener('resize', syncAccountTheme);
   new MutationObserver(syncAccountTheme).observe(document.documentElement, { attributes: true, attributeFilter: ['data-theme', 'style'] });
   syncAccountTheme();
 })();

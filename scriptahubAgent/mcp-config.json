@@ -81,6 +81,58 @@
       }
     },
     {
+      "name": "scriptahub_points_config_set",
+      "title": "Save ScriptaHub points policy",
+      "description": "Administrator configuration for contribution rewards and edition and fork costs.",
+      "command": "node",
+      "args": [
+        "tools/settings-tool.mjs"
+      ],
+      "cwd": "/code",
+      "timeoutMs": 30000,
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "bookReward": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 1000000
+          },
+          "correctionReward": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 1000000
+          },
+          "editionCost": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 1000000
+          },
+          "forkCost": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 1000000
+          },
+          "rewardValidityDays": { "type": "integer", "minimum": 0, "maximum": 3650 },
+          "firstNoticeDays": { "type": "integer", "minimum": 0, "maximum": 3650 },
+          "lastNoticeDays": { "type": "integer", "minimum": 0, "maximum": 3650 }
+        },
+        "required": [
+          "bookReward",
+          "correctionReward",
+          "editionCost",
+          "forkCost"
+        ],
+        "additionalProperties": false
+      },
+      "tags": [
+        "admin"
+      ],
+      "env": {
+        "TOOL_NAME": "scriptahub_points_config_set"
+      }
+    },
+    {
       "name": "scriptahub_task_claim",
       "title": "Claim one approved task by type",
       "description": "Claim one queued task of taskType. For a reserved batch, use the batchId, taskId and durable runId returned by the local scriptahub-tasks batch helper and ScriptaHub. The workflow select-task step advances its fixed batch; processing steps must not claim additional work. An edit task contains all approved requests snapshotted by Submit new edition.",

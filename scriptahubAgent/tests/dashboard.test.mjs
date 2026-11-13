@@ -161,7 +161,7 @@ test('HTTP dashboard connects existing forms to owner and collaborator workflows
   const repeated = await request('alice', '/api/dashboard/review', { changeId: proposal.value.submissionId, decision: 'accept' });
   assert.equal(repeated.value.task, null);
   await request('alice','/api/dashboard/cancel',{taskId:creation.value.task.id});
-  assert.equal((await request('bob','/api/dashboard/editions',{bookId,submissionId:crypto.randomUUID()})).status,403);
+  assert.equal((await request('charlie','/api/dashboard/editions',{bookId,submissionId:crypto.randomUUID()})).status,403);
   const edition = await request('alice','/api/dashboard/editions',{bookId,submissionId:crypto.randomUUID()});
   assert.equal(edition.status,200);assert.equal(edition.value.changeCount,1);
   assert.equal((await request('alice', '/api/dashboard/cancel', { taskId: edition.value.taskId })).status, 200);

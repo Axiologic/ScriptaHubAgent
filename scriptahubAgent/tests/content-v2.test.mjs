@@ -63,8 +63,10 @@ test('content-only format renders the unchanged Metacult URL and maps shared res
   assert.match(markup, /data-reading-format="read"/);
   assert.match(markup, /data-book-feedback/);
   assert.equal(requests.length, 2, 'the book landing page is rendered by the agent');
-  const css = markup.match(/href="([^"]*assets\/site.css)"/)[1];
+  const css = markup.match(/href="([^"]*assets\/site\.css(?:\?[^"]*)?)"/)[1];
   assert.equal((await fetch(new URL(css, legacyUrl))).status, 200);
+  const controls = markup.match(/href="([^"]*assets\/controls\.css\?[^"]*)"/)[1];
+  assert.equal((await fetch(new URL(controls, legacyUrl))).status, 200);
   assert.equal((await fetch(new URL(`books/${id}/en/book.html?lang=en`, base))).status, 200);
   assert.equal(await (await fetch(new URL(`${directory}/en/full_content.html`, base))).text(), html);
   assert.equal(requests.at(-1), '/' + content);
@@ -85,6 +87,49 @@ test('content-only format renders the unchanged Metacult URL and maps shared res
 
 test('content metadata rejects escaping resources and missing mapped editions', () => {
   assert.throws(() => validateContentBook({ schemaVersion: 2, id: 'bk-one', metadata: { id: 'bk-one' }, legacyDirectory: '../private' }), /Invalid content path/);
+});
+
+test('fork requests require an explicit reusable source licence before fetching content', async t => {
+  const root = await fs.mkdtemp(path.join(os.tmpdir(),'scripta-fork-licence-'));
+  const site = path.join(root,'site'), id = 'bk-licence', directory = 'books/' + id;
+  await fs.mkdir(site);
+  const user = {id:'user:reader',email:'reader@example.test',installationAdministratorId:'user:admin'};
+  let downloads = 0;
+  const origin = http.createServer((_req,res)=>{downloads++;res.end('<main>Original book</main>');});
+  await new Promise(resolve=>origin.listen(0,'127.0.0.1',resolve));
+  await fs.writeFile(path.join(root,'remote-books.json'),JSON.stringify({schemaVersion:1,books:[
+    {directory,baseUrl:`http://127.0.0.1:${origin.address().port}/`},
+  ]}));
+  const server = createSiteServer(site,{dataDir:path.join(root,'data'),manageApprovals:true,verifyUser:async()=>user});
+  await new Promise(resolve=>server.listen(0,'127.0.0.1',resolve));
+  t.after(async()=>{
+    await Promise.all([server,origin].map(item=>new Promise(resolve=>item.close(resolve))));
+    await fs.rm(root,{recursive:true,force:true});
+  });
+  const oldKey = process.env.SCRIPTA_RECORD_KEY;
+  process.env.SCRIPTA_RECORD_KEY = 'test-key-for-fork-source-licence';
+  t.after(()=>{
+    if (oldKey === undefined) delete process.env.SCRIPTA_RECORD_KEY;
+    else process.env.SCRIPTA_RECORD_KEY = oldKey;
+  });
+  const submit = async license => {
+    const book = {id,directory,title:{en:'Original book'},editions:{en:{fullContent:directory+'/en/full.html'}},license};
+    await fs.writeFile(path.join(site,'collection.json'),JSON.stringify({books:[book]}));
+    const form = new FormData();
+    form.set('metadata',JSON.stringify({submissionId:crypto.randomUUID(),kind:'fork',bookId:id,language:'en',
+      confirmedCost:0,agreementVersion:'2026-09-10',agreementAccepted:true,
+      values:{titles:'Derived book',prompt:'Add a chapter',sourceEdition:'edition-1'}}));
+    return fetch(`http://127.0.0.1:${server.address().port}/api/submissions`,{method:'POST',body:form});
+  };
+  for (const license of [undefined,'CC-BY-ND-4.0']) {
+    const response = await submit(license);
+    assert.equal(response.status,403);
+    assert.match((await response.json()).error,/explicit CC BY 4\.0/);
+    assert.equal(downloads,0);
+  }
+  const response = await submit('https://creativecommons.org/licenses/by/4.0/');
+  assert.equal(response.status,202,await response.text());
+  assert.equal(downloads,1);
 });
 
 test('Romanian-only books render and route through available languages and formats', async () => {

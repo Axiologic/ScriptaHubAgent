@@ -42,7 +42,12 @@ export async function verifyRouterUser(req, url, body, { verifier, createClient 
     const profile = parseToolResult(await client.callTool('userpersisto_profile_get', {}, { timeoutMs: 30000 }));
     const user = profile.user;
     if (user?.id !== actor.id.slice(5) || user.status !== 'active' || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(user.email || '')) return null;
-    return { id: actor.id, email: user.email, displayName: user.displayName || user.username || '',
+    const userAgentCall = async (tool,args) => {
+      const delegated = await createClient('userPersistoAgent', { userDelegationToken: token });
+      try { return parseToolResult(await delegated.callTool(tool,args,{timeoutMs:30000})); }
+      finally { await delegated.close(); }
+    };
+    return { userAgentCall, id: actor.id, email: user.email, displayName: user.displayName || user.username || '',
       roles: profile.roles || [], capabilities: profile.capabilities || [],
       installationAdministratorId: profile.installationAdministratorId ? `user:${profile.installationAdministratorId}` : null };
   } catch { throw Object.assign(new Error('Identity service is unavailable'), { status: 503 }); }

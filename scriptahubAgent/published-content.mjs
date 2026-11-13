@@ -145,6 +145,11 @@ export function sourceState(resolved) {
 }
 
 export function bridgeBookHtml(html) {
+  const prefix = html.match(/href=["']([^"']*assets\/)site\.css(?:[?"'])/)?.[1];
+  if (prefix) html = html.replace(/(href=["'][^"']*assets\/site\.css)(?:\?[^"']*)?(["'])/, '$1?v=uniform-controls-2$2');
+  if (prefix && !html.includes('assets/controls.css')) {
+    html = html.replace('</head>', `<link rel="stylesheet" href="${prefix}controls.css?v=uniform-controls-2"></head>`);
+  }
   if (!html.includes('assets/workflow.js') || html.includes('assets/workflow-bridge.js')) return html;
   return html.replace(/(<script src=")([^"]*assets\/)workflow\.js[^"]*("><\/script>)/, (_match, start, prefix, end) =>
     `${start}${prefix}workflow-bridge.js${end}<script src="${prefix}workflow.js${end}`);
