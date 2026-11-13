@@ -1,19 +1,17 @@
 :root .site-shell.dashboard-page { height: calc(100vh - 48px); height: calc(100dvh - 48px); min-height: 0; padding-bottom: 24px; }
 .dashboard-page > .site-header, .dashboard-page > .dashboard-toolbar { flex-shrink: 0; }
-.dashboard-page > #dashboard-content { flex: 1 1 0; min-width: 0; min-height: 0; overflow-y: auto; overscroll-behavior: contain; }
-.dashboard-page > #dashboard-content > :is(.account-users, .account-points) { height: 100%; min-height: 0; overflow-y: auto; }
+.dashboard-page > #dashboard-content { flex: 1 1 0; min-width: 0; min-height: 0; padding: clamp(16px, 3vw, 28px); border: 1px solid var(--line); border-top: 0; border-radius: 0 0 12px 12px; background: var(--panel); overflow-y: auto; overscroll-behavior: contain; }
+.dashboard-page > #dashboard-content > :is(.account-users, .account-points) { height: 100%; min-height: 0; padding: 0; border: 0; border-radius: 0; overflow-y: auto; }
 @media (max-width: 720px) {
   :root .site-shell.dashboard-page { height: 100vh; height: 100dvh; }
 }
 .dashboard-heading { display: flex; align-items: center; justify-content: space-between; gap: 16px; }
-.dashboard-tabs { display: flex; align-items: center; gap: 24px; padding-top: 12px; border-bottom: 1px solid var(--line); margin-bottom: 20px; overflow-x: auto; }
+.dashboard-tabs { display: flex; align-items: center; gap: 4px; overflow-x: auto; }
 .dashboard-page :is(.button,.workflow-submit) { cursor: pointer; }
 .dashboard-page :is(.button,.workflow-submit):disabled { cursor: default; opacity: .6; }
-:root .dashboard-tabs [data-view] { position: relative; flex: none; appearance: none; min-height: 44px; margin: 0; padding: 10px 0; border: 0; border-radius: 0; background: transparent; box-shadow: none; color: var(--muted); font: inherit; font-size: var(--action-font-size); font-weight: 550; line-height: 1.5; cursor: pointer; white-space: nowrap; }
-:root .dashboard-tabs [data-view]::after { content: ''; position: absolute; inset: auto 0 0; height: 1.5px; background: var(--green); opacity: 0; pointer-events: none; }
-:root .dashboard-tabs [data-view]:hover { color: var(--green); background: transparent; box-shadow: none; }
-:root .dashboard-tabs [data-view][aria-selected="true"] { color: var(--green); font-weight: 650; }
-:root .dashboard-tabs [data-view][aria-selected="true"]::after { opacity: 1; }
+:root .dashboard-tabs [data-view] { flex: none; appearance: none; min-height: calc(var(--control-height, 40px) + 8px); margin: 0; padding: 0 14px; border: 1px solid transparent; border-bottom: 0; border-radius: var(--control-radius, 8px) var(--control-radius, 8px) 0 0; background: transparent; box-shadow: none; color: var(--muted); font: inherit; font-size: var(--action-font-size); font-weight: 550; line-height: 1.5; cursor: pointer; white-space: nowrap; }
+:root .dashboard-tabs [data-view]:hover { color: var(--ink); background: var(--field); box-shadow: none; }
+:root .dashboard-tabs [data-view][aria-selected="true"] { color: var(--green); font-weight: 650; border-color: var(--line); background: var(--panel); }
 :root .dashboard-tabs [data-view]:focus:not(:focus-visible) { outline: 0; }
 .dashboard-page :is(.dashboard-title,.dashboard-tabs,#dashboard-content) :is(button,summary,a):focus-visible { outline: 2px solid var(--green); outline-offset: 3px; }
 .dashboard-card, .dashboard-empty { background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 18px 20px; margin-bottom: 12px; overflow-wrap: anywhere; }
@@ -50,8 +48,6 @@
   .dashboard-card-copy { flex-basis: 100%; }
   .dashboard-card-header .dashboard-actions { flex-basis: 100%; }
   :is(.dashboard-card, .dashboard-change-card) form label { width: 100%; }
-  .dashboard-tabs { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 0 16px; overflow: visible; }
-  :root .dashboard-tabs [data-view] { text-align: left; white-space: normal; overflow-wrap: anywhere; }
 }
 
 .dashboard-change-group { margin-block: 0 12px; min-width: 0; border: 1px solid var(--line); border-radius: 10px; background: var(--surface); }
@@ -124,6 +120,22 @@
   .dashboard-contribution-facts > div { grid-template-columns: minmax(0, 1fr); gap: 2px; }
 }
 
-.dashboard-toolbar { min-width: 0; margin-block: 12px 20px; border-bottom: 1px solid var(--line); }
-.dashboard-toolbar > .dashboard-tabs { flex: 1 1 0; min-width: 0; padding-top: 0; margin-bottom: 0; border-bottom: 0; }
-.dashboard-toolbar > #refresh { flex: none; }
+.dashboard-toolbar { min-width: 0; margin-block: 12px 0; padding: 8px 12px 0; gap: 20px; border: 1px solid var(--line); border-bottom: 0; border-radius: 12px 12px 0 0; background: var(--field); }
+.dashboard-toolbar > .dashboard-tabs {
+  display: flex;
+  flex: 0 1 auto;
+  align-self: stretch;
+  align-items: stretch;
+  min-width: 0;
+  padding: 0;
+  margin: 0;
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+.dashboard-toolbar > .dashboard-tabs::-webkit-scrollbar { display: none; }
+:root .dashboard-toolbar .dashboard-tabs [data-view] { height: auto; min-height: calc(var(--control-height, 40px) + 8px); border-radius: var(--control-radius, 8px) var(--control-radius, 8px) 0 0; }
+:root .dashboard-toolbar .dashboard-tabs [data-view]:focus-visible { outline-offset: -2px; }
+.dashboard-toolbar > #refresh { flex: none; align-self: center; margin-bottom: 8px; }
+@media (max-width: 600px) {
+  .dashboard-toolbar { gap: 12px; }
+}

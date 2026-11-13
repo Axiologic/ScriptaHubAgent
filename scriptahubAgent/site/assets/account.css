@@ -12,11 +12,12 @@
 .account-security-frame { display: block; flex: 1 1 0; width: 100%; height: 100%; min-height: 0; border: 1px solid var(--line); border-radius: 12px; background: var(--panel); }
 .header-account { white-space: nowrap; }
 .account-points { display: block; padding: clamp(16px, 3vw, 28px); border: 1px solid var(--line); border-radius: 12px; background: var(--panel); font-size: var(--control-font-size, var(--action-font-size)); line-height: 1.5; overflow-y: auto; overscroll-behavior: contain; }
+.account-points { scrollbar-width: none; }
+.account-points::-webkit-scrollbar { display: none; }
 :is(.account-points, .account-users) form, :is(.account-points, .account-users) nav { display: flex; flex-wrap: wrap; align-items: end; gap: 12px; margin-block: 20px; }
 :is(.account-points, .account-users) label { display: grid; gap: 6px; min-width: 0; max-width: 100%; color: var(--muted); font-size: var(--action-font-size); }
 :is(.account-points, .account-users) input, :is(.account-points, .account-users) select { box-sizing: border-box; min-width: 0; max-width: 100%; min-height: 40px; border: 1px solid var(--line); border-radius: 8px; background: var(--field); color: var(--ink); font: inherit; padding: 8px 12px; }
 :is(.account-points, .account-users) input:focus-visible, :is(.account-points, .account-users) select:focus-visible { outline: 2px solid var(--green); outline-offset: 2px; }
-.account-points > * { max-width: 38rem; margin-inline: auto; }
 .account-credit-balance {
   display: grid;
   grid-template-columns: auto minmax(0,1fr);
@@ -68,7 +69,6 @@
 :is(.account-credit-balance, .account-credit-purchase-header) h2 { margin: 0; }
 .account-credit-history-title { padding-block-start: 16px; border-block-start: 1px solid var(--line); }
 :is(.account-points, .account-users) ul { list-style: none; padding: 0; margin: 0; }
-.account-points > ul { margin-inline: auto; }
 :is(.account-points, .account-users) li { overflow-wrap: anywhere; padding: 12px 0; border-bottom: 1px solid var(--line); line-height: 1.6; }
 @media (max-width: 720px) {
   :root .site-shell.account-page { height: 100vh; height: 100dvh; }
