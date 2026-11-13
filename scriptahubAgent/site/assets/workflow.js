@@ -507,10 +507,10 @@
     document.title = `${words.createTitle} · ScriptaHub`;
 
     root.innerHTML = `${fork ? backToBook(book, lang) : ""}${pageHero(words.createKicker, words.createTitle, fork ? labels[1] : "")}${fork ? `<div class="fork-source">${compactBookContext(book, lang, words, false)}</div>` : ""}<section class="workflow-layout create-workflow-layout"><form class="workflow-form create-workflow-form" data-workflow-form><div class="form-grid create-form-grid">
-      ${field(fields.title, "titles", "text", fork, fields.titleHint, false, "create-title-field")}
-      ${fork ? "" : textarea(descriptionLabel, "description", descriptionHint, true, "create-description-field")}
-      ${fork ? textarea(words.prompt, "prompt", words.promptHint, true, "create-instructions-field") : bookInstructions(words.prompt, instructionNames, lang)}
-      ${fork ? "" : `<input type="hidden" name="coverMode" value="generate">${bookCover(lang)}`}
+      ${fork ? "" : '<div class="create-book-brief">'}${field(fields.title, "titles", "text", fork, fields.titleHint, false, "create-title-field")}
+      ${fork ? "" : `${textarea(descriptionLabel, "description", descriptionHint, true, "create-description-field")}</div>`}
+      ${fork ? textarea(words.prompt, "prompt", words.promptHint, true, "create-instructions-field") : `<section class="create-preferences-panel">${bookInstructions(words.prompt, instructionNames, lang)}</section>`}
+      ${fork ? "" : `<input type="hidden" name="coverMode" value="generate"><section class="create-cover-panel">${bookCover(lang)}</section>`}
       ${fork ? `<p data-fork-cost class="workflow-note" aria-live="polite"></p><input type="file" name="documents" hidden>` : `<label class="form-file-field"><input class="form-file-input" type="file" name="documents" multiple aria-label="${escape(words.files)}"><span class="form-file-label">${escape(words.files)}</span><span class="form-file-picker"><span class="form-file-hint">${escape(fields.filesHint)}</span><span class="form-file-button"><svg aria-hidden="true" viewBox="0 0 24 24"><path d="M8.5 12.8 14 7.3a3.2 3.2 0 0 1 4.5 4.5l-7.1 7.1a5 5 0 0 1-7.1-7.1l7.5-7.5"/></svg>${escape(fields.chooseFiles)}</span><span class="form-file-selection" data-file-selection aria-live="polite"></span></span></label>`}
       </div><div class="create-form-footer"><p class="workflow-note">${escape(ScriptaContributionBridge.note(lang))}</p><button class="workflow-submit" type="submit">${escape(submitLabels[lang])}<svg aria-hidden="true" viewBox="0 0 24 24"><path d="M4 12h16m-6-6 6 6-6 6"/></svg></button></div><p class="workflow-status" data-workflow-status aria-live="polite"></p></form></section>`;
     const form = root.querySelector("form");

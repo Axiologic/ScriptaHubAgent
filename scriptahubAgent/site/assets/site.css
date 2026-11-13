@@ -1811,3 +1811,86 @@ body[data-book-workflow] .animation-contribution>.workflow-hero{padding-bottom:8
 .create-cover-field .cover-note { margin: 0; padding: 8px 0; line-height: 1.5; }
 .create-cover-field .cover-description-field { padding: 16px 0; border-bottom: 1px solid var(--line); }
 .create-cover-field .cover-description-field textarea { min-height: 112px; resize: vertical; }
+
+/* Create a book: a clear brief, optional sources, then editorial and visual direction. */
+[data-workflow-page="create"] .create-form-grid {
+  grid-template-columns: minmax(0, 2fr) minmax(240px, 1fr);
+  grid-template-areas: "brief files" "instructions instructions" "cover cover";
+  gap: 20px;
+  align-items: stretch;
+}
+.create-book-brief,
+.create-preferences-panel,
+.create-cover-panel,
+[data-workflow-page="create"] .create-form-grid > .form-file-field {
+  min-width: 0;
+  padding: clamp(18px, 2vw, 28px);
+  border: 1px solid var(--line);
+  border-radius: 12px;
+}
+.create-book-brief {
+  grid-area: brief;
+  display: grid;
+  grid-template-areas: "title" "description";
+  grid-template-columns: minmax(0, 1fr);
+  align-content: start;
+  gap: 20px;
+  background: color-mix(in srgb, var(--green) 6%, var(--panel));
+}
+.create-book-brief > .form-field { margin: 0; }
+.create-book-brief .create-description-field textarea { min-height: 160px; }
+.create-preferences-panel { grid-area: instructions; background: var(--panel); }
+.create-cover-panel { grid-area: cover; background: color-mix(in srgb, var(--green) 4%, var(--panel)); }
+[data-workflow-page="create"] :is(.create-preferences-panel, .create-cover-panel) .create-instructions { padding: 0; }
+[data-workflow-page="create"] :is(.create-preferences-panel, .create-cover-panel) legend {
+  margin-bottom: 20px;
+  font-size: 1rem;
+  font-weight: 650;
+}
+[data-workflow-page="create"] .create-instructions-grid {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 22px 24px;
+}
+[data-workflow-page="create"] .instruction-picker { padding: 0; border: 0; }
+[data-workflow-page="create"] .create-form-grid > .form-file-field {
+  margin: 0;
+  grid-template-rows: auto 1fr;
+  align-content: start;
+  gap: 16px;
+  background: var(--panel);
+  border-style: dashed;
+}
+[data-workflow-page="create"] .form-file-picker {
+  justify-content: center;
+  align-items: flex-start;
+  padding: 0;
+  border: 0;
+  background: transparent;
+}
+[data-workflow-page="create"] .form-file-selection:empty { display: none; }
+[data-workflow-page="create"] .create-cover-field .cover-note {
+  margin: -10px 0 20px;
+  padding: 0;
+}
+[data-workflow-page="create"] .create-cover-field .cover-description-field {
+  margin-top: 22px;
+  padding: 0;
+  border: 0;
+}
+@media (max-width: 1000px) {
+  [data-workflow-page="create"] .create-instructions-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+@media (max-width: 700px) {
+  [data-workflow-page="create"] .create-form-grid {
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-areas: "brief" "files" "instructions" "cover";
+    gap: 16px;
+  }
+  [data-workflow-page="create"] .create-instructions-grid { grid-template-columns: minmax(0, 1fr); gap: 18px; }
+  [data-workflow-page="create"] .form-file-picker { gap: 14px; }
+}
+
+/* White controls contrast with the tinted creation sections in light themes. */
+:root:not(:is([data-theme="dark"], [data-theme="dark-orange"])) :is(.create-book-brief, .create-cover-panel) {
+  --field: #ffffff;
+}
