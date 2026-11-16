@@ -48,7 +48,7 @@ test('user administration is admin-only, paginated and independent of personal p
   const policyUrl='/api/dashboard/points/policy';
   assert.equal((await get('reader',policyUrl)).status,403);
   const policy=(await (await get('admin',policyUrl)).json()).points;
-  assert.equal(policy.rewardValidityDays,180);
+  assert.deepEqual(policy,{bookReward:10,correctionReward:2,editionCost:5,forkCost:8,rewardValidityDays:180,firstNoticeDays:30,lastNoticeDays:7});
   const savePolicy=(actor,points)=>fetch(base+policyUrl,{method:'POST',headers:{'x-test-user':actor,'content-type':'application/json'},body:JSON.stringify(points)});
   assert.equal((await savePolicy('reader',policy)).status,403);
   const updated={...policy,bookReward:20,correctionReward:5,editionCost:10,forkCost:15,rewardValidityDays:90,firstNoticeDays:14,lastNoticeDays:3};
@@ -58,6 +58,11 @@ test('user administration is admin-only, paginated and independent of personal p
   assert.equal((await savePolicy('admin',{...updated,lastNoticeDays:30})).status,400);
   assert.equal((await savePolicy('admin',{...updated,bookReward:-1})).status,400);
   assert.deepEqual((await (await get('admin',policyUrl)).json()).points,updated);
+
+  const disabled={bookReward:0,correctionReward:0,editionCost:0,forkCost:0,rewardValidityDays:0,firstNoticeDays:0,lastNoticeDays:0};
+  assert.equal((await savePolicy('admin',disabled)).status,200);
+  assert.deepEqual((await (await get('admin',policyUrl)).json()).points,disabled,'saved zero values override defaults');
+  assert.deepEqual(JSON.parse(await fs.readFile(path.join(dataDir,'points.json'),'utf8')),disabled);
 
   assert.equal((await get('reader','/api/dashboard/points/offer-settings')).status,403);
   const pricing=await get('admin','/api/dashboard/points/offer-settings');assert.equal(pricing.status,200);

@@ -30,6 +30,21 @@ async function terminal(service) {
   throw new Error('Worker did not stop');
 }
 
+test('preflight advertises the actual installed command contract and invalid commands never create jobs',async t=>{
+ const f=await fixture(t,'process.exit(0)');
+ f.service.receipt={ok:true,...await processingRuntime(path.join(f.root,'runtime')),checks:[{status:'passed',name:'installed-runtime'}],checkedAt:new Date().toISOString()};
+ const receipt=await f.service.preflight();
+ assert.deepEqual(receipt.skillCommands,{pdf2html:['doctor','convert','check','decorations','fonts']});
+ await assert.rejects(f.service.prepare(owner,{...f.request,args:['--help']}),error=>error.message==='Invalid skill command'&&error.status===400&&error.admissionRejected===true);
+ await assert.rejects(f.service.prepare(owner,{...f.request,sourceDigest:'0'.repeat(64)}),error=>error.status===409&&error.admissionRejected===true);
+ assert.equal(f.service.store.db.prepare('SELECT COUNT(*) AS count FROM task_processing_jobs').get().count,0);
+ assert.equal(f.launches(),0);
+ await f.service.listen();
+ const {invokeSupervisor}=await import('../processing-ipc.mjs');
+ const error=await invokeSupervisor(path.join(f.root,'data'),{tool:'scriptahub_skill_job_prepare',executor:owner,input:{...f.request,args:['--help']}});
+ assert.equal(error.error,'Invalid skill command');assert.equal(error.status,400);assert.equal(error.admissionRejected,true);
+});
+
 test('job runs once, persists complete inventory and serves bounded output',async t=>{
   const f=await fixture(t,"require('fs').writeFileSync(process.argv[1]+'/é.txt','hello'); console.log('done')");
   await f.prepare(); assert.equal((await f.service.start(owner,{executionId:'execution',jobId:'job'})).state,'running');

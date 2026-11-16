@@ -20,7 +20,8 @@ try {
   const dataDir=process.env.SCRIPTA_DATA_DIR || path.resolve(import.meta.dirname,'../data');
   const result=await invokeSupervisor(dataDir,{tool,executor,input:envelope.input ?? envelope.arguments ?? {}});
   process.stdout.write(JSON.stringify(result));
-  if (result.error) process.exitCode=1;
+  // Keep application errors structured; the caller checks error/status. A nonzero
+  // tool exit discards the supervisor's error details in the MCP wrapper.
 } catch(error) {
   const status=error.status || 503;
   const message=error.status ? error.message : 'Processing supervisor is unavailable';

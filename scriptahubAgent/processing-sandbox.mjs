@@ -12,6 +12,9 @@ const commands = Object.freeze({
   'theatrical-audio':['providers','plan','validate','say','draft','render','verify','preview','voices','doctor'],
   'shf-presentation-creator':['install-player','analyze','compile','validate','voice-tasks','attach-voice','catalog','music','captions'],
 });
+export function skillCommandContract(skills = Object.keys(commands)) {
+  return Object.fromEntries(skills.filter(skill => Object.hasOwn(commands, skill)).map(skill => [skill, [...commands[skill]]]));
+}
 const fail = message => { throw Object.assign(new Error(message),{status:400}); };
 const fixedRoots = ['/usr','/bin','/sbin','/lib','/lib64','/opt','/proc','/dev','/tmp','/etc','/run','/var'];
 

@@ -41,7 +41,7 @@ export async function mountAdministration(host, api = pointsApi) {
   const resetPath=document.createElementNS(resetIcon.namespaceURI,'path');
   resetPath.setAttribute('d','M3 10a9 9 0 1 1 2.9 8.1M3 4v6h6');resetIcon.append(resetPath);reset.prepend(resetIcon);
   const actions=el('div','',{className:'account-settings-actions'});actions.append(reset,submit);form.append(actions);
-  host.replaceChildren(el('h2',t('Credit settings','Setările creditelor')),form,status);
+  host.replaceChildren(form,status);
   const controls=[...fields.values(),...pricing.controls,submit,reset];
   const edited=new Set();let pending=false,loading=true,savedPolicy=null,savedPricing=null;
   for(const [name,input] of fields)input.oninput=()=>edited.add(name);

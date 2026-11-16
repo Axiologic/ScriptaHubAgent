@@ -22,10 +22,18 @@ export function chooseRepository({ repositories, candidates } = {}) {
     return { repository: unique[crypto.randomInt(unique.length)], candidates: unique };
 }
 export function unwrap(response) {
-    if (response?.isError) throw new Error('ScriptaHub rejected the task operation');
-    const result = Array.isArray(response?.content)
-        ? JSON.parse(response.content.filter(item => item.type === 'text').map(item => item.text).join('\n')) : response;
-    if (!result || result.error || result.ok === false) throw new Error(result?.error || 'Invalid ScriptaHub response');
+    const encoded=Array.isArray(response?.content);
+    const message = encoded ? response.content.filter(item => item.type === 'text').map(item => item.text).join('\n') : response?.isError ? response.message : undefined;
+    let result=response;
+    if(encoded && !message) throw new Error('Invalid ScriptaHub response');
+    if (message) { try { result=JSON.parse(message); } catch { if(response?.isError) throw new Error(message); throw new Error('Invalid ScriptaHub response'); } }
+    if (response?.isError || !result || result.error || result.ok === false) {
+        throw Object.assign(new Error(result?.error || message || 'ScriptaHub rejected the task operation'), {
+            ...(Number.isInteger(result?.status)?{status:result.status}:{}),
+            ...(typeof result?.code==='string'?{code:result.code}:{}),
+            ...(result?.admissionRejected===true?{admissionRejected:true}:{}),
+        });
+    }
     return result;
 }
 

@@ -237,15 +237,29 @@ export async function runRemoteSkill(input,call,{root=process.cwd(),sourceRoot=p
     journal.inputScope={bookRoot:scope.bookRoot,assets:scope.assets};
   }
   await guardRemoteBackups(base,executionId,{ignorePending:journal?taskDirectory.slice(6):undefined});
+  let freshJournal=false;
   if(!journal) {
     if(skill==='validate-book'&&(args[0]==='complete'||args.includes('--auto-correct'))&&args.some(arg=>arg==='--pdf'||arg.startsWith('--pdf=')||arg==='--english'||arg.startsWith('--english=')))throw Error('Source overrides are audit-only: use prepare without --auto-correct, or complete with sources declared inside the current book.');
+    const receipt=await call('scriptahub_skills_preflight',{});
+    const supported=receipt?.ok===true && receipt.skillCommands && Object.hasOwn(receipt.skillCommands,skill) ? receipt.skillCommands[skill] : null;
+    if(!Array.isArray(supported)||!supported.length||supported.some(command=>typeof command!=='string'||!/^[a-z][a-z0-9-]*$/.test(command)))throw Error('The service must advertise its skill command contract before processing. Update the service and helper together.');
+    if(args.includes('--help')) {stdout.write(JSON.stringify({skill,commands:supported,usage:'Read this skill’s SKILL.md for command arguments.'})+'\n');return 0;}
+    if(!supported.includes(args[0]))throw Error(`Unsupported ${skill} command: ${args[0] || '(missing)'}. Supported commands: ${supported.join(', ')}.`);
     const skillDir=await findSkill(sourceRoot,skill);let source;try{source=await inventory(skillDir,{source:true,skill});}finally{await skillDir.close();}
     const sourceMap=Object.fromEntries(source.map(e=>[skill+'/'+e.path,e.sha256]));if(!source.length)throw new Error('Selected skill source is empty');
     const files=args.length===1&&args[0]==='doctor'&&!stdin?[]:await inventory(taskRoot,{hook,scope}),manifest=Buffer.from(JSON.stringify(files));if(manifest.length>8*1024*1024)throw new Error('Manifest too large');
-    journal={commandHash,command,jobId:crypto.randomUUID(),sourceDigest:digest(JSON.stringify(sourceMap)),inputScope:{bookRoot:scope.bookRoot,assets:scope.assets},files,manifest:manifest.toString('base64'),phase:'uploading'};await atomic(control,'pending.json',journal,{exclusive:true});
+    journal={commandHash,command,jobId:crypto.randomUUID(),sourceDigest:digest(JSON.stringify(sourceMap)),inputScope:{bookRoot:scope.bookRoot,assets:scope.assets},files,manifest:manifest.toString('base64'),phase:'uploading'};await atomic(control,'pending.json',journal,{exclusive:true});freshJournal=true;
   }
   const {jobId,files}=journal, manifest=Buffer.from(journal.manifest,'base64');
-  let status=await call('scriptahub_skill_job_prepare',{executionId,jobId,virtualCwd:root,skill,args,input:stdin,sourceDigest:journal.sourceDigest,manifestSha256:digest(manifest),manifestSize:manifest.length});
+  let status;
+  try {status=await call('scriptahub_skill_job_prepare',{executionId,jobId,virtualCwd:root,skill,args,input:stdin,sourceDigest:journal.sourceDigest,manifestSha256:digest(manifest),manifestSize:manifest.length});}
+  catch(error) {
+    if(freshJournal && error.admissionRejected===true) {
+      await atomic(control,jobId+'.rejected.json',{jobId,command,rejectedAt:new Date().toISOString(),error:error.message,status:error.status});
+      await fs.unlink(journalPath);
+    }
+    throw error;
+  }
   if (status.state === 'uploading') {
   if(files.some(entry=>!scope.allows(entry.path)))throw Error('Pending job contains other books or catalogue files. Cancel this unstarted upload through the helper before retrying with the current-book scope.');
   async function upload(kind,name,buffer) {let last;for(let offset=0;offset<buffer.length;) {const data=buffer.subarray(offset,offset+uploadBlockSize('scriptahub_skill_job_upload',{executionId,jobId,kind,...(name?{path:name}:{}),offset},buffer.length-offset)); const reply=await call('scriptahub_skill_job_upload',{executionId,jobId,kind,...(name?{path:name}:{}),offset,data:data.toString('base64')}); if(reply.nextOffset!==offset+data.length)throw new Error('Invalid upload acknowledgement');offset=reply.nextOffset;last=reply;}return last;}

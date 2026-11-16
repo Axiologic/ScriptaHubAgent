@@ -397,7 +397,7 @@ function renderPointsSection(name) {
     node.append(element('p', t('Loading dashboard…'), 'dashboard-meta'));
     entry = {node};dashboardSections.set(name,entry);
     const modules = {
-      admin: () => import('./account-admin.js?v=credit-payment-feedback-10'),
+      admin: () => import('./account-admin.js?v=admin-heading-1'),
       users: () => import('./account-users.js?v=credit-payment-feedback-10'),
       points: () => import('./account-points.js?v=credit-payment-feedback-10'),
     };

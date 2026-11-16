@@ -9,13 +9,14 @@ import { TaskExecution } from './task-execution.mjs';
 import { ProcessingStore } from './processing-store.mjs';
 import { processingRuntime } from './processing-runtime.mjs';
 import { parseProcessingManifest, processingPath, uploadProcessingChunk, verifyProcessingFile } from './processing-files.mjs';
-import { sandboxCommand, validateSkillCommand } from './processing-sandbox.mjs';
+import { sandboxCommand, validateSkillCommand, skillCommandContract } from './processing-sandbox.mjs';
 import { processingSocketPath } from './processing-ipc.mjs';
 
 const MAX_WORKSPACE=4*1024**3, FLOOR=1024**3, MAX_LOG=16*1024**2, MAX_STORED=MAX_WORKSPACE+48*1024**2;
 const hash = bytes => crypto.createHash('sha256').update(bytes).digest('hex');
 const fail = (message,status=400) => { throw Object.assign(new Error(message),{status}); };
 const time = () => new Date().toISOString();
+const commandReceipt = receipt => ({...receipt, skillCommands:skillCommandContract(Object.keys(receipt.sourceDigests))});
 function processIdentity(pid) {
   try {
     if(process.platform==='linux') {
@@ -148,13 +149,13 @@ export class ProcessingService {
   directory(row) {return path.join(this.root,'job-'+hash(row.execution_id+'\0'+row.job_id));}
   async preflight() {
     const runtime=await processingRuntime(this.runtimeRoot);
-    if(this.receipt?.runtimeId===runtime.runtimeId && Date.now()-Date.parse(this.receipt.checkedAt)<15*60*1000) return this.receipt;
+    if(this.receipt?.runtimeId===runtime.runtimeId && Date.now()-Date.parse(this.receipt.checkedAt)<15*60*1000) return commandReceipt(this.receipt);
     if(this.draining)fail('Processing supervisor is draining',503);
     if(!this.preflightPromise) {
       if(this.store.db.prepare("SELECT 1 FROM task_processing_jobs WHERE state IN ('starting','running','stopping')").get()) {
         // A job holds the worker slot, so verifying again is unsafe; the runtime it started on was already verified.
         // The runtime identity was just rechecked; the doctor result is reported with its original time.
-        if(this.receipt?.runtimeId===runtime.runtimeId)return {...this.receipt,checkedAt:time(),doctorCheckedAt:this.receipt.doctorCheckedAt??this.receipt.checkedAt,cachedWhileBusy:true};
+        if(this.receipt?.runtimeId===runtime.runtimeId)return commandReceipt({...this.receipt,checkedAt:time(),doctorCheckedAt:this.receipt.doctorCheckedAt??this.receipt.checkedAt,cachedWhileBusy:true});
         fail('Processing capacity unavailable',503);
       }
       const runCheck=(command,args)=>new Promise((resolve,reject)=>{
@@ -181,24 +182,35 @@ export class ProcessingService {
     if(this.draining)fail('Processing supervisor is draining',503);
     const current=await processingRuntime(this.runtimeRoot);
     if(current.runtimeId!==runtime.runtimeId)fail('ScriptaHub processing runtime changed',503);
-    return this.receipt={ok:true,...runtime,checks:[{status:'passed',name:'installed-runtime'}],checkedAt:time()};
+    this.receipt={ok:true,...runtime,checks:[{status:'passed',name:'installed-runtime'}],checkedAt:time()};
+    return commandReceipt(this.receipt);
   }
   async prepare(executor,input) {
-    required(input,['executionId','jobId','virtualCwd','skill','args','input','sourceDigest','manifestSha256','manifestSize']);
-    validateSkillCommand(input.skill,input.args,input.input);
-    if(!/^[a-f0-9]{64}$/.test(input.sourceDigest||'')||!/^[a-f0-9]{64}$/.test(input.manifestSha256||'')
-      ||!Number.isSafeInteger(input.manifestSize)||input.manifestSize<2||input.manifestSize>8*1024**2)fail('Invalid processing manifest');
+    try {
+      required(input,['executionId','jobId','virtualCwd','skill','args','input','sourceDigest','manifestSha256','manifestSize']);
+      validateSkillCommand(input.skill,input.args,input.input);
+      if(!/^[a-f0-9]{64}$/.test(input.sourceDigest||'')||!/^[a-f0-9]{64}$/.test(input.manifestSha256||'')
+        ||!Number.isSafeInteger(input.manifestSize)||input.manifestSize<2||input.manifestSize>8*1024**2)fail('Invalid processing manifest');
+    } catch(error) { if(error.status===400) error.admissionRejected=true; throw error; }
     const existing=this.store.db.prepare('SELECT * FROM task_processing_jobs WHERE execution_id=? AND job_id=? AND executor_agent_id=?').get(input.executionId,input.jobId,executor);
     if(existing) {
       const row=this.jobs.prepare(executor,input,existing.runtime_id,existing.reserved_bytes);
       if(row.state==='uploading')this.initializeUpload(row);
       return present(row);
     }
-    const runtime=await processingRuntime(this.runtimeRoot);
-    if(runtime.sourceDigests[input.skill]!==input.sourceDigest) fail('Skill source does not match installed runtime',409);
-    if(this.draining)fail('Processing supervisor is draining',503);
-    if(this.available(this.root)<FLOOR+input.manifestSize)fail('Processing storage unavailable',503);
-    const row=this.jobs.prepare(executor,input,runtime.runtimeId,input.manifestSize);
+    let row;
+    try {
+      const runtime=await processingRuntime(this.runtimeRoot);
+      if(runtime.sourceDigests[input.skill]!==input.sourceDigest) fail('Skill source does not match installed runtime',409);
+      if(this.draining)fail('Processing supervisor is draining',503);
+      if(this.available(this.root)<FLOOR+input.manifestSize)fail('Processing storage unavailable',503);
+      row=this.jobs.prepare(executor,input,runtime.runtimeId,input.manifestSize);
+    } catch(error) {
+      try {
+        if(error.status && !this.store.db.prepare('SELECT 1 FROM task_processing_jobs WHERE execution_id=? AND job_id=?').get(input.executionId,input.jobId)) error.admissionRejected=true;
+      } catch { /* Keep uncertain failures pending when admission cannot be checked. */ }
+      throw error;
+    }
     if(row.state==='uploading')this.initializeUpload(row);
     return present(row);
   }
@@ -559,7 +571,7 @@ export class ProcessingService {
     } catch(error) {if(error.code!=='ENOENT')throw error;}
     this.connections=new Set();
     this.server=net.createServer(connection=>{this.connections.add(connection);connection.once('close',()=>this.connections.delete(connection));connection.setTimeout(610000,()=>connection.destroy());let buffer='';connection.on('data',bytes=>{buffer+=bytes.toString('utf8');if(Buffer.byteLength(buffer)>131072){connection.destroy();return;}const end=buffer.indexOf('\n');if(end<0)return;connection.pause();
-      Promise.resolve().then(()=>{let request;try{request=JSON.parse(buffer.slice(0,end));}catch{fail('Invalid processing request');}const {tool,executor,input}=request;return this.dispatch(tool,executor,input);}).then(value=>connection.end(JSON.stringify(value)),error=>connection.end(JSON.stringify({error:error.status?error.message:'Processing operation failed',status:error.status||503,code:error.status===404?'not_found':error.status===409?'conflict':error.status===400?'invalid':error.status===410?'gone':'unavailable'})));
+      Promise.resolve().then(()=>{let request;try{request=JSON.parse(buffer.slice(0,end));}catch{fail('Invalid processing request');}const {tool,executor,input}=request;return this.dispatch(tool,executor,input);}).then(value=>connection.end(JSON.stringify(value)),error=>connection.end(JSON.stringify({error:error.status?error.message:'Processing operation failed',status:error.status||503,code:error.status===404?'not_found':error.status===409?'conflict':error.status===400?'invalid':error.status===410?'gone':'unavailable',...(error.admissionRejected===true?{admissionRejected:true}:{})})));
     });});
     let bound;
     try {

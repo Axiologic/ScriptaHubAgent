@@ -1,7 +1,11 @@
 :root .site-shell.dashboard-page { height: calc(100vh - 48px); height: calc(100dvh - 48px); min-height: 0; padding-bottom: 24px; }
 .dashboard-page > .site-header, .dashboard-page > .dashboard-toolbar { flex-shrink: 0; }
-.dashboard-page > #dashboard-content { flex: 1 1 0; min-width: 0; min-height: 0; padding: clamp(16px, 3vw, 28px); border: 1px solid var(--line); border-top: 0; border-radius: 0 0 12px 12px; background: var(--panel); overflow-y: auto; overscroll-behavior: contain; }
+.dashboard-page > #dashboard-content { flex: 1 1 0; min-width: 0; min-height: 0; padding: 16px clamp(16px, 3vw, 28px) clamp(16px, 3vw, 28px); border: 1px solid var(--line); border-top: 0; border-radius: 0 0 12px 12px; background: var(--panel); overflow-y: auto; overscroll-behavior: contain; }
 .dashboard-page > #dashboard-content > :is(.account-users, .account-points) { height: 100%; min-height: 0; padding: 0; border: 0; border-radius: 0; overflow-y: auto; }
+.dashboard-page > #dashboard-content > :first-child,
+.dashboard-page > #dashboard-content > :is(.account-users, .account-points) > :first-child,
+.dashboard-page > #dashboard-content > .dashboard-users > :first-child > h2:first-child { margin-block-start: 0; }
+.dashboard-admin .account-settings-form > fieldset:first-child { margin-block-start: 0; }
 @media (max-width: 720px) {
   :root .site-shell.dashboard-page { height: 100vh; height: 100dvh; }
 }
