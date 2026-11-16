@@ -103,6 +103,96 @@
     it: ["Fatto", "Chiudi", "Rimuovi", "Opzione personalizzata", "Aggiungi"],
     pl: ["Gotowe", "Zamknij", "Usuń", "Własna opcja", "Dodaj"],
   };
+  const instructionDialogHelp = {
+    en: {
+      audience: "You can tick more than one group of readers. If you have another audience in mind, write it below and choose Add.",
+      purpose: "You can tick more than one thing you want the book to achieve. To add another goal, write it below and choose Add.",
+      scope: "You can tick more than one direction for the book’s content. To suggest a particular topic or a limit on what to cover, write it below and choose Add.",
+      structure: "You can tick more than one way to organize the book. If you prefer a different structure, describe it below and choose Add.",
+      viewpoints: "You can tick more than one perspective to include in the book. To suggest another voice or point of view, write it below and choose Add.",
+      qualityCriteria: "You can tick more than one quality you want the book to have. If something else matters to you, write it below and choose Add.",
+      coverStyle: "You can tick more than one style to inspire the cover. If you have another style in mind, describe it below and choose Add.",
+      coverPalette: "You can tick more than one color combination for the cover. To suggest other colors, write what you would like below and choose Add.",
+      coverComposition: "You can tick more than one idea for arranging the title and artwork on the cover. If you have another idea, describe it below and choose Add.",
+    },
+    ro: {
+      audience: "Poți bifa mai multe grupuri de cititori. Dacă ai în minte un alt public, scrie-l în câmpul de mai jos și apasă „Adaugă”.",
+      purpose: "Poți bifa mai multe lucruri pe care vrei să le realizeze cartea. Pentru un alt scop, scrie ce îți dorești mai jos și apasă „Adaugă”.",
+      scope: "Poți bifa mai multe opțiuni despre ce va cuprinde cartea. Dacă vrei să incluzi un anumit subiect sau să restrângi tema, scrie mai jos ce ai în minte și apasă „Adaugă”.",
+      structure: "Poți bifa mai multe feluri de a organiza cartea. Dacă preferi o altă structură, descrie-o mai jos și apasă „Adaugă”.",
+      viewpoints: "Poți bifa mai multe perspective de inclus în carte. Pentru o altă voce sau un alt punct de vedere, scrie ce ai în minte mai jos și apasă „Adaugă”.",
+      qualityCriteria: "Poți bifa mai multe calități pe care vrei să le aibă cartea. Dacă mai este ceva important pentru tine, scrie mai jos și apasă „Adaugă”.",
+      coverStyle: "Poți bifa mai multe stiluri care să inspire coperta. Dacă ai alt stil în minte, descrie-l mai jos și apasă „Adaugă”.",
+      coverPalette: "Poți bifa mai multe combinații de culori pentru copertă. Pentru alte culori, scrie ce îți dorești mai jos și apasă „Adaugă”.",
+      coverComposition: "Poți bifa mai multe idei pentru așezarea titlului și a imaginii pe copertă. Dacă ai altă idee, descrie-o mai jos și apasă „Adaugă”.",
+    },
+    fr: {
+      audience: "Vous pouvez cocher plusieurs groupes de lecteurs. Si vous pensez à un autre public, indiquez-le ci-dessous, puis appuyez sur Ajouter.",
+      purpose: "Vous pouvez cocher plusieurs objectifs pour le livre. Pour proposer un autre objectif, écrivez-le ci-dessous, puis appuyez sur Ajouter.",
+      scope: "Vous pouvez cocher plusieurs orientations pour le contenu du livre. Pour préciser un sujet ou une limite aux thèmes abordés, écrivez votre souhait ci-dessous, puis appuyez sur Ajouter.",
+      structure: "Vous pouvez cocher plusieurs façons d’organiser le livre. Si vous préférez une autre structure, décrivez-la ci-dessous, puis appuyez sur Ajouter.",
+      viewpoints: "Vous pouvez cocher plusieurs perspectives à inclure dans le livre. Pour proposer une autre voix ou un autre point de vue, indiquez-le ci-dessous, puis appuyez sur Ajouter.",
+      qualityCriteria: "Vous pouvez cocher plusieurs qualités que vous souhaitez pour le livre. Si autre chose vous tient à cœur, écrivez-le ci-dessous, puis appuyez sur Ajouter.",
+      coverStyle: "Vous pouvez cocher plusieurs styles pour inspirer la couverture. Si vous avez un autre style en tête, décrivez-le ci-dessous, puis appuyez sur Ajouter.",
+      coverPalette: "Vous pouvez cocher plusieurs associations de couleurs pour la couverture. Pour proposer d’autres couleurs, indiquez vos souhaits ci-dessous, puis appuyez sur Ajouter.",
+      coverComposition: "Vous pouvez cocher plusieurs idées pour disposer le titre et l’illustration sur la couverture. Si vous avez une autre idée, décrivez-la ci-dessous, puis appuyez sur Ajouter.",
+    },
+    de: {
+      audience: "Sie können mehrere Lesergruppen ankreuzen. Wenn Sie eine andere Zielgruppe im Sinn haben, tragen Sie diese unten ein und wählen Sie Hinzufügen.",
+      purpose: "Sie können mehrere Ziele für das Buch ankreuzen. Für ein weiteres Ziel schreiben Sie Ihren Wunsch unten auf und wählen Sie Hinzufügen.",
+      scope: "Sie können mehrere inhaltliche Richtungen für das Buch ankreuzen. Wenn Sie ein bestimmtes Thema oder eine Eingrenzung wünschen, beschreiben Sie dies unten und wählen Sie Hinzufügen.",
+      structure: "Sie können mehrere Möglichkeiten ankreuzen, das Buch aufzubauen. Wenn Sie einen anderen Aufbau bevorzugen, beschreiben Sie ihn unten und wählen Sie Hinzufügen.",
+      viewpoints: "Sie können mehrere Perspektiven für das Buch ankreuzen. Wenn Sie eine weitere Stimme oder Sichtweise wünschen, tragen Sie diese unten ein und wählen Sie Hinzufügen.",
+      qualityCriteria: "Sie können mehrere Eigenschaften ankreuzen, die Ihnen am Buch wichtig sind. Falls Ihnen noch etwas am Herzen liegt, schreiben Sie es unten auf und wählen Sie Hinzufügen.",
+      coverStyle: "Sie können mehrere Stile als Anregung für das Buchcover ankreuzen. Wenn Sie einen anderen Stil im Sinn haben, beschreiben Sie ihn unten und wählen Sie Hinzufügen.",
+      coverPalette: "Sie können mehrere Farbkombinationen für das Buchcover ankreuzen. Wenn Sie andere Farben wünschen, schreiben Sie diese unten auf und wählen Sie Hinzufügen.",
+      coverComposition: "Sie können mehrere Ideen für die Anordnung von Titel und Bild auf dem Buchcover ankreuzen. Wenn Sie eine andere Idee haben, beschreiben Sie diese unten und wählen Sie Hinzufügen.",
+    },
+    es: {
+      audience: "Puedes marcar varios grupos de lectores. Si tienes otro público en mente, escríbelo abajo y pulsa Añadir.",
+      purpose: "Puedes marcar varios objetivos para el libro. Para proponer otro, escribe lo que deseas abajo y pulsa Añadir.",
+      scope: "Puedes marcar varias orientaciones para el contenido del libro. Si quieres precisar un tema o limitar lo que se tratará, escríbelo abajo y pulsa Añadir.",
+      structure: "Puedes marcar varias formas de organizar el libro. Si prefieres otra estructura, descríbela abajo y pulsa Añadir.",
+      viewpoints: "Puedes marcar varias perspectivas para incluir en el libro. Si quieres proponer otra voz o punto de vista, escríbelo abajo y pulsa Añadir.",
+      qualityCriteria: "Puedes marcar varias cualidades que quieres para el libro. Si hay algo más que te importe, escríbelo abajo y pulsa Añadir.",
+      coverStyle: "Puedes marcar varios estilos para inspirar la portada. Si tienes otro estilo en mente, descríbelo abajo y pulsa Añadir.",
+      coverPalette: "Puedes marcar varias combinaciones de colores para la portada. Para proponer otros colores, escribe lo que deseas abajo y pulsa Añadir.",
+      coverComposition: "Puedes marcar varias ideas para colocar el título y la ilustración en la portada. Si tienes otra idea, descríbela abajo y pulsa Añadir.",
+    },
+    pt: {
+      audience: "Pode marcar vários grupos de leitores. Se tiver outro público em mente, escreva-o abaixo e carregue em Adicionar.",
+      purpose: "Pode marcar vários objetivos para o livro. Para propor outro, escreva o que pretende abaixo e carregue em Adicionar.",
+      scope: "Pode marcar várias orientações para o conteúdo do livro. Para indicar um tema específico ou limitar os assuntos a abordar, escreva abaixo e carregue em Adicionar.",
+      structure: "Pode marcar várias formas de organizar o livro. Se preferir outra estrutura, descreva-a abaixo e carregue em Adicionar.",
+      viewpoints: "Pode marcar várias perspetivas a incluir no livro. Para propor outra voz ou ponto de vista, escreva abaixo e carregue em Adicionar.",
+      qualityCriteria: "Pode marcar várias qualidades que deseja para o livro. Se houver algo mais que considere importante, escreva abaixo e carregue em Adicionar.",
+      coverStyle: "Pode marcar vários estilos para inspirar a capa. Se tiver outro estilo em mente, descreva-o abaixo e carregue em Adicionar.",
+      coverPalette: "Pode marcar várias combinações de cores para a capa. Para propor outras cores, escreva o que pretende abaixo e carregue em Adicionar.",
+      coverComposition: "Pode marcar várias ideias para dispor o título e a ilustração na capa. Se tiver outra ideia, descreva-a abaixo e carregue em Adicionar.",
+    },
+    it: {
+      audience: "Puoi selezionare più gruppi di lettori. Se hai in mente un altro pubblico, scrivilo qui sotto e premi Aggiungi.",
+      purpose: "Puoi selezionare più obiettivi per il libro. Per proporne un altro, scrivi ciò che desideri qui sotto e premi Aggiungi.",
+      scope: "Puoi selezionare più direzioni per il contenuto del libro. Per indicare un tema preciso o delimitare gli argomenti da trattare, scrivi qui sotto e premi Aggiungi.",
+      structure: "Puoi selezionare più modi di organizzare il libro. Se preferisci un’altra struttura, descrivila qui sotto e premi Aggiungi.",
+      viewpoints: "Puoi selezionare più prospettive da includere nel libro. Per proporre un’altra voce o un altro punto di vista, scrivilo qui sotto e premi Aggiungi.",
+      qualityCriteria: "Puoi selezionare più qualità che desideri per il libro. Se c’è qualcos’altro a cui tieni, scrivilo qui sotto e premi Aggiungi.",
+      coverStyle: "Puoi selezionare più stili a cui ispirare la copertina. Se hai in mente un altro stile, descrivilo qui sotto e premi Aggiungi.",
+      coverPalette: "Puoi selezionare più combinazioni di colori per la copertina. Per proporre altri colori, scrivi ciò che desideri qui sotto e premi Aggiungi.",
+      coverComposition: "Puoi selezionare più idee per disporre il titolo e l’illustrazione sulla copertina. Se hai un’altra idea, descrivila qui sotto e premi Aggiungi.",
+    },
+    pl: {
+      audience: "Możesz zaznaczyć kilka grup czytelników. Jeśli masz na myśli innych odbiorców, wpisz ich poniżej i wybierz Dodaj.",
+      purpose: "Możesz zaznaczyć kilka celów książki. Aby zaproponować inny cel, opisz go poniżej i wybierz Dodaj.",
+      scope: "Możesz zaznaczyć kilka kierunków dla treści książki. Aby wskazać konkretny temat lub zawęzić zakres, opisz to poniżej i wybierz Dodaj.",
+      structure: "Możesz zaznaczyć kilka sposobów uporządkowania książki. Jeśli wolisz inną strukturę, opisz ją poniżej i wybierz Dodaj.",
+      viewpoints: "Możesz zaznaczyć kilka perspektyw do uwzględnienia w książce. Aby zaproponować inny głos lub punkt widzenia, wpisz go poniżej i wybierz Dodaj.",
+      qualityCriteria: "Możesz zaznaczyć kilka cech, na których zależy Ci w książce. Jeśli coś jeszcze jest dla Ciebie ważne, napisz o tym poniżej i wybierz Dodaj.",
+      coverStyle: "Możesz zaznaczyć kilka stylów jako inspirację dla okładki. Jeśli masz na myśli inny styl, opisz go poniżej i wybierz Dodaj.",
+      coverPalette: "Możesz zaznaczyć kilka zestawień kolorów na okładkę. Aby zaproponować inne kolory, wpisz je poniżej i wybierz Dodaj.",
+      coverComposition: "Możesz zaznaczyć kilka pomysłów na ułożenie tytułu i ilustracji na okładce. Jeśli masz inny pomysł, opisz go poniżej i wybierz Dodaj.",
+    },
+  };
   const instructionPreviewCopy = {
     en: ['View all', 'selected'], ro: ['Vezi toate', 'selectate'],
     fr: ['Tout voir', 'sélectionnés'], de: ['Alle anzeigen', 'ausgewählt'],
@@ -260,9 +350,10 @@
           <ul class="instruction-pills" aria-labelledby="${id}-label"></ul>
           <button type="button" class="instruction-view-all" aria-haspopup="dialog" aria-controls="${id}-dialog" hidden>${escape(instructionPreviewCopy[lang][0])}</button>
         </div>
-        <dialog class="instruction-dialog" id="${id}-dialog" aria-labelledby="${id}-title">
+        <dialog class="instruction-dialog" id="${id}-dialog" aria-labelledby="${id}-title" aria-describedby="${id}-help">
           <header><div><h2 id="${id}-title">${label}</h2><p class="instruction-selection-count" role="status" aria-live="polite"></p></div><button type="button" class="instruction-close" aria-label="${escape(close)}" autofocus>×</button></header>
           <div class="instruction-dialog-body">
+            <p class="instruction-dialog-help" id="${id}-help">${escape(instructionDialogHelp[lang][name])}</p>
             <div class="instruction-choices" role="group" aria-labelledby="${id}-title">${choices}</div>
             <div class="instruction-custom">
               <label class="form-field"><span>${escape(custom)}</span><input type="text" maxlength="200"></label>

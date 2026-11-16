@@ -1075,11 +1075,13 @@ html[lang] [data-workflow-page="create"] .workflow-hero h1 {
 .instruction-dialog header { border-bottom: 1px solid var(--line); }
 .instruction-dialog h2 { margin: 0; font-size: 1.1rem; }
 .instruction-dialog footer { justify-content: flex-end; border-top: 1px solid var(--line); }
+.instruction-dialog-help { margin: 0; padding: 16px 20px 0; color: var(--content); font-size: var(--action-font-size); line-height: 1.5; }
 .instruction-choices { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; padding: 16px 20px; }
-.instruction-choice { position: relative; display: flex; align-items: center; min-height: 44px; padding: 8px 10px; border: 1px solid transparent; border-radius: 8px; background: var(--field); color: var(--ink); font-size: .82rem; cursor: pointer; overflow-wrap: anywhere; }
-.instruction-choice:hover { border-color: var(--green); }
-.instruction-choice:has(:checked) { border-color: var(--green); background: color-mix(in srgb, var(--green) 22%, var(--surface)); }
-.instruction-choice input { position: absolute; width: 1px; height: 1px; margin: 0; padding: 0; clip-path: inset(50%); }
+.instruction-choice { display: flex; align-items: center; gap: 10px; min-height: 44px; padding: 10px 12px; border: 1px solid var(--line); border-radius: 8px; background: var(--field); color: var(--ink); font-size: .82rem; cursor: pointer; overflow-wrap: anywhere; }
+.instruction-choice:hover { border-color: var(--green); background: color-mix(in srgb, var(--green) 10%, var(--field)); }
+.instruction-choice:has(:checked) { border-color: var(--green); background: color-mix(in srgb, var(--green) 22%, var(--surface)); box-shadow: inset 0 0 0 1px var(--green); }
+.instruction-choice input[type="checkbox"] { flex: 0 0 20px; width: 20px; height: 20px; min-height: 20px; margin: 0; padding: 0; accent-color: var(--green); cursor: inherit; }
+.instruction-choice > span { min-width: 0; }
 .instruction-custom { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: end; gap: 8px; padding: 0 20px 16px; }
 .instruction-add { border: 1px solid var(--line); background: var(--field); color: var(--ink); font-weight: 680; }
 .instruction-add:hover { border-color: var(--green); }
@@ -1149,7 +1151,7 @@ html[lang] [data-workflow-page="create"] .workflow-hero h1 {
   [data-workflow-page="create"] .create-workflow-form.workflow-form { padding: 16px; }
   .instruction-dialog[open] { display: grid; grid-template-rows: auto minmax(0, 1fr) auto; width: calc(100% - 24px); max-height: calc(100dvh - 24px); overflow: hidden; }
   .instruction-dialog-body { min-height: 0; overflow-y: auto; overscroll-behavior: contain; }
-  .instruction-dialog header, .instruction-dialog footer, .instruction-choices, .instruction-custom { padding-inline: 14px; }
+  .instruction-dialog header, .instruction-dialog footer, .instruction-dialog-help, .instruction-choices, .instruction-custom { padding-inline: 14px; }
   .instruction-dialog header, .instruction-dialog footer { padding-block: 10px; }
   .instruction-close, .instruction-done.workflow-submit { min-height: 44px; }
   .instruction-close { min-width: 44px; }
@@ -1800,7 +1802,6 @@ body[data-book-workflow] .animation-contribution>.workflow-hero{padding-bottom:8
 .instruction-dialog header, .instruction-dialog footer { padding: 16px 20px; }
 .instruction-dialog footer { border-top: 1px solid var(--line); }
 .instruction-dialog header > div { min-width: 0; }
-.instruction-dialog .instruction-choice { border: 0; }
 @media (max-width: 650px) {
   .instruction-dialog .instruction-choices { grid-template-columns: minmax(0, 1fr); }
   .instruction-dialog { width: calc(100% - 24px); height: min(760px, calc(100dvh - 24px)); }
