@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs/promises';
 import vm from 'node:vm';
 import { webcrypto } from 'node:crypto';
-import { uploadLimits, submissionBodyLimit, validateDocuments, newSubmissionId } from '../site/assets/submission-policy.js';
+import { uploadLimits, submissionBodyLimit, validateDocuments, validateCoverImage, coverImageBytes, newSubmissionId } from '../site/assets/submission-policy.js';
 import { annotations } from '../annotations.mjs';
 import { standaloneReaderUrl } from '../site/assets/suggest.js';
 import { dashboardLanguages, dashboardMessages, dashboardText } from '../site/assets/dashboard-copy.js';
@@ -25,6 +25,13 @@ test('submission IDs require cryptographic randomness, not the secure-context-on
   const identifiers = Array.from({ length: 100 }, () => vm.runInContext(`(${newSubmissionId.toString()})()`, context));
   for (const value of identifiers) assert.match(value, /^[a-f0-9]{8}-[a-f0-9]{4}-4[a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f0-9]{12}$/);
   assert.equal(new Set(identifiers).size, 100);
+});
+
+test('cover uploads have their own formats and size limit without weakening manuscript validation', () => {
+  for(const name of ['cover.png','cover.JPG','cover.jpeg','cover.webp']) assert.doesNotThrow(()=>validateCoverImage({name,size:coverImageBytes}));
+  for(const size of [0,coverImageBytes+1])assert.throws(()=>validateCoverImage({name:'cover.png',size}),/10 MB/);
+  assert.throws(()=>validateCoverImage({name:'cover.svg',size:100}),/PNG, JPG or WebP/);
+  assert.throws(()=>validateDocuments([{name:'cover.png',size:100}]),/PDF, DOC and DOCX/);
 });
 
 test('dashboard copy is complete for all supported languages and preserves template fields', () => {
@@ -71,6 +78,22 @@ async function bridgeFixture({language='en'} = {}) {
   script.runInContext(context);
   return { bridge: context.ScriptaContributionBridge, records, requests, respond: value => { response = value; } };
 }
+
+test('the cover is uploaded separately and does not turn a book proposal into a manuscript', async () => {
+  for (const withManuscript of [false,true]) {
+    const fixture=await bridgeFixture(),button={disabled:false,dataset:{}},status={textContent:''};
+    const coverImage=new File(['image bytes'],'cover.png',{type:'image/png'});
+    const documents=withManuscript?[new File(['%PDF-1.7\nsource'],'book.pdf')]:[];
+    const draft={returnUrl:'https://deployment.example/create/index.html',lines:[],values:{description:'Gardens',coverMode:'upload'},agreementAccepted:true,coverImage};
+    fixture.respond({ok:true,status:202,value:{submissionId:'received'}});
+    assert.equal(await fixture.bridge.submitContribution(draft,documents,status,button),true);
+    const [body]=fixture.requests;
+    assert.equal(JSON.parse(body.get('metadata')).kind,withManuscript?'manuscript':'book-proposal');
+    assert.equal(body.getAll('documents').length,documents.length);
+    assert.equal(body.getAll('coverImage').length,1);
+    assert.equal(await body.get('coverImage').text(),'image bytes');
+  }
+});
 
 test('existing document drafts can be restored without creating another agreement step', async () => {
   const {bridge,records}=await bridgeFixture();

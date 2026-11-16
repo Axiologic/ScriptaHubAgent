@@ -69,6 +69,7 @@ export function checkPublicationPackage(manifest, target, bytes, oldCollection, 
     for (const field of ['coverUrl', 'thumbnailUrl']) for (const value of Object.values(metadata[field] || {})) {
       const name = resolve(value);
       if (!name || !bytes.get(name)?.length) fail('Missing or unrelated book artwork');
+      if (manifest.coverSourceHash && sha256(bytes.get(name)) !== manifest.coverSourceHash) fail('Use the uploaded cover image unchanged for the cover and thumbnail');
     }
   };
   const requireForkSource = source => {

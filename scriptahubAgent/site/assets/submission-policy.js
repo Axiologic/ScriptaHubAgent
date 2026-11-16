@@ -1,6 +1,14 @@
 // Shared by the browser forms and the server. MB denotes decimal bytes.
 export const uploadLimits = Object.freeze({ count: 8, fileBytes: 50_000_000, totalBytes: 100_000_000 });
-export const submissionBodyLimit = uploadLimits.totalBytes + 1024 * 1024;
+export const coverImageBytes = 10_000_000;
+export const submissionBodyLimit = uploadLimits.totalBytes + coverImageBytes + 1024 * 1024;
+
+export function validateCoverImage(file) {
+  if (!file || !Number.isSafeInteger(file.size) || file.size < 1 || file.size > coverImageBytes) {
+    throw new Error('The cover image must contain data and be no larger than 10 MB.');
+  }
+  if (!/\.(png|jpe?g|webp)$/i.test(file.name || '')) throw new Error('Choose a PNG, JPG or WebP cover image.');
+}
 
 export function validateDocuments(files) {
   if (files.length > uploadLimits.count) throw new Error('Up to 8 documents are allowed.');

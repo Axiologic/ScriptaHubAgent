@@ -1809,9 +1809,19 @@ body[data-book-workflow] .animation-contribution>.workflow-hero{padding-bottom:8
 
 /* Cover preferences use the same editorial rows and selection dialogs. */
 .create-cover-field { grid-area: cover; }
-.create-cover-field .cover-note { margin: 0; padding: 8px 0; line-height: 1.5; }
-.create-cover-field .cover-description-field { padding: 16px 0; border-bottom: 1px solid var(--line); }
-.create-cover-field .cover-description-field textarea { min-height: 112px; resize: vertical; }
+.create-cover-description textarea { height: 100%; min-height: 160px; resize: vertical; }
+.cover-upload { display: grid; grid-template-rows: auto 1fr; gap: 6px; min-width: 0; }
+.cover-upload-body { display: grid; align-content: start; justify-items: start; gap: 16px; min-width: 0; }
+.cover-upload .cover-upload-picker { grid-area: auto; width: 100%; margin: 0; grid-template-rows: 1fr; align-content: start; gap: 0; }
+.cover-upload-picker:focus-within .form-file-button { outline: 2px solid var(--green); outline-offset: 3px; }
+.cover-upload-status { margin: 0; color: var(--content); font-size: var(--action-font-size); line-height: 1.5; }
+.cover-upload-status:empty { display: none; }
+.cover-upload-preview { display: flex; align-items: center; gap: 16px; max-width: 100%; min-width: 0; }
+.cover-upload-preview img { display: block; width: 100px; height: 150px; object-fit: contain; border: 1px solid var(--line); border-radius: var(--control-radius); background: var(--field); }
+.cover-upload-preview span { min-width: 0; overflow-wrap: anywhere; color: var(--ink); font-size: var(--action-font-size); }
+.cover-upload-remove { border: 1px solid var(--line); background: var(--field); color: var(--ink); cursor: pointer; }
+.cover-upload-remove:hover { border-color: var(--green); }
+.cover-upload [hidden], .create-cover-panel [data-cover-generated][hidden] { display: none; }
 
 /* Create a book: a clear brief, optional sources, then editorial and visual direction. */
 [data-workflow-page="create"] .create-form-grid {
@@ -1821,8 +1831,8 @@ body[data-book-workflow] .animation-contribution>.workflow-hero{padding-bottom:8
   align-items: stretch;
 }
 .create-book-brief,
-.create-preferences-panel,
-.create-cover-panel,
+.create-instructions-body,
+.cover-upload-body,
 [data-workflow-page="create"] .create-form-grid > .form-file-field {
   min-width: 0;
   padding: clamp(18px, 2vw, 28px);
@@ -1840,11 +1850,22 @@ body[data-book-workflow] .animation-contribution>.workflow-hero{padding-bottom:8
 }
 .create-book-brief > .form-field { margin: 0; }
 .create-book-brief .create-description-field textarea { min-height: 160px; }
-.create-preferences-panel { grid-area: instructions; background: var(--panel); }
-.create-cover-panel { grid-area: cover; background: color-mix(in srgb, var(--green) 4%, var(--panel)); }
+.create-preferences-panel { grid-area: instructions; min-width: 0; }
+.create-cover-panel { grid-area: cover; min-width: 0; }
+.create-instructions-body { background: var(--panel); }
+.create-cover-panel .create-instructions-body { background: color-mix(in srgb, var(--green) 6%, var(--panel)); }
+.create-cover-layout { display: grid; grid-template-columns: minmax(0, 2fr) auto minmax(240px, 1fr); column-gap: 16px; row-gap: 20px; align-items: stretch; }
+.cover-choice-divider { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 12px; color: var(--muted); }
+.cover-choice-divider svg { display: block; flex: none; width: 20px; height: 20px; fill: none; stroke: currentColor; stroke-width: 1.6; stroke-linecap: round; stroke-linejoin: round; }
+.cover-choice-divider::before, .cover-choice-divider::after { content: ""; flex: 1; width: 1px; min-height: 12px; background: var(--line); }
+.create-cover-description { display: flex; min-width: 0; }
+.create-cover-description > .cover-description-field { flex: 1; min-width: 0; grid-template-rows: auto minmax(160px, 1fr); }
+.create-cover-preferences { grid-column: 1 / -1; min-width: 0; padding-top: 20px; border-top: 1px solid var(--line); }
+.cover-upload-body { background: var(--panel); border-style: dashed; }
+.create-cover-layout:has(.create-cover-description[hidden]) > .cover-upload { grid-column: 1 / -1; }
 [data-workflow-page="create"] :is(.create-preferences-panel, .create-cover-panel) .create-instructions { padding: 0; }
 [data-workflow-page="create"] :is(.create-preferences-panel, .create-cover-panel) legend {
-  margin-bottom: 20px;
+  margin-bottom: 12px;
   font-size: 1rem;
   font-weight: 650;
 }
@@ -1870,11 +1891,17 @@ body[data-book-workflow] .animation-contribution>.workflow-hero{padding-bottom:8
 }
 [data-workflow-page="create"] .form-file-selection:empty { display: none; }
 [data-workflow-page="create"] .create-cover-field .cover-note {
-  margin: -10px 0 20px;
+  width: auto;
+  min-height: 0;
+  margin: 0 0 12px;
   padding: 0;
+  color: var(--muted);
+  font-size: .72rem;
+  font-weight: 400;
+  line-height: 1.4;
 }
-[data-workflow-page="create"] .create-cover-field .cover-description-field {
-  margin-top: 22px;
+[data-workflow-page="create"] .create-cover-description .cover-description-field {
+  margin: 0;
   padding: 0;
   border: 0;
 }
@@ -1889,6 +1916,10 @@ body[data-book-workflow] .animation-contribution>.workflow-hero{padding-bottom:8
   }
   [data-workflow-page="create"] .create-instructions-grid { grid-template-columns: minmax(0, 1fr); gap: 18px; }
   [data-workflow-page="create"] .form-file-picker { gap: 14px; }
+  .create-cover-layout { grid-template-columns: minmax(0, 1fr); gap: 16px; }
+  .cover-choice-divider { flex-direction: row; gap: 12px; }
+  .cover-choice-divider svg { transform: rotate(90deg); }
+  .cover-choice-divider::before, .cover-choice-divider::after { width: auto; height: 1px; min-height: 0; }
 }
 
 /* White controls contrast with the tinted creation sections in light themes. */

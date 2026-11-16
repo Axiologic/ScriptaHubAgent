@@ -92,3 +92,43 @@ test('a description without attachments reaches the Add book executor with its i
     assert.deepEqual(service.claim(executor,args).task,task);
   } finally { store.close(); }
 });
+
+test('an uploaded cover stays separate from manuscripts and reaches the executor with verified bytes', async t => {
+  const root = await fs.mkdtemp(path.join(os.tmpdir(), 'scripta-cover-'));
+  const server = createSiteServer(root, {dataDir:root, verifyUser:async()=>({id:'user:alice',email:'alice@example.test'})});
+  await new Promise(resolve=>server.listen(0,'127.0.0.1',resolve));
+  t.after(async()=>{await new Promise(resolve=>server.close(resolve));await fs.rm(root,{recursive:true,force:true});});
+  const endpoint=`http://127.0.0.1:${server.address().port}/api/submissions`;
+  const png=Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+jXioAAAAASUVORK5CYII=','base64');
+  const makeBody=(id=crypto.randomUUID(),{kind='book-proposal',mode='upload',image=new File([png],'cover.png'),duplicate=false}={})=>{
+    const body=new FormData();
+    body.set('metadata',JSON.stringify({submissionId:id,kind,agreementVersion:'2026-09-10',agreementAccepted:true,language:'ro',values:{description:'O carte despre grădini.',coverMode:mode}}));
+    if(image)body.append('coverImage',image);
+    if(duplicate)body.append('coverImage',image);
+    if(kind==='manuscript')body.append('documents',new File(['%PDF-1.7\nsource'],'source.pdf'));
+    return body;
+  };
+  const send=body=>fetch(endpoint,{method:'POST',body});
+  const id=crypto.randomUUID(),response=await send(makeBody(id));
+  assert.equal(response.status,202);assert.equal((await response.json()).task.type,'scriptahub.book-proposal');
+  assert.equal((await send(makeBody(id))).status,202);
+  assert.equal((await send(makeBody(id,{image:new File([Buffer.concat([png,Buffer.from('changed')])],'cover.png')}))).status,409);
+  const store=new DashboardStore(root);
+  try {
+    const service=new TaskExecution(store,root),executor='agent:test/cover';
+    const {task}=service.claim(executor,{runId:'cover-only',taskType:'add-book'});
+    assert.equal(task.type,'scriptahub.book-proposal');
+    assert.equal(task.values.coverMode,'upload');
+    assert.deepEqual(task.files,[{index:0,originalName:'cover.png',sha256:crypto.createHash('sha256').update(png).digest('hex'),role:'cover'}]);
+    const image=await service.document(executor,{executionId:task.executionId,index:0});
+    assert.deepEqual(Buffer.from(image.data,'base64'),png);
+  } finally {store.close();}
+  assert.equal((await send(makeBody(undefined,{kind:'manuscript'}))).status,202);
+  for(const options of [
+    {image:null}, {duplicate:true}, {mode:'generate'},
+    {image:new File(['<svg/>'],'cover.svg')},
+    {image:new File(['not an image'],'cover.png')},
+    {image:new File([new Uint8Array(10_000_001)],'cover.png')},
+    {kind:'animation'},
+  ])assert.equal((await send(makeBody(undefined,options))).status,400);
+});

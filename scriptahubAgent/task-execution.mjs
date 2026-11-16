@@ -77,7 +77,7 @@ export class TaskExecution {
       bookId: book.id, ownerId: book.owner, authorId: change.author, type: `scriptahub.${row.kind}`,
       values: Object.fromEntries(Object.entries(payload.metadata.values).filter(([key]) => !['annotations','annotationDraftKey'].includes(key))), language: payload.metadata.language,
       baseRevision:change.base_revision, ...(payload.source ? {source:payload.source} : {}), annotations:approvedAnnotations(payload),
-      files: payload.files.map((file, index) => ({ index, originalName: file.originalName, sha256: file.sha256 })),
+      files: payload.files.map((file, index) => ({ index, originalName: file.originalName, sha256: file.sha256, ...(file.role ? {role:file.role} : {}) })),
       result: row.result, error: row.error };
   }
   batch(executor,batchId) {
@@ -198,7 +198,8 @@ export class TaskExecution {
     if (!source) fail('Document not found',404);
     const {change,payload,file} = source;
     if (!file || !/^[0-9a-f-]{36}$/.test(change.id) || typeof file.name !== 'string'
-      || file.name !== path.basename(file.name) || !/^[0-9a-f-]{36}\.(pdf|doc|docx|html)$/.test(file.name)) fail('Document not found', 404);
+      || file.name !== path.basename(file.name) || !/^[0-9a-f-]{36}\.(pdf|doc|docx|html|png|jpg|webp)$/.test(file.name)
+      || /\.(png|jpg|webp)$/.test(file.name) && file.role !== 'cover') fail('Document not found', 404);
     const root = await fs.realpath(this.dataDir);
     const folder = path.join(root, 'inbox', change.id);
     // Reject symlinked directories/files before opening private input.

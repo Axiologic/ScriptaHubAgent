@@ -57,8 +57,10 @@ export class PublicationTransfer {
       seen.add(file.path); bytes += file.size;
     }
     if (bytes > 512000000) publicationError('Publication package exceeds 512 MB');
-    const manifest = { executionId, catalogue, branch, baseCommit, bookId: task.bookId, taskType:task.type, coverRequired:task.values?.coverMode === 'generate',
-      ...(task.source ? {source:task.source} : {}), sourceHashes: task.files.map(file => file.sha256), files: [...files].sort((a,b) => a.path.localeCompare(b.path)), validation };
+    const cover = task.files.find(file => file.role === 'cover');
+    const manifest = { executionId, catalogue, branch, baseCommit, bookId: task.bookId, taskType:task.type, coverRequired:['generate','upload'].includes(task.values?.coverMode),
+      ...(cover ? {coverSourceHash:cover.sha256} : {}),
+      ...(task.source ? {source:task.source} : {}), sourceHashes: task.files.filter(file => file.role !== 'cover').map(file => file.sha256), files: [...files].sort((a,b) => a.path.localeCompare(b.path)), validation };
     const text = JSON.stringify(manifest);
     if (Buffer.byteLength(text) > 100000) publicationError('Publication inventory is too large');
     const digest = sha256(text);

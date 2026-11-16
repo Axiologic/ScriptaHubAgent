@@ -81,7 +81,7 @@
     form.addEventListener('reset',()=>queueMicrotask(update));
     update();return update;
   }
-  async function submitDirect(metadata, files, status, button) {
+  async function submitDirect(metadata, files, status, button, coverImage) {
     if (sending.has(button) || button.dataset.submissionComplete === 'true') return false;
     sending.add(button);
     button.disabled = true;
@@ -89,9 +89,11 @@
     let received;
     try {
       (await policy).validateDocuments(files);
+      if (coverImage) (await policy).validateCoverImage(coverImage);
       const body = new FormData();
       body.set('metadata', JSON.stringify(metadata));
       for (const file of files) body.append('documents', file, file.name);
+      if (coverImage) body.set('coverImage', coverImage, coverImage.name);
       const response = await fetch(new URL('api/submissions', root), { method: 'POST', credentials: 'same-origin', body });
       received = await response.json();
       if (!response.ok) throw new Error(received.error || `Upload failed (${response.status})`);
@@ -124,7 +126,7 @@
       metadata.confirmedCost = Number(metadata.values.confirmedCost);
       delete metadata.values.confirmedCost;
     }
-    return submitDirect(metadata,files,status,button);
+    return submitDirect(metadata,files,status,button,draft.coverImage);
   }
   globalThis.ScriptaContributionBridge = {bindFormValidity,loadDraftFiles,deleteDraftFiles:remove,submitContribution,submitDirect,
     newSubmissionId:async()=>(await policy).newSubmissionId(),

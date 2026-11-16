@@ -326,12 +326,115 @@
     it: ["Minimalista;Illustrazione editoriale;Geometrico;Astratto;Botanico;Vintage;Scientifico;Letterario", "Toni caldi della terra;Blu e turchese;Verde bosco;Bianco e nero;Pastelli delicati;Colori intensi;Alto contrasto", "Titolo grande;Illustrazione centrale;Motivo simbolico;Composizione incorniciata;Ampio spazio libero;Illustrazione a tutta pagina"],
     pl: ["Minimalistyczny;Ilustracja redakcyjna;Geometryczny;Abstrakcyjny;Botaniczny;Vintage;Naukowy;Literacki", "Ciepłe kolory ziemi;Błękit i turkus;Leśna zieleń;Czerń i biel;Delikatne pastele;Intensywne kolory;Silny kontrast", "Duży tytuł;Centralna ilustracja;Motyw symboliczny;Kompozycja w ramie;Dużo wolnej przestrzeni;Ilustracja do krawędzi"],
   };
+  const coverUploadCopy = {
+    en: ["Use your own cover image", "Create with AI or upload your image.", "Choose an image", "Remove image", "Your chosen cover", "This image will be used as your cover. Remove it to create a new one instead.", "Choose a PNG, JPG or WebP image that opens correctly.", "Choose an image no larger than 10 MB.", "Preparing your image…", "PNG, JPG or WebP, up to 10 MB. Your image will be used as it is."],
+    ro: ["Folosește o imagine proprie pentru copertă", "Creează coperta cu AI sau încarcă o imagine.", "Alege o imagine", "Elimină imaginea", "Coperta aleasă", "Această imagine va fi folosită drept copertă. Elimin-o dacă vrei să creăm o copertă nouă.", "Alege o imagine PNG, JPG sau WebP care se deschide corect.", "Alege o imagine de cel mult 10 MB.", "Se pregătește imaginea…", "PNG, JPG sau WebP, până la 10 MB. Imaginea va fi folosită ca atare."],
+    fr: ["Utiliser votre propre image de couverture", "Créez avec l’IA ou importez votre image.", "Choisir une image", "Retirer l’image", "Votre couverture", "Cette image sera utilisée comme couverture. Retirez-la pour créer une nouvelle couverture.", "Choisissez une image PNG, JPG ou WebP qui s’ouvre correctement.", "Choisissez une image de 10 Mo maximum.", "Préparation de votre image…", "PNG, JPG ou WebP, jusqu’à 10 Mo. Votre image sera utilisée telle quelle."],
+    de: ["Ein eigenes Coverbild verwenden", "Mit KI erstellen oder ein eigenes Bild hochladen.", "Bild auswählen", "Bild entfernen", "Ihr ausgewähltes Cover", "Dieses Bild wird als Cover verwendet. Entfernen Sie es, wenn ein neues Cover erstellt werden soll.", "Wählen Sie ein PNG-, JPG- oder WebP-Bild, das sich öffnen lässt.", "Wählen Sie ein Bild mit höchstens 10 MB.", "Ihr Bild wird vorbereitet…", "PNG, JPG oder WebP, bis zu 10 MB. Ihr Bild wird unverändert verwendet."],
+    es: ["Usar tu propia imagen de portada", "Crea con IA o sube tu imagen.", "Elegir una imagen", "Quitar imagen", "Tu portada elegida", "Esta imagen se usará como portada. Quítala si quieres que creemos una nueva.", "Elige una imagen PNG, JPG o WebP que se abra correctamente.", "Elige una imagen de hasta 10 MB.", "Preparando tu imagen…", "PNG, JPG o WebP, hasta 10 MB. Tu imagen se usará tal cual."],
+    pt: ["Usar uma imagem sua para a capa", "Crie com IA ou carregue a sua imagem.", "Escolher uma imagem", "Remover imagem", "A capa escolhida", "Esta imagem será usada como capa. Remova-a se quiser que seja criada uma nova.", "Escolha uma imagem PNG, JPG ou WebP que abra corretamente.", "Escolha uma imagem com até 10 MB.", "A preparar a sua imagem…", "PNG, JPG ou WebP, até 10 MB. A sua imagem será usada tal como está."],
+    it: ["Usa una tua immagine per la copertina", "Crea con l’IA o carica la tua immagine.", "Scegli un’immagine", "Rimuovi immagine", "La copertina scelta", "Questa immagine sarà usata come copertina. Rimuovila se vuoi crearne una nuova.", "Scegli un’immagine PNG, JPG o WebP che si apra correttamente.", "Scegli un’immagine di massimo 10 MB.", "Preparazione dell’immagine…", "PNG, JPG o WebP, fino a 10 MB. La tua immagine sarà usata così com’è."],
+    pl: ["Użyj własnego obrazu na okładkę", "Stwórz z AI lub prześlij swój obraz.", "Wybierz obraz", "Usuń obraz", "Wybrana okładka", "Ten obraz zostanie użyty jako okładka. Usuń go, jeśli chcesz utworzyć nową.", "Wybierz obraz PNG, JPG lub WebP, który otwiera się poprawnie.", "Wybierz obraz o rozmiarze do 10 MB.", "Przygotowywanie obrazu…", "PNG, JPG lub WebP, do 10 MB. Twój obraz zostanie użyty bez zmian."],
+  };
   function bookCover(lang) {
     const copy = coverCopy[lang];
+    const upload = coverUploadCopy[lang];
     return bookInstructions(copy[0], copy.slice(2, 5), lang, {
       fields: coverFields, options: coverOptions[lang].map(row => row.split(";")), hints: copy.slice(5, 8), cover: true,
-      note: copy[1], description: textarea(copy[8], "coverDescription", copy[9], false, "cover-description-field", 4000),
+      note: upload[1], description: textarea(copy[8], "coverDescription", copy[9], false, "cover-description-field", 4000),
+      upload: `<div class="cover-upload">
+        <span class="form-file-label" id="cover-image-label">${escape(upload[0])}</span>
+        <div class="cover-upload-body">
+          <label class="form-file-field cover-upload-picker"><input class="form-file-input" type="file" name="coverImage" accept="image/png,image/jpeg,image/webp,.png,.jpg,.jpeg,.webp" aria-labelledby="cover-image-label" aria-describedby="cover-image-hint cover-image-status"><span class="form-file-picker"><span id="cover-image-hint" class="form-file-hint">${escape(upload[9])}</span><span class="form-file-button"><svg aria-hidden="true" viewBox="0 0 24 24"><path d="M8.5 12.8 14 7.3a3.2 3.2 0 0 1 4.5 4.5l-7.1 7.1a5 5 0 0 1-7.1-7.1l7.5-7.5"/></svg>${escape(upload[2])}</span></span></label>
+          <div class="cover-upload-preview" hidden><img alt="${escape(upload[4])}"><span data-cover-filename></span></div>
+          <p id="cover-image-status" class="cover-upload-status" role="status"></p>
+          <button type="button" class="cover-upload-remove" hidden>${escape(upload[3])}</button>
+        </div>
+      </div>`,
     });
+  }
+
+  function bindCoverUpload(form, lang) {
+    const input = form.elements.coverImage;
+    if (!input) return;
+    const copy = coverUploadCopy[lang];
+    const upload = input.closest('.cover-upload');
+    const preview = upload.querySelector('.cover-upload-preview');
+    const image = preview.querySelector('img');
+    const filename = preview.querySelector('[data-cover-filename]');
+    const status = upload.querySelector('[role="status"]');
+    const remove = upload.querySelector('.cover-upload-remove');
+    const generated = form.querySelectorAll('[data-cover-generated]');
+    const note = form.querySelector('.create-cover-field .cover-note');
+    let previewUrl, version = 0;
+    function setUploadedMode(uploaded) {
+      for (const section of generated) {
+        section.hidden = uploaded;
+        for (const control of section.querySelectorAll('input, textarea, button')) {
+          if (uploaded) {
+            if (control.type === 'checkbox') control.checked = false;
+            else if (control.matches('input, textarea')) control.value = '';
+          }
+          control.disabled = uploaded;
+        }
+        if (uploaded) {
+          for (const dialog of section.querySelectorAll('dialog[open]')) dialog.close();
+          for (const choices of section.querySelectorAll('.instruction-choices')) choices.dispatchEvent(new Event('change', {bubbles:true}));
+        }
+      }
+      note.textContent = uploaded ? copy[5] : copy[1];
+    }
+    function clearPreview() {
+      if (previewUrl) URL.revokeObjectURL(previewUrl);
+      previewUrl = undefined;
+      image.removeAttribute('src');
+      preview.hidden = true;
+    }
+    async function update() {
+      const current = ++version;
+      clearPreview();
+      const file = input.files[0];
+      form.elements.coverMode.value = 'generate';
+      setUploadedMode(false);
+      remove.hidden = !file;
+      status.textContent = '';
+      input.setCustomValidity(file ? copy[8] : '');
+      form.updateContributionState?.();
+      if (!file) return;
+      status.textContent = copy[8];
+      let url;
+      try {
+        const policy = await import(new URL('assets/submission-policy.js', siteRoot));
+        if (current !== version) return;
+        policy.validateCoverImage(file);
+        url = URL.createObjectURL(file);
+        previewUrl = url;
+        image.src = url;
+        await image.decode();
+        if (current !== version) return;
+        filename.textContent = file.name;
+        preview.hidden = false;
+        status.textContent = copy[5];
+        input.setCustomValidity('');
+        form.elements.coverMode.value = 'upload';
+        setUploadedMode(true);
+      } catch {
+        if (current !== version) return;
+        clearPreview();
+        const message = file.size > 10_000_000 ? copy[7] : copy[6];
+        status.textContent = message;
+        input.setCustomValidity(message);
+      } finally {
+        if (current === version) form.updateContributionState?.();
+      }
+    }
+    input.addEventListener('change', update);
+    remove.addEventListener('click', () => { input.value = ''; update(); input.focus(); });
+    form.addEventListener('reset', () => queueMicrotask(update));
+    const observer = new MutationObserver(() => {
+      if (!upload.isConnected) { version++; clearPreview(); observer.disconnect(); }
+    });
+    observer.observe(root, {childList:true, subtree:true});
   }
 
   function bookInstructions(title, labels, lang, config = {}) {
@@ -364,7 +467,9 @@
         </dialog>
       </div>`;
     });
-    return `<fieldset class="${config.cover ? "create-cover-field" : "create-instructions-field"} create-instructions"><legend>${escape(title)}</legend>${config.note ? `<p class="workflow-note cover-note">${escape(config.note)}</p>` : ""}<div class="create-instructions-grid">${fields.join("")}</div>${config.description || ""}</fieldset>`;
+    const content = `<div class="create-instructions-grid">${fields.join("")}</div>${config.cover ? "" : config.description || ""}`;
+    const coverLayout = config.cover ? `<div class="create-cover-layout"><div class="create-cover-description" data-cover-generated>${config.description || ""}</div><div class="cover-choice-divider" data-cover-generated aria-hidden="true"><svg viewBox="0 0 24 24" focusable="false"><path d="M4 12h16M8 8l-4 4 4 4m8-8 4 4-4 4"/></svg></div>${config.upload || ""}<div class="create-cover-preferences" data-cover-generated>${content}</div></div>` : "";
+    return `<fieldset class="${config.cover ? "create-cover-field" : "create-instructions-field"} create-instructions"><legend>${escape(title)}</legend><div class="create-instructions-body">${config.note ? `<p class="workflow-note cover-note">${escape(config.note)}</p>` : ""}${config.cover ? coverLayout : content}</div></fieldset>`;
   }
   function bindInstructionPickers(form, lang, saved = {}) {
     const [, , remove] = instructionPickerCopy[lang];
@@ -532,7 +637,7 @@
     for (const [name, value] of Object.entries(draft.values)) {
       if (hasInstructionPickers && pickerFields.includes(name)) continue;
       const input = form.elements.namedItem(name);
-      if (input && input.type !== "file") input.value = value;
+      if (input && input.type !== "file" && name !== 'coverMode') input.value = value;
     }
     form._draftFiles = draft.files;
     return draft.values;
@@ -546,7 +651,8 @@
       let files=[...(form.elements.documents?.files || [])];
       if(!files.length && expectedNames.length) files=await ScriptaContributionBridge.loadDraftFiles(params().get('draft'),expectedNames);
       const values=Object.fromEntries([...(data || new FormData(form))].filter(([,value])=>typeof value==='string'));
-      const submitted=await ScriptaContributionBridge.submitContribution({subject,lines,values,language:lang,returnUrl:location.href,agreementAccepted:accepted},files,status,button);
+      const coverImage=form.elements.coverImage?.files[0];
+      const submitted=await ScriptaContributionBridge.submitContribution({subject,lines,values,language:lang,returnUrl:location.href,agreementAccepted:accepted,coverImage},files,status,button);
       if(submitted && params().get('draft')) {
         sessionStorage.removeItem(draftPrefix+params().get('draft'));
         await ScriptaContributionBridge.deleteDraftFiles(params().get('draft')).catch(()=>{});
@@ -583,7 +689,9 @@
       data.set(name, value);
       return index < instructionFields.length ? [`${instructionLabels[lang][index]}:\n${value}`] : [];
     });
-    data.set("coverDescription", String(data.get("coverDescription") || "").trim());
+    if (data.get('coverMode') === 'upload') {
+      for (const name of [...coverFields, 'coverDescription']) data.delete(name);
+    } else data.set("coverDescription", String(data.get("coverDescription") || "").trim());
     data.set("prompt", [description, ...sections].join("\n\n"));
     return data;
   }
@@ -620,6 +728,7 @@
     }
     if (!fork) {
       bindInstructionPickers(form, lang, saved);
+      bindCoverUpload(form, lang);
     }
     prepareContributionForm(form,lang);
     const documents = form.elements.documents;

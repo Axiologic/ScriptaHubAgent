@@ -29,6 +29,8 @@ test('cover choices are optional, localized and use the existing accessible sele
       assert.ok((html.match(new RegExp(`name="${name}"`,'g'))||[]).length>=6);
     }
     assert.match(html,/name="coverDescription"/);
+    assert.match(html,/<input[^>]*type="file"[^>]*name="coverImage"[^>]*accept="image\/png,image\/jpeg,image\/webp/);
+    assert.match(html,/class="cover-upload-preview" hidden/);
     assert.match(html,/maxlength="4000"/);
     assert.ok(html.includes(api.coverCopy[lang][0]));
     assert.doesNotMatch(html,/\brequired\b|undefined/);
@@ -58,4 +60,17 @@ test('all preset and custom cover choices reach the task without becoming book c
   assert.equal(automatic.coverDescription,'');
   assert.equal(automatic.coverStyle,undefined);
   assert.equal(automatic.prompt,'Subiect');
+});
+
+test('using an uploaded cover omits all generation preferences from the submitted data', async () => {
+  const api=await formApi();
+  const data=api.creationData([
+    ['description','A book about gardens'],['audience','Beginners'],['coverMode','upload'],
+    ['coverStyle','Botanical'],['coverPalette','Forest green'],['coverComposition','Large title'],
+    ['coverDescription','A greenhouse on a rooftop'],
+  ],'en');
+  for(const name of ['coverStyle','coverPalette','coverComposition','coverDescription']) assert.equal(data.has(name),false,name);
+  assert.equal(data.get('coverMode'),'upload');
+  assert.equal(data.get('audience'),'Beginners');
+  assert.doesNotMatch(data.get('prompt'),/Botanical|Forest green|Large title|greenhouse/);
 });

@@ -18,7 +18,7 @@ import { sha256 } from '../publication-transfer.mjs';
 import { sealRecord } from '../record-integrity.mjs';
 const exec = promisify(execFile), agent = 'agent:test/processor';
 process.env.SCRIPTA_RECORD_KEY = 'publication-tests-record-key-012345678901234567890';
-async function fixture(t, { schemaVersion = 1, kind = 'manuscript', manageApprovals = false, coverMode } = {}) {
+async function fixture(t, { schemaVersion = 1, kind = 'manuscript', manageApprovals = false, coverMode, coverImage } = {}) {
   const root = await fs.mkdtemp(path.join(os.tmpdir(),'scripta-publication-'));
   const remote = path.join(root,'remote.git'), seed = path.join(root,'seed'), data = path.join(root,'data');
   const git = async (cwd,...args) => (await exec('git',args,{cwd,env:{...process.env,GIT_CONFIG_GLOBAL:'/dev/null',GIT_CONFIG_NOSYSTEM:'1',GIT_AUTHOR_NAME:'Test',GIT_AUTHOR_EMAIL:'test@example.test',GIT_COMMITTER_NAME:'Test',GIT_COMMITTER_EMAIL:'test@example.test'}})).stdout.trim();
@@ -33,7 +33,8 @@ async function fixture(t, { schemaVersion = 1, kind = 'manuscript', manageApprov
   const source = Buffer.from('%PDF-1.7\nOriginal manuscript\n');
   const submitted = store.submit(sealRecord({id:crypto.randomUUID(),owner:'user:owner',contact:{email:'owner@example.test'},
     metadata:{kind,language:'en',values:{description:kind==='book-proposal'?'A book about gardens':'Process the original manuscript',...(coverMode?{coverMode}:{})}},
-    files:kind==='manuscript'?[{name:crypto.randomUUID()+'.pdf',originalName:'source.pdf',sha256:sha256(source)}]:[],createdAt:new Date().toISOString(),state:'received',task:null}));
+    files:[...(kind==='manuscript'?[{name:crypto.randomUUID()+'.pdf',originalName:'source.pdf',sha256:sha256(source)}]:[]),
+      ...(coverImage?[{role:'cover',name:crypto.randomUUID()+'.png',originalName:'cover.png',sha256:sha256(coverImage)}]:[])],createdAt:new Date().toISOString(),state:'received',task:null}));
   const task = service.claim(agent,{runId:'run-publication',taskType:kind}).task;
   const catalogue = 'https://github.com/example/books/blob/main/collection.json';
   const config = {repositories:[catalogue],publication:{authorName:'Publisher',authorEmail:'publisher@example.test'}};
@@ -538,4 +539,39 @@ test('a requested generated cover is required, inventoried and published with it
   assert.equal(published.books[0].coverUrl.en,cover);
   assert.equal(published.books[0].thumbnailUrl.en,cover);
   assert.match(await f.git(f.remote,'show','main:'+cover),/viewBox="0 0 1200 1800"/);
+});
+
+for (const [kind,schemaVersion] of [['book-proposal',1],['manuscript',1],['book-proposal',2]]) test(`an uploaded cover publishes unchanged for ${kind}, schema ${schemaVersion}`, async t => {
+  const image=Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+jXioAAAAASUVORK5CYII=','base64');
+  const f=await fixture(t,{kind,schemaVersion,coverMode:'upload',coverImage:image});
+  const collection=JSON.parse(f.files.get('collection.json')),book=collection.books[0];
+  let cover=book.directory+'/en/cover.png';
+  book.coverUrl={en:cover};book.thumbnailUrl={en:cover};
+  f.files.set('collection.json',Buffer.from(JSON.stringify(collection)));
+  f.files.set(cover,image);
+  const sourceHashes=kind==='manuscript'?[sha256(f.files.get(book.directory+'/en/book.pdf'))]:[];
+  if(schemaVersion===2) {
+    const html=f.files.get(book.directory+'/en/full.html');
+    book.directory='books/uploaded-cover';
+    cover=book.directory+'/en/cover.png';
+    const document={schemaVersion:2,id:f.task.bookId,legacyDirectory:book.directory+'/'+f.task.bookId,contentDirectory:book.directory,
+      metadata:{id:f.task.bookId,title:{en:'Gardens'},coverUrl:{en:'en/cover.png'},thumbnailUrl:{en:'en/cover.png'},editions:{en:{book:'en/book.html',fullContent:'en/full.html'}}},
+      history:{bookId:f.task.bookId,editions:[]},resources:{'en/full.html':book.directory+'/en/full.html','en/cover.png':cover}};
+    const metadata=Buffer.from(JSON.stringify(document));
+    f.files.clear();
+    f.files.set('collection.json',Buffer.from(JSON.stringify({schemaVersion:2,bookCount:1,books:[{id:f.task.bookId,path:book.directory+'/book.json',sha256:sha256(metadata)}]})));
+    f.files.set(book.directory+'/book.json',metadata);f.files.set(book.directory+'/en/full.html',html);f.files.set(cover,image);
+  }
+  const manifest={taskType:f.task.type,bookId:f.task.bookId,coverRequired:true,coverSourceHash:sha256(image),sourceHashes};
+  const target=publicationTarget(f.input.catalogue,f.input.branch);
+  assert.ok(checkPublicationPackage(manifest,target,f.files,f.previous));
+  const changed=new Map(f.files);changed.set(cover,Buffer.concat([image,Buffer.from('changed')]));
+  assert.throws(()=>checkPublicationPackage(manifest,target,changed,f.previous),/uploaded cover image unchanged/);
+  f.input.files=[...f.files].map(([path,bytes])=>({path,size:bytes.length,sha256:sha256(bytes)}));
+  f.upload();
+  const stored=JSON.parse(f.publisher.row(f.task.executionId).manifest);
+  assert.deepEqual(stored.sourceHashes,sourceHashes);assert.equal(stored.coverSourceHash,sha256(image));assert.equal(stored.coverRequired,true);
+  assert.equal((await f.publisher.publish(agent,{executionId:f.task.executionId},f.config)).state,'completed');
+  const published=await exec('git',['show','main:'+cover],{cwd:f.remote,encoding:'buffer'});
+  assert.deepEqual(published.stdout,image);
 });

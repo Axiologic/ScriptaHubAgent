@@ -4,7 +4,7 @@ import path from 'node:path';
 import crypto from 'node:crypto';
 import { verifyRouterUser } from './identity.mjs';
 import { sealRecord, verifyRecord } from './record-integrity.mjs';
-import { submissionBodyLimit, validateDocuments } from './site/assets/submission-policy.js';
+import { submissionBodyLimit, validateDocuments, validateCoverImage } from './site/assets/submission-policy.js';
 
 const ID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const KINDS = new Set(['manuscript', 'book-proposal', 'fork', 'edit', 'animation', 'translation', 'librarian-feedback']);
@@ -44,6 +44,14 @@ function fileKind(filename, bytes) {
   throw new Error('Only PDF, DOC and DOCX manuscripts are accepted');
 }
 
+function coverKind(filename, bytes) {
+  const extension = path.extname(filename).toLowerCase();
+  if (extension === '.png' && bytes.subarray(0, 8).equals(Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]))) return '.png';
+  if (['.jpg', '.jpeg'].includes(extension) && bytes.subarray(0, 3).equals(Buffer.from([255, 216, 255]))) return '.jpg';
+  if (extension === '.webp' && bytes.subarray(0, 4).toString() === 'RIFF' && bytes.subarray(8, 12).toString() === 'WEBP') return '.webp';
+  throw new Error('Choose a valid PNG, JPG or WebP cover image.');
+}
+
 export async function saveSubmission({ body, contentType, user, dataDir, store, policy, forkSource }) {
   if (!user?.id || !user.email) throw Object.assign(new Error('Sign in to submit'), { status: 401 });
   const request = new Request('http://localhost/upload', { method: 'POST', body, headers: { 'content-type': contentType || '' } });
@@ -53,6 +61,14 @@ export async function saveSubmission({ body, contentType, user, dataDir, store, 
   store.validateSubmission(user, meta);
   const uploads = form.getAll('documents');
   validateDocuments(uploads);
+  const covers = form.getAll('coverImage');
+  if (covers.length > 1) throw new Error('Choose one cover image.');
+  const cover = covers[0];
+  if (cover) {
+    if (!['book-proposal', 'manuscript'].includes(meta.kind)) throw new Error('A cover image is only supported for a new book.');
+    validateCoverImage(cover);
+    if (meta.values.coverMode !== 'upload') throw new Error('Choose the uploaded image as the book cover.');
+  } else if (meta.values.coverMode === 'upload') throw new Error('Choose a cover image before submitting.');
   if (meta.kind === 'fork' && (uploads.length || meta.targetBookId || !meta.values.titles?.trim() || !meta.values.prompt?.trim() || !meta.values.sourceEdition)) {
     throw new Error('A derived book requires a source edition, a new title and instructions.');
   }
@@ -67,6 +83,11 @@ export async function saveSubmission({ body, contentType, user, dataDir, store, 
     const bytes = Buffer.from(await upload.arrayBuffer());
     const ext = fileKind(upload.name, bytes);
     files.push({ originalName: path.basename(upload.name), name: `${crypto.randomUUID()}${ext}`, sha256: crypto.createHash('sha256').update(bytes).digest('hex'), bytes });
+  }
+  if (cover) {
+    const bytes = Buffer.from(await cover.arrayBuffer());
+    const ext = coverKind(cover.name, bytes);
+    files.push({ role: 'cover', originalName: path.basename(cover.name), name: `${crypto.randomUUID()}${ext}`, sha256: crypto.createHash('sha256').update(bytes).digest('hex'), bytes });
   }
   const inbox = path.join(dataDir, 'inbox');
   const directory = path.join(inbox, meta.submissionId);
