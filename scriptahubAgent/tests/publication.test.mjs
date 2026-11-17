@@ -341,6 +341,8 @@ test('a successful push remains completed when a stop request arrives before rec
   const complete = f.publisher.complete.bind(f.publisher);
   f.publisher.complete = (...args) => {
     f.store.cancel({id:'user:owner'},f.submitted.task.id);
+    f.service.reconcileStops(message=>assert.fail(message));
+    assert.equal(f.service.status(agent,{executionId:f.task.executionId}).state,'stop_requested');
     return complete(...args);
   };
   assert.equal((await f.publisher.publish(agent,{executionId:f.task.executionId},f.config)).state,'completed');

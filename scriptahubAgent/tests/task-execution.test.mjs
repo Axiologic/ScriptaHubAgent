@@ -7,7 +7,7 @@ import crypto from 'node:crypto';
 import { promisify } from 'node:util';
 import { execFile } from 'node:child_process';
 import { DashboardStore } from '../dashboard-store.mjs';
-import { TaskExecution, requireExecutor, executionTools } from '../task-execution.mjs';
+import { TaskExecution, requireExecutor, executionTools, startStopWorker } from '../task-execution.mjs';
 import { sealRecord } from '../record-integrity.mjs';
 
 process.env.SCRIPTA_RECORD_KEY = 'test-task-execution-key-0123456789abcdef0123456789';
@@ -127,6 +127,71 @@ test('only real terminal states are recorded and failures retain useful result d
   assert.throws(() => service.finish(agent,{executionId,state:'completed',result:'published'}), /another result/);
   await submit(); const next = service.claim(agent,{runId:'finish-two'}).task;
   assert.throws(() => service.finish(agent,{executionId:next.executionId,state:'completed',result:'Published commit 123'}), /Only ScriptaHub/);
+});
+
+test('the cancellation worker recovers an orphaned stop on startup and handles later stops once', async t => {
+  const {root,service,store,submit} = await fixture(t);
+  const first = await submit(), second = await submit();
+  const task = service.claim(agent,{runId:'orphaned'}).task;
+  store.cancel(user('owner'),first.receipt.task.id);
+  const reopened = new DashboardStore(root);
+  t.after(()=>reopened.close());
+  t.mock.timers.enable({apis:['setInterval']});
+  const recovered = new TaskExecution(reopened,root);
+  const stop = startStopWorker(recovered);
+  t.after(stop);
+  assert.equal(service.status(agent,{executionId:task.executionId}).state,'cancelled');
+  assert.ok(service.execution(agent,task.executionId).finished_at);
+  await assert.rejects(service.document(agent,{executionId:task.executionId,index:0}),/not running/);
+  const next = service.claim(agent,{runId:'unaffected'}).task;
+  assert.equal(next.taskId,second.receipt.task.id);
+  t.mock.timers.tick(3000);
+  assert.equal(service.status(agent,{executionId:next.executionId}).state,'running');
+  store.cancel(user('owner'),next.taskId);
+  t.mock.timers.tick(3000);
+  assert.equal(service.status(agent,{executionId:next.executionId}).state,'cancelled');
+  t.mock.timers.tick(6000);
+  assert.equal(store.db.prepare("SELECT COUNT(*) AS n FROM events WHERE action='task.cancelled'").get().n,2);
+  stop();
+});
+
+test('automatic cancellation waits for every active processing state and preserves diagnostics', async t => {
+  const {service,store,submit}=await fixture(t);
+  const input=await submit(),task=service.claim(agent,{runId:'processing-stop'}).task;
+  const time=new Date().toISOString();
+  store.db.prepare(`INSERT INTO task_processing_jobs(execution_id,job_id,executor_agent_id,request,digest,state,runtime_id,created_at,updated_at)
+    VALUES(?,?,?,?,?,'uploading',?,?,?)`).run(task.executionId,'job',agent,'{}','digest','runtime',time,time);
+  store.cancel(user('owner'),input.receipt.task.id);
+  for(const state of ['uploading','starting','running','stopping']) {
+    store.db.prepare('UPDATE task_processing_jobs SET state=?').run(state);
+    service.reconcileStops(message=>assert.fail(message));
+    assert.equal(service.status(agent,{executionId:task.executionId}).state,'stop_requested');
+    assert.equal(service.execution(agent,task.executionId).finished_at,null);
+  }
+  store.db.prepare("UPDATE task_processing_jobs SET state='interrupted',reason='Supervisor restarted',diagnostics_complete=0").run();
+  service.reconcileStops(message=>assert.fail(message));
+  assert.equal(service.status(agent,{executionId:task.executionId}).state,'cancelled');
+  assert.equal(store.db.prepare('SELECT reason FROM task_processing_jobs').get().reason,'Supervisor restarted');
+});
+
+test('automatic cancellation preserves publication leases, queued pushes and uncertain receipts', async t => {
+  const {service,store,submit}=await fixture(t);
+  const input=await submit(),task=service.claim(agent,{runId:'publication-stop'}).task;
+  store.db.prepare('INSERT INTO task_publications(execution_id,manifest,digest) VALUES(?,?,?)').run(task.executionId,'{}','digest');
+  store.cancel(user('owner'),input.receipt.task.id);
+  for(const fields of [
+    {lease_until:Date.now()+60000}, {retry_at:Date.now()},
+    {commit_id:'a'.repeat(40),push_state:'pushing'},
+    {commit_id:'a'.repeat(40),push_state:null}, {receipt:'{}'},
+  ]) {
+    store.db.prepare('UPDATE task_publications SET lease_until=0,retry_at=NULL,commit_id=NULL,push_state=NULL,receipt=NULL').run();
+    for(const [key,value] of Object.entries(fields)) store.db.prepare(`UPDATE task_publications SET ${key}=?`).run(value);
+    service.reconcileStops(message=>assert.fail(message));
+    assert.equal(service.status(agent,{executionId:task.executionId}).state,'stop_requested');
+  }
+  store.db.prepare('UPDATE task_publications SET receipt=NULL').run();
+  service.reconcileStops(message=>assert.fail(message));
+  assert.equal(service.status(agent,{executionId:task.executionId}).state,'cancelled');
 });
 
 test('claims always deliver ten-minute summaries regardless of task or stored configuration', async t => {

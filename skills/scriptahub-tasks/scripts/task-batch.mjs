@@ -16,12 +16,42 @@ async function directory(root,relative) {
     if (!(await fs.lstat(current)).isDirectory()) throw new Error('Batch directories must not be symlinks');
   }
 }
-async function readState(filename) {
+async function readState(filename, limit = 4096) {
   const handle = await fs.open(filename,constants.O_RDONLY | constants.O_NOFOLLOW);
   try {
-    if ((await handle.stat()).size > 4096) throw new Error('Invalid batch state');
+    const stat = await handle.stat();
+    if (!stat.isFile() || stat.size > limit) throw new Error('Invalid batch state');
     return JSON.parse(await handle.readFile('utf8'));
   } finally { await handle.close(); }
+}
+
+async function ensureHandoff(root, result, fresh) {
+  const {task,taskDirectory,claimedPath,handoffPath,processingSettings} = result;
+  const keys = ['executionId','runId','taskId','bookId'];
+  if (keys.some(key=>!identifier(task[key]))) throw new Error('Invalid claimed task identity');
+  const read = async () => {
+    const saved = await readState(path.join(root,handoffPath),32768);
+    if (keys.some(key=>saved.context?.[key]!==task[key])) throw new Error('Handoff belongs to another execution');
+  };
+  try { await read(); return; }
+  catch (error) { if (error.code !== 'ENOENT') throw error; }
+  // Missing context is bootstrapped only for a new claim in a pristine item directory.
+  // A resumed execution may already have pinned sources or results: never reconstruct it.
+  if (!fresh) throw new Error('Existing execution is missing its durable handoff; restore it before resuming');
+  const entries = await fs.readdir(path.join(root,taskDirectory));
+  const stateEntries = await fs.readdir(path.join(root,taskDirectory,'run-state'));
+  if (entries.some(name=>name!=='run-state') || stateEntries.length) throw new Error('Cannot initialize a handoff over existing task artifacts');
+  const context = Object.fromEntries(keys.map(key=>[key,task[key]]));
+  Object.assign(context,{task,taskDirectory,claimedPath,processingSettings,
+    repositories:task.repositories || [],serviceState:task.state});
+  if (Buffer.byteLength(JSON.stringify(context))>24000) throw new Error('Initial handoff exceeds 24 KB');
+  const temporary = path.join(root,handoffPath)+'.'+crypto.randomUUID()+'.tmp';
+  try {
+    await fs.writeFile(temporary,JSON.stringify({step:'select-task',context,updatedAt:new Date().toISOString()})+'\n',{flag:'wx',mode:0o600});
+    // Publish a complete file without replacing a handoff created concurrently.
+    await fs.link(temporary,path.join(root,handoffPath)).catch(error=>{if(error.code!=='EEXIST')throw error;});
+    await read();
+  } finally { await fs.rm(temporary,{force:true}); }
 }
 
 // The flow owns traversal. This helper only persists its batch identity and calls
@@ -83,9 +113,13 @@ export async function runBatchOperation(call,operation,input,{root=process.cwd()
     await directory(root,taskDirectory);
     const claimed = await call('scriptahub_task_claim',{...state,taskId:item.taskId,runId});
     if (!claimed.task) throw new Error('Reserved task could not be claimed');
+    if (claimed.task.taskId!==item.taskId || claimed.task.runId!==runId
+      || item.executionId && claimed.task.executionId!==item.executionId) throw new Error('Claimed execution does not match the reserved item');
     await directory(root,taskDirectory+'/run-state');
     const claimedPath = taskDirectory+'/run-state/claimed.json';
-    const result = {...claimed,batchId:state.batchId,taskDirectory,claimedPath};
+    const handoffPath = taskDirectory+'/run-state/handoff.json';
+    const result = {...claimed,batchId:state.batchId,taskDirectory,claimedPath,handoffPath};
+    await ensureHandoff(root,result,item.state==='queued' && !item.executionId);
     const temporary = path.join(root,claimedPath)+'.'+crypto.randomUUID()+'.tmp';
     try {
       await fs.writeFile(temporary,JSON.stringify(result)+'\n',{flag:'wx',mode:0o600});

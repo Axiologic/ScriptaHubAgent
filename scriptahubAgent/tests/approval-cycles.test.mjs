@@ -104,6 +104,47 @@ test('a paid edition waits for debit, survives a lost confirmation and blocks re
   assert.equal(executorApi.claim(executor,{runId:'paid-retry',taskType:'edit'}).task.taskId,retry.taskId);
 });
 
+test('an automatically cancelled paid edition refunds once, queues notification and blocks retry until restoration', async t => {
+  const {store,executorApi}=await fixture(t);
+  const request=store.submitEdition(admin,'bk-source',crypto.randomUUID(),8);
+  const operations=new Set(),notices=[];
+  let balance=10,refundUnavailable=true,mailUnavailable=true;
+  const options={report:()=>{},apply:async(row,operation,amount)=>{
+    if(operation==='refund' && refundUnavailable) throw Error('Refund unavailable');
+    const key=`${row.id}:${row.attempt}:${operation}`;
+    if(!operations.has(key)) {operations.add(key);balance+=operation==='debit'?-amount:amount;}
+    return {};
+  },send:async notice=>{
+    if(mailUnavailable) throw Error('Email unavailable');
+    notices.push(notice);return {providerMessageId:'sent'};
+  }};
+  await advanceCycles(store,options);
+  const task=executorApi.claim(executor,{runId:'orphaned-paid-edition',taskType:'edit'}).task;
+  store.cancel(admin,task.taskId);
+  executorApi.reconcileStops(message=>assert.fail(message));
+  assert.equal(executorApi.status(executor,{executionId:task.executionId}).state,'cancelled');
+  const retry=()=>store.transaction(()=>store.cycles.retry(admin,request.id,1));
+  await advanceCycles(store,options);
+  await advanceCycles(store,options);
+  assert.equal(balance,2);
+  assert.equal(store.cycles.read(request.id).phase,'restoring');
+  assert.throws(retry,/once the previous attempt/);
+  refundUnavailable=false;
+  await advanceCycles(store,options);
+  assert.equal(balance,10);
+  const restored=store.cycles.read(request.id);
+  assert.equal(restored.phase,'retryable');
+  assert.ok(store.db.prepare('SELECT 1 FROM cycle_notifications WHERE id=? AND sent_at IS NULL').get(restored.notification_id));
+  mailUnavailable=false;
+  executorApi.reconcileStops(message=>assert.fail(message));
+  await advanceCycles(store,options);
+  await advanceCycles(store,options);
+  assert.equal(balance,10);
+  assert.equal(notices.length,1);
+  assert.equal(operations.size,2,'one debit and one refund, without a reward');
+  assert.notEqual(retry().taskId,task.taskId);
+});
+
 test('a derived book retains its verified source and stays unavailable with insufficient points', async t => {
   const {store,executorApi} = await fixture(t);
   const root = executorApi.dataDir;

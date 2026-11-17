@@ -15,7 +15,7 @@ import { startCycleWorker } from './cycle-worker.mjs';
 import { defaultPoints, loadPointsPolicy } from './points-policy.mjs';
 import { DashboardStore } from './dashboard-store.mjs';
 import { handleDashboard } from './dashboard-http.mjs';
-import { TaskExecution } from './task-execution.mjs';
+import { TaskExecution, startStopWorker } from './task-execution.mjs';
 import { TaskPublication } from './task-publication.mjs';
 
 const port = Number(process.env.SCRIPTA_PORT || 3002);
@@ -263,6 +263,7 @@ export async function main({ onShutdown = async () => {} } = {}) {
   const stopNotifications = startNotificationWorker({ dataDir });
   const stopCycles = startCycleWorker(server.getDashboardStore,()=>loadPointsPolicy(dataDir));
   const publisher = new TaskPublication(new TaskExecution(server.getDashboardStore(),dataDir));
+  const stopCancellations = startStopWorker(publisher.service);
   const publicationConfig = () => loadSourceConfig({configPath,dataDir,includePublication:true});
   let publishing;
   const resumePublication = () => {
@@ -284,6 +285,7 @@ export async function main({ onShutdown = async () => {} } = {}) {
     clearInterval(timer);
     stopNotifications();
     clearInterval(publicationTimer);
+    stopCancellations();
     settingsWatcher?.close();
     settingsServer?.kill('SIGTERM');
     try { await Promise.all([stopCycles(),publishing]); await onShutdown(); } catch { code = 1; console.error('Processing supervisor drain failed'); }

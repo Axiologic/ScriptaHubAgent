@@ -92,7 +92,17 @@ test('the flow helper drains its fixed batch sequentially, preserving claims, ev
   const first=await run('batch-next');
   assert.equal(first.task.taskId,batch.taskIds[0]);
   assert.equal(first.taskDirectory,'tasks/'+first.task.taskId);
+  const initialHandoff=JSON.parse(await fs.readFile(path.join(f.root,first.handoffPath),'utf8'));
+  assert.equal(initialHandoff.step,'select-task');
+  for(const key of ['executionId','runId','taskId','bookId']) assert.equal(initialHandoff.context[key],first.task[key]);
+  assert.deepEqual(initialHandoff.context.task,JSON.parse(JSON.stringify(first.task)));
+  assert.equal(initialHandoff.context.claimedPath,first.claimedPath);
+  const acceptedHandoff=JSON.stringify({...initialHandoff,step:'process-content',context:{...initialHandoff.context,
+    editorialSource:{path:first.taskDirectory+'/sources/book.html',sha256:'a'.repeat(64),language:'ro'},
+    editorialResults:{summary:{path:first.taskDirectory+'/editorial/summary.html',sha256:'b'.repeat(64)}}}})+'\n';
+  await fs.writeFile(path.join(f.root,first.handoffPath),acceptedHandoff);
   assert.deepEqual(await run('batch-next'),first,'a lost response or repeated selection must recover the same execution');
+  assert.equal(await fs.readFile(path.join(f.root,first.handoffPath),'utf8'),acceptedHandoff,'dispatch must preserve pinned sources and accepted results byte for byte');
   assert.throws(()=>f.service.claim(executor,{batchId:batch.batchId,runId:'out-of-order',taskType:'add-book',taskId:batch.taskIds[1]}),/preceding task/);
   await fs.writeFile(path.join(f.root,first.taskDirectory,'evidence.txt'),'original evidence');
   f.store.db.prepare('INSERT INTO task_publications(execution_id,manifest,digest,retry_at) VALUES(?,?,?,?)').run(first.task.executionId,'{}','digest',0);
@@ -112,6 +122,42 @@ test('the flow helper drains its fixed batch sequentially, preserving claims, ev
   assert.equal((await run('batch-next')).closed,true);
   assert.equal((await run('batch-next')).task,null);
   assert.deepEqual(f.service.snapshot(executor,{batchId:'later-run',taskType:'manuscript'}).taskIds,[later.task.id]);
+});
+
+test('a resumed execution cannot reconstruct a missing or mismatched handoff or overwrite its evidence',async t=>{
+  const {runBatchOperation}=await import('../../skills/scriptahub-tasks/scripts/task-batch.mjs');
+  const f=await fixture(t);f.add();
+  const methods={scriptahub_task_batch_snapshot:'snapshot',scriptahub_task_claim:'claim'};
+  const run=(op,input={})=>runBatchOperation(async(tool,args)=>f.service[methods[tool]](executor,args),op,input,{root:f.root});
+  await run('batch-start',{taskType:'add-book'});
+  const first=await run('batch-next'),filename=path.join(f.root,first.handoffPath);
+  const original=await fs.readFile(filename,'utf8'),claim=await fs.readFile(path.join(f.root,first.claimedPath),'utf8');
+  const evidence=path.join(f.root,first.taskDirectory,'accepted-result.html');await fs.writeFile(evidence,'accepted book');
+  await fs.unlink(filename);
+  await assert.rejects(run('batch-next'),/missing its durable handoff/);
+  await assert.rejects(fs.stat(filename),{code:'ENOENT'});
+  const wrong=JSON.parse(original);wrong.context.executionId='another-execution';
+  await fs.writeFile(filename,JSON.stringify(wrong));
+  await assert.rejects(run('batch-next'),/another execution/);
+  assert.equal(await fs.readFile(filename,'utf8'),JSON.stringify(wrong));
+  await fs.unlink(filename);await fs.symlink(evidence,filename);
+  await assert.rejects(run('batch-next'),{code:'ELOOP'});
+  assert.equal(await fs.readFile(evidence,'utf8'),'accepted book');
+  assert.equal(await fs.readFile(path.join(f.root,first.claimedPath),'utf8'),claim);
+  assert.equal(f.store.db.prepare("SELECT COUNT(*) AS n FROM events WHERE action='task.started'").get().n,1);
+});
+
+test('new handoffs cannot silently initialize over existing book artifacts',async t=>{
+  const {runBatchOperation}=await import('../../skills/scriptahub-tasks/scripts/task-batch.mjs');
+  const f=await fixture(t),submission=f.add();
+  const directory=path.join(f.root,'tasks',submission.task.id);
+  await fs.mkdir(directory,{recursive:true});await fs.writeFile(path.join(directory,'book.html'),'retained book');
+  const methods={scriptahub_task_batch_snapshot:'snapshot',scriptahub_task_claim:'claim'};
+  const run=(op,input={})=>runBatchOperation(async(tool,args)=>f.service[methods[tool]](executor,args),op,input,{root:f.root});
+  await run('batch-start',{taskType:'add-book'});
+  await assert.rejects(run('batch-next'),/existing task artifacts/);
+  assert.equal(await fs.readFile(path.join(directory,'book.html'),'utf8'),'retained book');
+  await assert.rejects(fs.stat(path.join(directory,'run-state/handoff.json')),{code:'ENOENT'});
 });
 
 test('flow batch setup is retry safe and rejects changed task types and symlinked state',async t=>{

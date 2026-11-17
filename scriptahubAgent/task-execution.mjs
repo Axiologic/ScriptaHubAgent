@@ -277,4 +277,30 @@ export class TaskExecution {
       return this.status(executor, { executionId });
     });
   }
+  reconcileStops(report = console.error) {
+    const pending = this.store.db.prepare(`SELECT e.id,e.executor_agent_id FROM task_executions e
+      JOIN tasks t ON t.id=e.task_id WHERE t.state='stop_requested' AND e.finished_at IS NULL`).all();
+    for (const row of pending) {
+      try {
+        // The stop state fences new processing, document delivery and publication admission.
+        // finish checks active jobs and publication ownership atomically; an uncertain push
+        // must still be reconciled by TaskPublication, never turned into a cancellation here.
+        this.finish(row.executor_agent_id, {executionId:row.id,state:'cancelled',
+          result:'Cancellation confirmed. Processing has stopped and no publication is pending.'});
+      } catch (error) {
+        if (error.status !== 409) report(`ScriptaHub cancellation ${row.id}: ${error.message}`);
+      }
+    }
+  }
+}
+
+export function startStopWorker(service) {
+  const tick = () => {
+    try { service.reconcileStops(); }
+    catch (error) { console.error(`ScriptaHub cancellation worker: ${error.message}`); }
+  };
+  const timer = setInterval(tick, 3000);
+  timer.unref();
+  tick();
+  return () => clearInterval(timer);
 }
