@@ -1,0 +1,95 @@
+{
+  "schemaVersion": 2,
+  "name": "ScriptaHub – Add books",
+  "description": "Process a fixed batch of book requests through isolated Create book subflows; record failures separately and continue with the remaining books.",
+  "entryTaskId": "select-task",
+  "tasks": [
+    {
+      "id": "select-task",
+      "name": "Select the next book request",
+      "creator": true,
+      "executionType": "terminal",
+      "effort": "low",
+      "skillsets": [
+        "ScriptaHubAgent/scriptahub-tasks"
+      ],
+      "prompt": "This is the parent batch dispatcher, not a book-generation phase. Use the installed scriptahub-tasks helper locally from the flow root. Run batch-start with {\"taskType\":\"add-book\"}; it durably reserves the fixed current snapshot of manuscripts, proposals and funded forks. Later arrivals wait for another batch. On first entry run preflight with {}; repeat only if its validity expires. If preflight fails before claim, use batch-close and take batch-to-result with the actual error.\n\nThe creator explicitly uses continueOnChildFailure=true: a failed or terminated child returns to reconcile-task with its actual outcome; it does not fail the entire batch. Manual parent/child pauses remain operator pauses. Before selecting another item, the preceding item must be either confirmed terminal or durably recorded through batch-defer. Never release an active/uncertain execution or claim it again. Do not turn uncertain publication into a terminal failure. A deferred item is skipped by batch-next without blocking other books and remains reserved for separate recovery.\n\nRun batch-next with {}. The helper settles terminal reservations, claims only the earliest remaining reserved task and persists its context at claimedPath. Never create another runId, call ordinary claim, read private storage, generate book/editorial content or publish here. If task is null, the batch is exhausted and closed: take batch-to-result, with no workflow blocks.\n\nIf an item is returned (including publicationPending=true), select EXACTLY ONE existing workflow type create-book through the native Run workflows node. Pass a self-contained child prompt containing the same taskDirectory, claimedPath when present, executionId and <taskDirectory>/run-state/handoff.json, plus publicationPending when supplied. The child uses this same working directory and existing files. For a pending publication the original claimed.json remains under taskDirectory/run-state; do not replace it or prepare the book again. Never include manuscript text, full reports or credentials in the child prompt. Do not launch workflows via shell/API or delegate a whole batch. Only the child processes this one request.\n\nReturn the runtime's human report followed by these technical fields for an item:\n# nextEdgeId\nbatch-to-book\n# nextNodePrompt\nCompact item identity and durable file references.\n# afterWorkflowsEdgeId\nbook-to-reconcile\n# workflow\ncreate-book\n# prompt\nSelf-contained single-item identity, context paths and actual pending-publication flag. Tell the child to resume matching existing results without regeneration.\n\nFor an exhausted batch or pre-claim failure return nextEdgeId=batch-to-result and the actual batch outcome only. No # workflow or afterWorkflowsEdgeId is needed for that direct edge.",
+      "continueOnChildFailure": true
+    },
+    {
+      "id": "run-workflows",
+      "name": "Create the selected book",
+      "kind": "run-workflows",
+      "skillsets": []
+    },
+    {
+      "id": "reconcile-task",
+      "name": "Confirm the book request result",
+      "executionType": "terminal",
+      "effort": "low",
+      "skillsets": [
+        "ScriptaHubAgent/scriptahub-tasks"
+      ],
+      "prompt": "Handle the single preceding create-book child outcome, including a graph-level failure or termination before any child result existed. Read the most recent creator handoff for taskDirectory/executionId and that item's existing claimed.json/handoff.json. Read only the child state/error and current request evidence, never another book's files. Use scriptahub-tasks status once.\n\nIf the service confirms completed, failed or cancelled, retain its actual outcome and take item-to-next. A successful child graph alone is not proof of publication: require the service receipt. If the child failed/terminated while the service still shows running and publicationPending is false, attempt finish state=failed with the child's actual error and retained artifact paths; a stopped task may be acknowledged with finish state=cancelled. Do not fabricate a success or alter output bytes. Finish may refuse while a remote processing job or publication is active: preserve that error as evidence, never weaken its guard.\n\nIf publicationPending=true, a remote job is still active, finish cannot safely finalize the item, or the child ended without resolving its running state, use batch-defer with {taskId,executionId,reason:<actual concise cause>} from the parent flow root. This durably skips only this identified item for the current batch and keeps its execution and reservation intact. Never release its processing artifacts, overwrite its package, call claim again or start a duplicate child. Do not poll indefinitely or block unrelated books. After batch-defer succeeds take item-to-next with deferred=true and the exact task identity/reason. The next batch-next call processes other reserved items and closes traversal with active deferred items still reserved. Later batches may process new arrivals without stealing these executions.\n\nAn unavailable batch/status service is a shared infrastructure failure, not proof of one task's failure: report that exact blocker without pretending the item was settled or deferred. Return nextNodePrompt with taskDirectory, taskId, executionId, actual outcome (terminal or deferred) and evidence paths. Use nextEdgeId=item-to-next only after terminal confirmation or successful durable deferral."
+    },
+    {
+      "id": "batch-result",
+      "name": "Summarize publication results",
+      "executionType": "terminal",
+      "effort": "low",
+      "skillsets": [
+        "ScriptaHubAgent/scriptahub-tasks"
+      ],
+      "prompt": "Read the durable batch through scriptahub-tasks batch-status with {}; this returns the original snapshot without reserving anything, never new arrivals. Report actual completed, failed, cancelled and unprocessed counts and the relative artifact directories. Report deferred items separately with their actual reasons and retained execution IDs. They are neither published nor successful. If traversal is not closed and all remaining active items were explicitly deferred, use batch-close with {retainActive:true}; this releases only unstarted/terminal reservations and preserves active deferred reservations. Never call ordinary batch-close while active work exists. Never overwrite an uncertain publication or claim more work. Report any preflight or service failure precisely. This is the end of the batch; do not loop or start another flow.\n\nCurrent-book scope: sources, baseline, review and validation contain only the current book (plus the explicitly pinned source edition for a fork). Never clone/download other books into this task. Read collection.json only to select the destination and preserve its entries, and fetch only this book’s metadata and referenced resources. Stage publication as a sparse package with the current book and exactly referenced shared assets; preserve other catalogue entries verbatim without fetching their content. Skill arguments must address the specific book directory, never package/, books/ or a repository root. For package inputs the helper binds one book directory to the claimed book and includes only that directory and its referenced local assets. Do not expand a package by copying unrelated catalogue resources. Existing-book revisions may include baseline/candidate versions of that same book, never other books."
+    }
+  ],
+  "edges": [
+    {
+      "id": "batch-to-book",
+      "sourceTaskId": "select-task",
+      "targetTaskId": "run-workflows",
+      "sourcePort": "right",
+      "targetPort": "left"
+    },
+    {
+      "id": "book-to-reconcile",
+      "sourceTaskId": "run-workflows",
+      "targetTaskId": "reconcile-task",
+      "sourcePort": "right",
+      "targetPort": "left"
+    },
+    {
+      "id": "item-to-next",
+      "sourceTaskId": "reconcile-task",
+      "targetTaskId": "select-task",
+      "sourcePort": "right",
+      "targetPort": "left"
+    },
+    {
+      "id": "batch-to-result",
+      "sourceTaskId": "select-task",
+      "targetTaskId": "batch-result",
+      "sourcePort": "right",
+      "targetPort": "left"
+    }
+  ],
+  "layout": {
+    "select-task": {
+      "x": 0,
+      "y": 0
+    },
+    "run-workflows": {
+      "x": 320,
+      "y": 0
+    },
+    "reconcile-task": {
+      "x": 640,
+      "y": 0
+    },
+    "batch-result": {
+      "x": 0,
+      "y": 260
+    }
+  },
+  "defaultObjective": "Process the fixed batch of waiting book requests through isolated create-book subflows; retain each actual outcome, skip durably deferred items and continue other books, then report successes, failures and deferred recoveries separately."
+}

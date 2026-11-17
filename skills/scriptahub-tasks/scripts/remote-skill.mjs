@@ -213,6 +213,38 @@ export async function releaseIncompleteRemote(input,call,{root=process.cwd()}={}
   return await releaseJournal(call,executionId,journal,journalPath);
   } finally {await evidence?.jobDir.close();await lock?.close();await control?.close();await taskRoot?.close();await base.close();}
 }
+// Stop only the current translation job, retain verified diagnostics and release without merging partial output.
+export async function discardTranslationJob(input,call,{root=process.cwd(),pollMs=250,waitMs=30000}={}) {
+  const {executionId,taskDirectory}=input;
+  if(!id(executionId)||!/^tasks\/[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$/.test(taskDirectory||''))throw Error('Invalid translation cleanup identity');
+  const base=await openRoot(await fs.realpath(root));let taskRoot,control,lock,evidence;
+  try {
+    lock=await executionLock(base,executionId);taskRoot=await openDir(base,taskDirectory);
+    try {control=await openDir(taskRoot,'run-state/remote-processing');} catch(error){if(error.code==='ENOENT')return {discarded:false};throw error;}
+    let journal;try {journal=await readJson(control,'pending.json');} catch(error){if(error.code==='ENOENT')return {discarded:false};throw error;}
+    if(journal.command?.executionId!==executionId||journal.command?.taskDirectory!==taskDirectory||journal.command?.skill!=='translate-html'||!id(journal.jobId))throw Error('Cleanup is restricted to this execution’s pending translate-html job');
+    const journalPath=at(control,'pending.json');
+    if(journal.phase==='merging')throw Error('Reconcile the pending merge before translation cleanup');
+    if(journal.phase==='release_pending')return {discarded:true,originalExitCode:await releaseJournal(call,executionId,journal,journalPath)};
+    let status=await call('scriptahub_skill_job_status',{executionId,jobId:journal.jobId});
+    if(!terminalStates.includes(status.state))status=await call('scriptahub_skill_job_cancel',{executionId,jobId:journal.jobId});
+    const deadline=Date.now()+waitMs;
+    while(!terminalStates.includes(status.state)) {
+      if(Date.now()>=deadline)throw Error('Translation cancellation is not yet confirmed; retain its pending journal');
+      await new Promise(resolve=>setTimeout(resolve,pollMs));status=await call('scriptahub_skill_job_status',{executionId,jobId:journal.jobId});
+    }
+    if(!/^[a-f0-9]{64}$/.test(status.resultDigest||'')||typeof status.diagnosticsComplete!=='boolean')throw Error('Invalid terminal translation cleanup receipt');
+    if(status.artifactsReleased===true){
+      await atomic(control,journal.jobId+'.discarded.json',{executionId,jobId:journal.jobId,state:status.state,resultDigest:status.resultDigest,artifactsReleased:true});
+      await fs.unlink(journalPath);return {discarded:true};
+    }
+    evidence=await retainEvidence(call,executionId,journal.jobId,status,control,{incomplete:!status.diagnosticsComplete});
+    journal.phase='release_pending';journal.release={resultDigest:status.resultDigest,exitCode:evidence.exitCode,incomplete:!status.diagnosticsComplete,evidence:{directory:journal.jobId,receipt:'result.json',stdout:'stdout',stderr:'stderr'}};
+    await atomic(control,'pending.json',journal);
+    const originalExitCode=await releaseJournal(call,executionId,journal,journalPath);
+    return {discarded:true,originalExitCode};
+  } finally {await evidence?.jobDir.close();await lock?.close();await control?.close();await taskRoot?.close();await base.close();}
+}
 export async function runRemoteSkill(input,call,{root=process.cwd(),sourceRoot=path.resolve(path.dirname(fileURLToPath(import.meta.url)),'../..'),stdout=process.stdout,stderr=process.stderr,pollMs=1000,hook=async()=>{}}={}) {
   const {executionId,taskDirectory,skill,args=[],input:stdin=''}=input;
   if(!id(executionId)||!/^tasks\/[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$/.test(taskDirectory||'')||!/^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(skill||'')||!Array.isArray(args)||args.length>256||args.some(a=>typeof a!=='string'||a.includes('\0'))||Buffer.byteLength(JSON.stringify(args))>60000||typeof stdin!=='string'||Buffer.byteLength(stdin)>65536) throw new Error('Invalid remote skill command');

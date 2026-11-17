@@ -1,3 +1,4 @@
+import {taskTranslationWarning} from './translation-outcome.mjs';
 import { callAgent } from './identity.mjs';
 
 const day = 24 * 60 * 60 * 1000;
@@ -54,7 +55,9 @@ export async function advanceCycles(store, { apply = points, send = sendEmail, r
         });
       } else if (row.task_state === 'completed') {
         store.transaction(() => {
-          if (!row.reward) cycles.notify(row,'Book processing complete','Your book request has completed.');
+          const warning=taskTranslationWarning(store,row.task_id);
+          if (warning) cycles.notify(row,'Book published with incomplete translations',warning);
+          else if (!row.reward) cycles.notify(row,'Book processing complete','Your book request has completed.');
           transition(row.reward ? 'rewarding' : 'completed');
         });
       } else transition('restoring');

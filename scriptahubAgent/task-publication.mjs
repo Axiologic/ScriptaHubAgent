@@ -1,3 +1,4 @@
+import {translationOutcomeMessage} from './translation-outcome.mjs';
 import fs from 'node:fs/promises';
 import path from 'node:path';
 import crypto from 'node:crypto';
@@ -330,7 +331,8 @@ export class TaskPublication extends PublicationTransfer {
   complete(executor, executionId, receipt) {
     const status = this.service.status(executor,{executionId});
     if (status.state === 'completed') return { ...status, publication: receipt };
-    const result = `Published ${receipt.bookId} to ${receipt.repository} (${receipt.branch}), commit ${receipt.commit}.`;
+    const warning=translationOutcomeMessage(JSON.parse(this.row(executionId).manifest).validation?.translationOutcome);
+    const result = `Published ${receipt.bookId} to ${receipt.repository} (${receipt.branch}), commit ${receipt.commit}.` + (warning ? ` ${warning}` : '');
     return { ...this.service.finish(executor,{executionId,state:'completed',result}, { publication: true }), publication: receipt };
   }
 

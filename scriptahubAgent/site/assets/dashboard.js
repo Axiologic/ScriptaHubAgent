@@ -8,7 +8,8 @@ const t = (key, values) => dashboardText(document.documentElement.lang, key, val
 const content = document.querySelector('#dashboard-content');
 let data, view = 'books', mutation = false, initialViewApplied = false;
 let publishedBooks = globalThis.SCRIPTA_COLLECTION?.books || [];
-const expandedChangeBooks = new Set();
+const disclosureStates = new Map();
+let refreshing = false;
 const editionSubmissionIds = new Map();
 const states = { open: 'Awaiting review', accepted: 'Accepted', rejected: 'Rejected', queued: 'Queued', cancelled: 'Cancelled', running: 'Running', stop_requested: 'Stop requested', completed: 'Completed', failed: 'Failed' };
 
@@ -29,7 +30,16 @@ function reviewButton(decision, action) {
   path.setAttribute('d',decision === 'accept' ? 'M7 10H3v11h4zM7 10l5-7a2 2 0 0 1 2 2v4h5a2 2 0 0 1 2 2l-1 8a2 2 0 0 1-2 2H7z' : 'M7 14H3V3h4zM7 14l5 7a2 2 0 0 0 2-2v-4h5a2 2 0 0 0 2-2l-1-8a2 2 0 0 0-2-2H7z');icon.append(path);node.append(icon);
   node.addEventListener('click',action);return node;
 }
-function detail(label) { const node = element('details'); node.append(element('summary', t(label))); return node; }
+function disclosure(key, className) {
+  const node = element('details', undefined, className);
+  node.dataset.disclosureKey = key;
+  node.open = disclosureStates.get(key) === true;
+  node.addEventListener('toggle', () => {
+    if (node.isConnected) disclosureStates.set(key, node.open);
+  });
+  return node;
+}
+function detail(label, key) { const node = disclosure(key); node.append(element('summary', t(label))); return node; }
 function date(value) { return new Date(value).toLocaleString(document.documentElement.lang); }
 async function api(endpoint = '', body) {
   const response = await fetch(new URL(`api/dashboard${endpoint}`, root), { credentials: 'same-origin', cache: 'no-store',
@@ -37,12 +47,13 @@ async function api(endpoint = '', body) {
   if (response.status === 401) throw Error(t('Your session expired. Sign in again to continue.'));
   const result = await response.json(); if (!response.ok) throw Error(t(result.error || 'Request failed')); return result;
 }
-async function load() {
-  const [overview, catalogue] = await Promise.all([
-    api(),
-    fetch(new URL('collection.json', root), {cache:'no-store'})
-      .then(response => response.ok ? response.json() : null).catch(() => null),
-  ]);
+async function load({ background = false } = {}) {
+  const overview = await api();
+  const changed = JSON.stringify(overview) !== JSON.stringify(data);
+  // Stable polling responses must not replace disclosures or in-progress review controls.
+  if (background && !changed) return;
+  const catalogue = await fetch(new URL('collection.json', root), {cache:'no-store'})
+    .then(response => response.ok ? response.json() : null).catch(() => null);
   data = overview;
   if (Array.isArray(catalogue?.books)) publishedBooks = catalogue.books;
   render();
@@ -53,11 +64,13 @@ async function load() {
     if (tab) selectView(tab);
   }
 }
-async function refresh() {
+async function refresh({ background = false } = {}) {
+  if (refreshing || mutation) return;
+  refreshing = true;
   const control = document.querySelector('#refresh'); control.disabled = true;
-  content.setAttribute('aria-busy', 'true');
-  try { await load();if(view==='points')await dashboardSections.get('points')?.controller?.refresh(); } catch (error) { showToast(error.message, 'error'); }
-  finally { control.disabled = false; content.setAttribute('aria-busy', 'false'); }
+  if (!background) content.setAttribute('aria-busy', 'true');
+  try { await load({background});if(!background && view==='points')await dashboardSections.get('points')?.controller?.refresh(); } catch (error) { if (!background) showToast(error.message, 'error'); }
+  finally { refreshing = false; control.disabled = false; if (!background) content.setAttribute('aria-busy', 'false'); }
 }
 async function mutate(endpoint, body) {
   if (mutation) return false; mutation = true;
@@ -116,7 +129,7 @@ function bookCard(book) {
   actions.append(button('Suggest a change', () => suggest(book)));
   node.querySelector('.dashboard-card-header').append(actions);
   if (owner) {
-    const access = detail('Collaborators');
+    const access = detail('Collaborators', `book:${book.id}:collaborators`);
     access.append(element('p', t('Collaborators can see the workspace and propose changes. You and workspace administrators can review changes. You manage collaborators.'), 'dashboard-meta'));
     for (const person of data.collaborators.filter(item => item.book_id === book.id)) {
       const row = element('div', undefined, 'dashboard-collaborator');
@@ -168,7 +181,7 @@ function changeCard(change) {
     }
   }
   if (statuses.childElementCount) node.querySelector('.dashboard-card-header').append(statuses);
-  const information = detail('View proposed changes and documents');
+  const information = detail('View proposed changes and documents', `change:${change.id}:information`);
   let annotations=[];
   try { annotations=JSON.parse(change.payload.metadata.values.annotations || '[]'); } catch { /* Older text contributions have no annotations. */ }
   const editorial = ['manuscript','book-proposal'].includes(change.kind) && change.cycle;
@@ -305,13 +318,7 @@ function renderChangeGroups(changes) {
   // The server returns newest first: preserve that order within and between books.
   let index = 0;
   for (const [bookId, requests] of groups) {
-    const section = element('details', undefined, 'dashboard-change-group');
-    section.open = expandedChangeBooks.has(bookId);
-    section.addEventListener('toggle', () => {
-      if (!section.isConnected) return;
-      if (section.open) expandedChangeBooks.add(bookId);
-      else expandedChangeBooks.delete(bookId);
-    });
+    const section = disclosure(`group:${bookId || 'library'}`, 'dashboard-change-group');
     const header = element('summary', undefined, 'dashboard-change-group-heading');
     const title = element('h2');
     const titleText = element('span', bookId ? requests[0].title : t('Library feedback'), 'dashboard-change-group-title');
@@ -412,6 +419,7 @@ function renderPointsSection(name) {
 }
 
 function render() {
+  for (const node of content.querySelectorAll('details[data-disclosure-key]')) disclosureStates.set(node.dataset.disclosureKey, node.open);
   localize();
   document.querySelector('#dashboard-tasks-tab').hidden = data.canManageTasks !== true;
   for (const name of ['admin','users']) document.querySelector('#dashboard-'+name+'-tab').hidden = data.canManageUsers !== true;
@@ -466,7 +474,7 @@ void refresh();
 
 // Keep asynchronous funding, publication and restoration status visible.
 setInterval(()=>{
-  if (!mutation && data && document.visibilityState==='visible'
+  if (!mutation && !refreshing && data && ['books','changes','tasks'].includes(view) && document.visibilityState==='visible'
     && (data.editionCycles?.length
-      || data.changes.some(item=>['funding','active','restoring','published'].includes(item.cycle?.phase)))) void refresh();
+      || data.changes.some(item=>['funding','active','restoring','published'].includes(item.cycle?.phase)))) void refresh({background:true});
 },5000);

@@ -2,7 +2,7 @@ import {uploadBlockSize} from './callback-budget.mjs';
 import {withExecutionLock} from './anchored-files.mjs';
 import fs from 'node:fs/promises';
 import {runBatchOperation} from './task-batch.mjs';
-import {runRemoteSkill,releaseIncompleteRemote,guardRemoteBackups} from './remote-skill.mjs';
+import {runRemoteSkill,releaseIncompleteRemote,discardTranslationJob,guardRemoteBackups} from './remote-skill.mjs';
 import {preflight,writeHandoff,verifyPackage,requirePreflight} from './workflow-checks.mjs';
 import { constants } from 'node:fs';
 import path from 'node:path';
@@ -169,7 +169,7 @@ async function main() {
   let client;
   try {
     const operation = process.argv[2];
-    if (process.argv.length !== 3 || (!operations[operation] && !['batch-start', 'batch-status', 'batch-next', 'batch-close', 'exec', 'release-incomplete', 'download', 'choose', 'publish', 'retry-publication', 'preflight', 'handoff', 'verify-package'].includes(operation))) throw new Error('Use batch-start, batch-status, batch-next, batch-close, exec, preflight, claim, status, download, choose, handoff, verify-package, publish, retry-publication or finish');
+    if (process.argv.length !== 3 || (!operations[operation] && !['batch-start', 'batch-status', 'batch-next', 'batch-close', 'batch-defer', 'exec', 'release-incomplete', 'discard-translation-job', 'download', 'choose', 'publish', 'retry-publication', 'preflight', 'handoff', 'verify-package'].includes(operation))) throw new Error('Use batch-start, batch-status, batch-next, batch-close, batch-defer, exec, preflight, claim, status, download, choose, handoff, verify-package, publish, retry-publication or finish');
     const chunks = [];
     let size = 0;
     for await (const chunk of process.stdin) {
@@ -192,6 +192,7 @@ async function main() {
     const call = async (tool, args) => unwrap(await client.callTool(tool, args, { timeoutMs: tool === 'scriptahub_task_publish' ? 600000 : 90000 }));
     if (operation === 'claim' || operation === 'batch-next') await preflight(await call('scriptahub_skills_preflight',{}));
     if (operation === 'exec') { process.exitCode = await runRemoteSkill(input,call); return; }
+    if (operation === 'discard-translation-job') { process.stdout.write(JSON.stringify(await discardTranslationJob(input,call))+'\n'); return; }
     if (operation === 'release-incomplete') { const exitCode = await releaseIncompleteRemote(input,call); process.stdout.write(JSON.stringify({released:true,executionId:input.executionId,originalExitCode:exitCode})+'\n'); return; }
     if (operation === 'preflight') { const receipt = await call('scriptahub_skills_preflight',{}); await preflight(receipt); process.stdout.write(JSON.stringify(receipt)+'\n'); return; }
     const result = operation.startsWith('batch-') ? await runBatchOperation(call,operation,input)

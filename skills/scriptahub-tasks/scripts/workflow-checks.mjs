@@ -47,7 +47,7 @@ function itemArtifact(directory = '.',name) {
   return (directory === '.' ? '' : directory + '/') + 'run-state/' + name;
 }
 export async function writeHandoff(input) {
-  const steps = ['claim-edit','apply-edit','validate-edit','submit-edit','prepare-manuscript','process-content','review-correct','validate-final','publish-result'];
+  const steps = ['claim-edit','apply-edit','validate-edit','submit-edit','resume-book','prepare-manuscript','process-content','translate-resources','review-correct','validate-final','publish-result'];
   if (!steps.includes(input.step) || !input.context || typeof input.context !== 'object' || Array.isArray(input.context)) throw new Error('Provide the step and a context object');
   for (const key of ['executionId','runId','taskId','bookId']) if (!/^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$/.test(input.context[key] || '')) throw new Error('Invalid handoff identity: '+key);
   const handoffPath = itemArtifact(input.directory,'handoff.json');
@@ -55,6 +55,12 @@ export async function writeHandoff(input) {
   try { old = await jsonArtifact(handoffPath); }
   catch (error) { if (error.code !== 'ENOENT') throw error; }
   for (const key of ['executionId','runId','taskId','bookId']) if (old && old.context[key] !== input.context[key]) throw new Error('Handoff belongs to another execution');
+  if (old?.context.editorialSource) {
+    const pinned = old.context.editorialSource;
+    const proposed = input.context.editorialSource;
+    if (proposed && ['path','sha256','language'].some(key => proposed[key] !== pinned[key])) throw new Error('Editorial source is pinned; do not replace or regenerate the book');
+    input = {...input, context:{...input.context, editorialSource:pinned}};
+  }
   const text = JSON.stringify(input.context);
   if (Buffer.byteLength(text)>24000) throw new Error('Keep handoff context under 24 KB; reference large inventories and reports by path');
   const rejectSecrets = value => {

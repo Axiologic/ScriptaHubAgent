@@ -1,3 +1,4 @@
+import {translationOutcome} from './translation-outcome.mjs';
 import { isDeepStrictEqual } from 'node:util';
 import { packagePath, publicationError as fail, sha256 } from './publication-transfer.mjs';
 import { validateContentBook } from './content-v2.mjs';
@@ -63,6 +64,7 @@ export function checkPublicationPackage(manifest, target, bytes, oldCollection, 
   const generated = fork || manifest.taskType === 'scriptahub.book-proposal';
   if(generated && [...bytes.keys()].some(name=>/\.(?:pdf|docx?)$/i.test(name))) fail('Generated HTML books do not publish DOCX/PDF intermediates or exports');
   const checkArtwork = (metadata, resolve) => {
+    translationOutcome(manifest.validation?.translationOutcome,{languages:Object.keys(metadata.editions || {})});
     if (manifest.coverRequired) for (const language of Object.keys(metadata.editions || {})) {
       if (!metadata.coverUrl?.[language] || !metadata.thumbnailUrl?.[language]) fail('Each published language requires its generated cover and thumbnail');
     }

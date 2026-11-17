@@ -1,3 +1,4 @@
+import {translationOutcome} from './translation-outcome.mjs';
 import crypto from 'node:crypto';
 import path from 'node:path';
 import { requireNoActiveProcessing } from './processing-store.mjs';
@@ -42,6 +43,7 @@ export class PublicationTransfer {
       || branch.includes('..') || branch.includes('//') || branch.endsWith('/') || branch.endsWith('.') || branch.split('/').some(p => p.endsWith('.lock'))
       || (baseCommit !== null && !/^[a-f0-9]{40}$/.test(baseCommit || ''))) publicationError('Invalid publication baseline');
     const task = this.service.present(execution);
+    translationOutcome(validation?.translationOutcome);
     if (!validation || validation.executionId !== executionId || validation.runId !== task.runId || validation.bookId !== task.bookId
       || validation.publicationPermitted !== true || validation.audit?.autoCorrect !== false
       || !['passed','passed_with_warnings'].includes(validation.audit?.status) || validation.audit.errorFindings !== 0) publicationError('A successful independent final validation is required');

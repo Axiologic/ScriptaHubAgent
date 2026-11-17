@@ -46,9 +46,14 @@ export async function runBatchOperation(call,operation,input,{root=process.cwd()
   let state = await readState(filename);
   const upgradingBookBatch = operation === 'batch-start' && state.taskType === 'manuscript' && input.taskType === 'add-book';
   if (!identifier(state.batchId) || !types.has(state.taskType) || input.taskType && input.taskType !== state.taskType && !upgradingBookBatch) throw new Error('Batch identity mismatch');
-  if (operation === 'batch-close') return call('scriptahub_task_batch_close',{batchId:state.batchId});
+  if (operation === 'batch-close') return call('scriptahub_task_batch_close',{batchId:state.batchId,...(input.retainActive === true ? {retainActive:true} : {})});
   let snapshot = await call('scriptahub_task_batch_snapshot',state);
   if (operation === 'batch-status') return snapshot;
+  if (operation === 'batch-defer') {
+    const item=snapshot.items?.find(item=>item.taskId===input.taskId && item.executionId===input.executionId && !item.released);
+    if (snapshot.closed || !identifier(input.taskId) || !identifier(input.executionId) || !item || !['running','stop_requested'].includes(item.state) || typeof input.reason !== 'string' || !input.reason.trim() || input.reason.length>1000) throw new Error('Defer only an identified active item from this open batch with its actual reason');
+    return call('scriptahub_task_batch_settle',{batchId:state.batchId,taskId:item.taskId,runId:item.runId,executionId:item.executionId,defer:true,reason:input.reason});
+  }
   // A Cron job reuses its run folder, so a batch an earlier run closed is replaced
   // by a new one. An open or paused batch is resumed, never replaced.
   if (operation === 'batch-start' && snapshot.closed === true) {
@@ -70,6 +75,7 @@ export async function runBatchOperation(call,operation,input,{root=process.cwd()
       continue;
     }
     const taskDirectory = 'tasks/' + item.taskId;
+    if (item.deferredExecutionId) continue;
     if (item.publicationPending) {
       if (!identifier(item.executionId)) throw new Error('Invalid pending publication identity');
       return {batchId:state.batchId,publicationPending:true,executionId:item.executionId,taskDirectory};
@@ -87,5 +93,5 @@ export async function runBatchOperation(call,operation,input,{root=process.cwd()
     } finally { await fs.rm(temporary,{force:true}); }
     return result;
   }
-  return {...await call('scriptahub_task_batch_close',{batchId:state.batchId}),task:null};
+  return {...await call('scriptahub_task_batch_close',{batchId:state.batchId,...(snapshot.deferred?.length ? {retainActive:true} : {})}),task:null,...(snapshot.deferred?.length ? {deferred:snapshot.deferred} : {})};
 }

@@ -575,3 +575,24 @@ for (const [kind,schemaVersion] of [['book-proposal',1],['manuscript',1],['book-
   const published=await exec('git',['show','main:'+cover],{cwd:f.remote,encoding:'buffer'});
   assert.deepEqual(published.stdout,image);
 });
+
+test('publishing the source and one translated edition retains the omitted-language warning in results and email',async t=>{
+  const f=await fixture(t,{manageApprovals:true});
+  const collection=JSON.parse(f.files.get('collection.json'));
+  const directory=collection.books[0].directory;
+  collection.books[0].editions.ro={fullContent:directory+'/ro/full.html'};
+  f.files.set('collection.json',Buffer.from(JSON.stringify(collection)));
+  f.files.set(directory+'/ro/full.html',Buffer.from('<html lang="ro"><p>Manuscrisul tradus.</p></html>'));
+  f.input.files=[...f.files].map(([path,bytes])=>({path,size:bytes.length,sha256:sha256(bytes)}));
+  f.input.validation.translationOutcome={sourceLanguage:'en',requestedLanguages:['en','ro','es'],publishedLanguages:['en','ro'],omitted:[{language:'es',reason:'Spanish translation could not be validated.'}]};
+  f.store.db.prepare('UPDATE approval_cycles SET reward=10 WHERE task_id=?').run(f.task.taskId);
+  f.upload();
+  const result=await f.publisher.publish(agent,{executionId:f.task.executionId},f.config);
+  assert.equal(result.state,'completed');assert.match(result.result,/Partially completed.*en, ro.*es.*could not be validated/);
+  assert.equal(f.pushes(),1);
+  const published=JSON.parse(await f.git(f.root,'--git-dir='+f.remote,'show','main:collection.json'));
+  assert.deepEqual(Object.keys(published.books[0].editions).sort(),['en','ro']);
+  const {advanceCycles}=await import('../cycle-worker.mjs');const mail=[];
+  await advanceCycles(f.store,{apply:async()=>({}),send:async notice=>{mail.push(notice);return {providerMessageId:'test-mail'};},report:message=>assert.fail(message)});
+  assert.ok(mail.some(notice=>notice.subject.includes('incomplete translations') && /en, ro.*es.*could not be validated/.test(notice.message)),'the owner must receive the partial-completion warning even when a reward is pending');
+});

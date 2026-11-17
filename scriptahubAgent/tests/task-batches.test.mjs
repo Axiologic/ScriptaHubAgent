@@ -127,11 +127,11 @@ test('flow batch setup is retry safe and rejects changed task types and symlinke
 });
 
 test('book workflows traverse their fixed batch using ordinary graph edges, with no RoboTeam queue extensions',async()=>{
-  for (const name of ['add-book','edit-book']) {
+  for (const name of ['add-books','edit-book']) {
     const graph=JSON.parse(await fs.readFile(new URL('../../flows/'+name+'.json',import.meta.url),'utf8'));
     assert.equal(graph.entryTaskId,'select-task');
     assert.equal(graph.taskQueueAgent,undefined);assert.equal(graph.taskType,undefined);
-    assert.ok(graph.edges.some(edge=>edge.id==='result-to-next'&&edge.targetTaskId==='select-task'));
+    assert.ok(graph.edges.some(edge=>['result-to-next','item-to-next'].includes(edge.id)&&edge.targetTaskId==='select-task'));
     assert.ok(graph.edges.some(edge=>edge.id==='batch-to-result'&&edge.targetTaskId==='batch-result'));
     assert.equal(graph.edges.filter(edge=>edge.sourceTaskId==='batch-result').length,0);
     assert.doesNotMatch(JSON.stringify(graph),/queueTask|batch management belongs to RoboTeam/);
@@ -164,4 +164,33 @@ test('a Cron run reusing a finished run folder starts a new batch, while an open
   assert.deepEqual(new Set(next.taskIds),new Set([first.task.id,later.task.id]),'released and new work joins the new batch');
   assert.equal(JSON.parse(await fs.readFile(statePath,'utf8')).batchId,next.batchId);
   assert.deepEqual(await run('batch-start',{taskType:'add-book'}),next);
+});
+
+test('a deferred active book does not block other books or future batches and cannot be stolen', async t => {
+  const {runBatchOperation}=await import('../../skills/scriptahub-tasks/scripts/task-batch.mjs');
+  const f=await fixture(t);f.add();f.add();
+  const call=async(tool,args)=>f.service[{scriptahub_task_batch_snapshot:'snapshot',scriptahub_task_batch_close:'closeBatch',scriptahub_task_batch_settle:'settle',scriptahub_task_claim:'claim'}[tool]](executor,args);
+  const run=(op,input={})=>runBatchOperation(call,op,input,{root:f.root});
+  const batch=await run('batch-start',{taskType:'add-book'});
+  const first=(await run('batch-next')).task;
+  assert.throws(()=>f.service.closeBatch(executor,{batchId:batch.batchId,retainActive:true}),/Defer each active task/);
+  await assert.rejects(run('batch-defer',{taskId:first.taskId,executionId:'wrong-execution',reason:'Wrong identity'}),/identified active item/);
+  await run('batch-defer',{taskId:first.taskId,executionId:first.executionId,reason:'The child failed while processing was still active'});
+  assert.equal((await run('batch-status')).deferred.length,1);
+  // Restart the local helper: deferral is read from disk, not memory.
+  const second=(await run('batch-next')).task;
+  assert.notEqual(second.taskId,first.taskId);
+  f.service.finish(executor,{executionId:second.executionId,state:'failed',error:'Only this second book failed validation'});
+  const end=await run('batch-next');
+  assert.equal(end.closed,true);assert.deepEqual(end.retainedTaskIds,[first.taskId]);
+  assert.equal(f.service.status(executor,{executionId:first.executionId}).state,'running');
+  assert.equal(f.store.db.prepare('SELECT released FROM task_batch_items WHERE batch_id=? AND task_id=?').get(batch.batchId,first.taskId).released,0);
+  assert.equal(f.service.claim('agent:other/processor',{runId:'steal',taskType:'add-book'}).task,null);
+  const later=f.add();
+  const next=await run('batch-start',{taskType:'add-book'});
+  assert.notEqual(next.batchId,batch.batchId);assert.deepEqual(next.taskIds,[later.task.id]);
+  assert.equal((await run('batch-next')).task.taskId,later.task.id);
+  // Recovery of the retained original execution still works after batch traversal closed.
+  f.service.finish(executor,{executionId:first.executionId,state:'failed',error:'Original processing reconciled'});
+  f.service.settle(executor,{batchId:batch.batchId,taskId:first.taskId,runId:first.runId});
 });

@@ -43,6 +43,9 @@ export class TaskExecution {
       CREATE TABLE IF NOT EXISTS task_batch_items (batch_id TEXT NOT NULL REFERENCES task_batches(id),
       task_id TEXT NOT NULL REFERENCES tasks(id), position INTEGER NOT NULL, released INTEGER NOT NULL DEFAULT 0,
       PRIMARY KEY(batch_id,task_id));
+      CREATE TABLE IF NOT EXISTS task_batch_deferrals (batch_id TEXT NOT NULL, task_id TEXT NOT NULL,
+        execution_id TEXT NOT NULL, reason TEXT NOT NULL, created_at TEXT NOT NULL,
+        PRIMARY KEY(batch_id,task_id), FOREIGN KEY(batch_id,task_id) REFERENCES task_batch_items(batch_id,task_id));
       CREATE UNIQUE INDEX IF NOT EXISTS task_batch_exclusive ON task_batch_items(task_id) WHERE released=0;`);
     createPublicationTables(store);
     createProcessingTables(store);
@@ -102,13 +105,14 @@ export class TaskExecution {
         batch=this.batch(executor,batchId);
       }
       const items = this.store.db.prepare(`SELECT i.task_id AS taskId,i.released,t.state,e.run_id AS runId,e.id AS executionId,
+        d.reason AS deferredReason, d.execution_id AS deferredExecutionId,
         CASE WHEN e.finished_at IS NULL AND (p.retry_at IS NOT NULL OR p.commit_id IS NOT NULL OR p.receipt IS NOT NULL) THEN 1 ELSE 0 END AS publicationPending
         FROM task_batch_items i JOIN tasks t ON t.id=i.task_id LEFT JOIN task_executions e ON e.task_id=t.id
-        LEFT JOIN task_publications p ON p.execution_id=e.id WHERE i.batch_id=? ORDER BY i.position`).all(batchId);
-      return {batchId,taskType,closed:Boolean(batch.closed_at),taskIds:items.map(item=>item.taskId),items};
+        LEFT JOIN task_publications p ON p.execution_id=e.id LEFT JOIN task_batch_deferrals d ON d.batch_id=i.batch_id AND d.task_id=i.task_id WHERE i.batch_id=? ORDER BY i.position`).all(batchId);
+      return {batchId,taskType,closed:Boolean(batch.closed_at),taskIds:items.map(item=>item.taskId),items, deferred:items.filter(item=>item.deferredExecutionId && !item.released && ['running','stop_requested'].includes(item.state)).map(item=>({taskId:item.taskId,executionId:item.deferredExecutionId,reason:item.deferredReason}))};
     });
   }
-  settle(executor,{batchId,taskId,runId}={}) {
+  settle(executor,{batchId,taskId,runId,defer=false,executionId,reason}={}) {
     if (!identifier(runId)) fail('Invalid item run ID');
     return this.store.transaction(()=>{
       this.batch(executor,batchId);
@@ -117,20 +121,29 @@ export class TaskExecution {
       const task=this.store.db.prepare('SELECT * FROM tasks WHERE id=?').get(taskId);
       const execution=this.store.db.prepare('SELECT * FROM task_executions WHERE task_id=?').get(taskId);
       if(execution && (execution.executor_agent_id!==executor||execution.run_id!==runId))fail('Task execution does not belong to this workflow run',409);
+      if (defer === true) {
+        if (!execution || execution.id!==executionId || !['running','stop_requested'].includes(task.state) || typeof reason!=='string' || !reason.trim() || reason.length>1000 || this.batch(executor,batchId).closed_at || item.released) fail('Defer only an identified active item from this open batch with its actual reason',409);
+        this.store.db.prepare(`INSERT INTO task_batch_deferrals(batch_id,task_id,execution_id,reason,created_at) VALUES(?,?,?,?,?) ON CONFLICT(batch_id,task_id) DO NOTHING`).run(batchId,taskId,executionId,reason,timestamp());
+        return {deferred:true,taskId,executionId};
+      }
       if (!['completed','failed','cancelled'].includes(task.state)) fail('Confirm the terminal task result before releasing its reservation',409);
       this.store.db.prepare('UPDATE task_batch_items SET released=1 WHERE batch_id=? AND task_id=?').run(batchId,taskId);
       return {taskId,state:task.state};
     });
   }
-  closeBatch(executor,{batchId}={}) {
+  closeBatch(executor,{batchId,retainActive=false}={}) {
+    if (typeof retainActive !== 'boolean') fail('retainActive must be boolean');
     return this.store.transaction(()=>{
       this.batch(executor,batchId);
-      const active=this.store.db.prepare(`SELECT 1 FROM task_batch_items i JOIN tasks t ON t.id=i.task_id
-        WHERE i.batch_id=? AND i.released=0 AND t.state IN ('running','stop_requested')`).get(batchId);
-      if(active)fail('Settle the active task before closing its batch',409);
-      this.store.db.prepare('UPDATE task_batch_items SET released=1 WHERE batch_id=?').run(batchId);
+      const active=this.store.db.prepare(`SELECT t.id FROM task_batch_items i JOIN tasks t ON t.id=i.task_id
+        WHERE i.batch_id=? AND i.released=0 AND t.state IN ('running','stop_requested')`).all(batchId);
+      if(active.length && !retainActive)fail('Settle the active task before closing its batch',409);
+      if(retainActive && active.some(task=>!this.store.db.prepare('SELECT 1 FROM task_batch_deferrals WHERE batch_id=? AND task_id=?').get(batchId,task.id))) fail('Defer each active task before closing batch traversal',409);
+      // Closing the traversal must not release uncertain work or make it claimable again.
+      this.store.db.prepare(`UPDATE task_batch_items SET released=1 WHERE batch_id=? AND task_id NOT IN
+        (SELECT id FROM tasks WHERE state IN ('running','stop_requested'))`).run(batchId);
       this.store.db.prepare('UPDATE task_batches SET closed_at=COALESCE(closed_at,?) WHERE id=?').run(timestamp(),batchId);
-      return {batchId,closed:true};
+      return {batchId,closed:true,...(active.length ? {retainedTaskIds:active.map(task=>task.id)} : {})};
     });
   }
   claim(executor, { runId, taskId, taskType = 'manuscript', batchId } = {}) {
@@ -141,7 +154,7 @@ export class TaskExecution {
       if(batchId!==undefined){
         const batch=this.batch(executor,batchId);
         if(batch.closed_at||batch.task_type!==taskType||!taskId||!this.store.db.prepare('SELECT 1 FROM task_batch_items WHERE batch_id=? AND task_id=? AND released=0').get(batchId,taskId))fail('Task is not reserved for this batch',409);
-        const first = this.store.db.prepare(`SELECT task_id FROM task_batch_items WHERE batch_id=? AND released=0 ORDER BY position LIMIT 1`).get(batchId);
+        const first = this.store.db.prepare(`SELECT i.task_id FROM task_batch_items i WHERE i.batch_id=? AND i.released=0 AND NOT EXISTS (SELECT 1 FROM task_batch_deferrals d WHERE d.batch_id=i.batch_id AND d.task_id=i.task_id) ORDER BY i.position LIMIT 1`).get(batchId);
         if (first?.task_id !== taskId) fail('Finish the preceding task before claiming the next batch item',409);
       }
       const existing = this.store.db.prepare('SELECT id,task_id FROM task_executions WHERE executor_agent_id=? AND run_id=?').get(executor, runId);

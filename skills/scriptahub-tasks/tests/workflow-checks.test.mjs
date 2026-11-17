@@ -100,3 +100,23 @@ test('generated HTML is accepted without PDF only after a strict native reader/l
   await assert.rejects(verifyPackage(input),/HTML changed/);
  }finally{process.env.PATH=savedPath;}
 }));
+
+test('editorial, review and final validation preserve the pinned source and accepted output receipt', async () => inRun(async () => {
+  const pinned={...context,editorialSource:{path:'tasks/task-one/sources/book.html',sha256:'a'.repeat(64),language:'en'},editorialResults:{summary:{output:'tasks/task-one/editorial/comprehensive-summary.html',sha256:'b'.repeat(64)}}};
+  for (const step of ['resume-book','process-content','translate-resources','review-correct','validate-final']) {
+    const saved=await writeHandoff({step,directory:'tasks/task-one',context:pinned});
+    const actual=JSON.parse(await fs.readFile(saved.path));
+    assert.equal(actual.step,step);assert.deepEqual(actual.context,pinned);
+  }
+}));
+
+test('a pinned editorial source survives a partial handoff and cannot be replaced', async () => inRun(async () => {
+  const editorialSource={path:'tasks/task-one/sources/book.html',sha256:'a'.repeat(64),language:'en'};
+  await writeHandoff({step:'process-content',directory:'tasks/task-one',context:{...context,editorialSource}});
+  const saved=await writeHandoff({step:'review-correct',directory:'tasks/task-one',context});
+  assert.deepEqual(JSON.parse(await fs.readFile(saved.path)).context.editorialSource,editorialSource);
+  for (const change of [{path:'tasks/task-one/editorial/comprehensive-summary.html'},{sha256:'b'.repeat(64)},{language:'ro'}]) {
+    await assert.rejects(writeHandoff({step:'review-correct',directory:'tasks/task-one',context:{...context,editorialSource:{...editorialSource,...change}}}),/source is pinned/);
+    assert.deepEqual(JSON.parse(await fs.readFile(saved.path)).context.editorialSource,editorialSource);
+  }
+}));
