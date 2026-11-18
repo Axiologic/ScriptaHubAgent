@@ -25,7 +25,15 @@ async function asset(filename, expected) {
   await fs.mkdir(path.dirname(filename),{recursive:true});await fs.writeFile(filename,bytes,{mode:0o644});
 }
 const skills=path.join(root,'skills'), pdf=path.join(skills,'pdf2html');
-await fs.writeFile(path.join(root,'source.json'),JSON.stringify(await skillSource(skills))+'\n');
+const source=await skillSource(skills),sourceDependencies={};
+for(const skill of config.skills) {
+  const descriptor=JSON.parse(await fs.readFile(path.join(skills,skill,'skill.json'),'utf8'));
+  const dependencies=descriptor.sourceDependencies||[];
+  if(!Array.isArray(dependencies)||dependencies.some(prefix=>prefix!=='scriptahub-tasks/shared'))throw Error('Invalid skill source dependencies: '+skill);
+  for(const prefix of dependencies)if(!source[prefix+'/batch-io.mjs'])throw Error('Missing shared batch module for '+skill);
+  if(dependencies.length)sourceDependencies[skill]=dependencies;
+}
+await fs.writeFile(path.join(root,'source.json'),JSON.stringify(source)+'\n');
 const platform=`${process.platform}-${process.arch}`;
 await installBuiltNative(root,config,platform);
 const integrity=JSON.parse(await fs.readFile(path.join(pdf,'external/native/integrity.json'),'utf8'));
@@ -57,7 +65,7 @@ for(const engine of config.audioEngines) {
     '--models-dir',path.join(audio,'models',engine==='qwen' ? 'qwen-custom' : 'kokoro'),
     ...(engine==='qwen' ? ['--lock',path.join(root,`qwen-linux-${process.arch}.requirements.txt`)] : [])]);
 }
-const receipt={schemaVersion:1,platform,skills:config.skills,audioEngines:config.audioEngines,node:process.version,
+const receipt={sourceDependencies,schemaVersion:1,platform,skills:config.skills,audioEngines:config.audioEngines,node:process.version,
   python:'python3',preparedAt:new Date().toISOString(),architecture:os.arch()};
 await fs.writeFile(path.join(root,'installed.json'),JSON.stringify(receipt,null,2)+'\n');
 console.log('ScriptaHub skill dependencies installed. Runtime verification is a separate required build gate.');

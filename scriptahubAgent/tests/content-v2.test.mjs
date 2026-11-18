@@ -9,6 +9,7 @@ import vm from 'node:vm';
 import { LANGUAGES, validateContentBook, normalizeContentBook, renderBookPage } from '../content-v2.mjs';
 import { resolveSources, buildSnapshot, combineCollections } from '../sync.mjs';
 import { createSiteServer } from '../server.mjs';
+import { savePointsPolicy } from '../points-policy.mjs';
 
 const sha = value => crypto.createHash('sha256').update(value).digest('hex');
 test('content-only format renders the unchanged Metacult URL and maps shared resources', async t => {
@@ -91,6 +92,8 @@ test('content metadata rejects escaping resources and missing mapped editions', 
 
 test('fork requests require an explicit reusable source licence before fetching content', async t => {
   const root = await fs.mkdtemp(path.join(os.tmpdir(),'scripta-fork-licence-'));
+  // This test isolates licence admission; paid fork settlement is covered separately.
+  await savePointsPolicy(path.join(root,'data'), {forkCost:0});
   const site = path.join(root,'site'), id = 'bk-licence', directory = 'books/' + id;
   await fs.mkdir(site);
   const user = {id:'user:reader',email:'reader@example.test',installationAdministratorId:'user:admin'};
@@ -103,6 +106,7 @@ test('fork requests require an explicit reusable source licence before fetching 
   const server = createSiteServer(site,{dataDir:path.join(root,'data'),manageApprovals:true,verifyUser:async()=>user});
   await new Promise(resolve=>server.listen(0,'127.0.0.1',resolve));
   t.after(async()=>{
+    server.closeAllConnections();origin.closeAllConnections();
     await Promise.all([server,origin].map(item=>new Promise(resolve=>item.close(resolve))));
     await fs.rm(root,{recursive:true,force:true});
   });

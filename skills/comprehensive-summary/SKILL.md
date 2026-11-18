@@ -16,7 +16,7 @@ Use this skill when the user wants a book summarized to a requested reading time
 
 1. Run `scripts/comprehensivesummary doctor`.
 2. Run `scripts/comprehensivesummary prepare INPUT --minutes N`. Pass `--wpm`, `--output`, or `--job-dir` only when requested or necessary. Keep the returned job path.
-3. Read all of `context.json`, `chapters.json`, and each ready batch. Analyze up to `recommendedParallelAnalyses` batches concurrently and write the exact analysis schema from [references/job-format.md](references/job-format.md). Do not ask for per-batch confirmation.
+3. Read all of `context.json`, `chapters.json`, and each ready batch. Analyze up to `recommendedParallelAnalyses` batches concurrently and submit each candidate with batch-contract/submit-batch using the exact analysis schema from [references/job-format.md](references/job-format.md). Do not ask for per-batch confirmation.
 4. Repeat `status` until it returns `synthesis_required`. Read every analysis, merge split chapters, identify the book's central message, cluster semantic recurrence, preserve distinctive ideas, and write `synthesis.json` with the exact schema.
 5. Run `status` again. When it returns `draft_required`, read the synthesis and relevant analyses, then write `draft.json`. Produce a thematic, unified essay for an educated general reader, not a list of chapter summaries.
 6. Respect the word range in `job.json`. Count the title, dek, thematic headings, paragraphs, and conclusion; exclude the generated source map. If short, add only supported nuance or evidence. If long, remove redundancy before removing central or original ideas.
@@ -52,3 +52,17 @@ Use scripts/comprehensivesummary with Node.js 22 or newer. The HTML parser is bu
 
 Language tags use hyphenated BCP 47 syntax and are normalized by Node.js
 `Intl.Locale`. The source language comes from HTML unless explicitly overridden.
+
+
+## Constrained batch input and submission
+
+Before analyzing or translating a batch, run `scripts/comprehensivesummary batch-contract JOB --batch batch-NNNN.json`. Read the returned skill-specific JSON Schema, exact batch identity, allowed source-unit IDs, source hash and batch digest together with the actual batch and frozen job context. Pass this contract unchanged to the assigned worker. Do not reuse another skill's enum values or another batch's IDs. The contract is read-only; it does not approve semantic content.
+
+Submit the complete analysis/translation JSON on standard input to `scripts/comprehensivesummary submit-batch JOB --batch batch-NNNN.json --batch-sha256 SHA`. Use the digest returned by batch-contract. In ScriptaHub, invoke both commands through `scriptahub-tasks exec`; put the serialized candidate JSON in `input` for submit-batch, not in a shell argument. Native calls remain serialized by the coordinator; workers return candidate JSON to it and never patch the analyses/translations files directly.
+
+Submission verifies the source hash, batch digest, exact schema and native analysis rules before saving formatted JSON atomically to that batch's own result path. A rejected submission returns structured errors and its exact contract, exits nonzero and leaves existing bytes unchanged. Correct the candidate in memory and resubmit; never use apply_patch to repair the stored batch. An identical accepted result is idempotent; a different candidate cannot replace an accepted batch by default. For a concrete later review finding, reread batch-contract and supply --replace-sha256 with existing.sha256; a stale digest is rejected, and the replacement must pass every admission check. Analysis acceptance does not replace synthesis, drafting, semantic review, build or independent final validation. Audit flags may be true only after actual review. Translation markup tokens and exact required unit membership are checked before saving; final language/structure checks remain mandatory.
+
+
+### Shared batch runtime dependency
+
+This skill imports `../../scriptahub-tasks/shared/batch-io.mjs` from its scripts and source modules. Distribute it together with the sibling `scriptahub-tasks/shared/` directory, keeping the `skills/<skill>/` and `skills/scriptahub-tasks/shared/` layout. There are no generated batch-io copies or synchronization step. The skill owns only its `src/batch-schema.mjs` adapter and native vocabulary/validator. Its descriptor declares `dependsOn` and `sourceDependencies`; hosted runtime receipts and RoboTeam source verification include the shared module's hashes. Shared runtime changes require rebuilding the agent image.

@@ -83,7 +83,7 @@ export async function analyze(input, options = {}) {
   for (let i = 0; i < batches.length; i++) await writeJson(path.join(jobDir, 'batches', job.batches[i]), { units: batches[i] });
   return { status: 'prepared', job: jobDir, language: lang, batches: batches.length, count, output: job.output };
 }
-function checkTerms(terms, allowed, name) {
+export function checkTerms(terms, allowed, name) {
   if (!Array.isArray(terms)) throw new Error(`${name}: keywords must be an array.`);
   const seen = new Set();
   for (const term of terms) {

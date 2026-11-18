@@ -72,6 +72,7 @@ test('stale review and protected spoiler prevent publication', async t => {
 });
 test('copied runtime and missing parser fail before writes', async t => {
   const dir = await temporary(t), copy = path.join(dir, 'copy');
+  await fs.cp(new URL('../../scriptahub-tasks/shared/',import.meta.url),path.join(dir,'scriptahub-tasks/shared'),{recursive:true});
   for (const name of ['src','external','scripts','assets']) await fs.cp(path.join(skill,name), path.join(copy,name), { recursive: true });
   const script = path.join(copy, 'scripts/marketingsummary.mjs');
   const good = spawnSync(process.execPath, [script, 'doctor'], { cwd: os.tmpdir(), env: { PATH: '' }, encoding:'utf8' });
@@ -79,7 +80,7 @@ test('copied runtime and missing parser fail before writes', async t => {
   await fs.rename(path.join(copy,'external/html'), path.join(copy,'external/missing'));
   const bad = spawnSync(process.execPath, [script,'prepare',path.join(dir,'source.html')], { cwd:os.tmpdir(),env:{PATH:''},encoding:'utf8' });
   assert.equal(bad.status,1); assert.match(bad.stderr,/Bundled HTML runtime/);
-  assert.deepEqual((await fs.readdir(dir)).sort(), ['copy']);
+  assert.deepEqual((await fs.readdir(dir)).sort(), ['copy','scriptahub-tasks']);
 });
 test('non-HTML input is rejected', async t => {
   const dir = await temporary(t), source = path.join(dir, 'book.md');

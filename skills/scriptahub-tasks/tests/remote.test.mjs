@@ -452,3 +452,34 @@ for(const skill of ['short-description','translate-html']) {
     });
   }
 }
+
+test('processing source digest includes the shared module from a separately mounted helper skill',async t=>{
+  const f=await fixture(t),skill='short-description';
+  const selected=path.join(f.sources,'roboteam-skill-1'),helper=path.join(f.sources,'roboteam-skill-0');
+  await fs.mkdir(selected);await fs.writeFile(path.join(selected,'SKILL.md'),'---\nname: short-description\n---\n');
+  await fs.writeFile(path.join(selected,'skill.json'),JSON.stringify({sourceDependencies:['scriptahub-tasks/shared']}));
+  await fs.mkdir(path.join(helper,'shared'),{recursive:true});await fs.writeFile(path.join(helper,'SKILL.md'),'---\nname: scriptahub-tasks\n---\n');
+  await fs.writeFile(path.join(helper,'shared/batch-io.mjs'),'shared batch bytes');
+  await fs.mkdir(path.join(f.task,'sources'));await fs.writeFile(path.join(f.task,'sources/book.html'),'<html lang="en"><body>Book</body></html>');
+  let prepared;
+  const call=async(tool,arg)=>{
+    if(tool==='scriptahub_skills_preflight')return {ok:true,skillCommands:{[skill]:['validate']}};
+    if(tool.endsWith('_prepare')){prepared=arg;throw Object.assign(Error('test admission complete'),{admissionRejected:true});}
+    return f.call(tool,arg);
+  };
+  const input={executionId:'e',taskDirectory:'tasks/a',skill,args:['validate','tasks/a/sources/book.html','--html','tasks/a/sources/book.html']};
+  const options={root:f.root,sourceRoot:f.sources,stdout:f.sink,stderr:f.sink};
+  await assert.rejects(runRemoteSkill(input,call,options),/test admission complete/);
+  const entries={
+    'scriptahub-tasks/shared/batch-io.mjs':hash('shared batch bytes'),
+    'short-description/SKILL.md':hash(await fs.readFile(path.join(selected,'SKILL.md'))),
+    'short-description/skill.json':hash(await fs.readFile(path.join(selected,'skill.json'))),
+  };
+  assert.equal(prepared.sourceDigest,hash(JSON.stringify(entries)));
+  const before=prepared.sourceDigest;
+  await fs.writeFile(path.join(helper,'shared/batch-io.mjs'),'updated shared bytes');
+  await assert.rejects(runRemoteSkill(input,call,options),/test admission complete/);
+  assert.notEqual(prepared.sourceDigest,before);
+  await fs.rm(path.join(helper,'shared'),{recursive:true});
+  await assert.rejects(runRemoteSkill(input,call,options),/ENOENT/);
+});

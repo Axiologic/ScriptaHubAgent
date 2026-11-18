@@ -52,3 +52,14 @@ test('preparation scopes include only explicit job/output, and validation needs 
   await assert.rejects(f.scope({skill:'short-description',args:['prepare','tasks/a/sources/book.html']}),/--job-dir/);
   await assert.rejects(f.scope({skill:'translate-html',args:['prepare','tasks/a/sources/book.html','--job-dir','tasks/a/translation-jobs/ro','--output','tasks/a/translations/ro/full.html']}),/one job/);
 });
+for(const skill of ['comprehensive-summary','marketing-summary','short-description','relevant-keywords','translate-html']) {
+  test(`${skill} batch contracts and admission keep the same isolated job boundary`,async t=>{
+    const f=await fixture(t),job=skill==='translate-html'?'translation-jobs/ro/full':'editorial-jobs/'+skill;
+    await f.write(job+'/job.json',JSON.stringify({source:'/workspace/run/tasks/a/sources/book.html',output:'/workspace/run/tasks/a/outputs/result.html'}));
+    for(const command of ['batch-contract','submit-batch']) {
+      const scope=await f.scope({skill,args:[command,'tasks/a/'+job,'--batch','batch-0001.json',...(command==='submit-batch'?['--batch-sha256','a'.repeat(64),'--replace-sha256','b'.repeat(64)]:[])]});
+      for(const file of [job+'/job.json',job+'/batches/batch-0001.json',job+'/analyses/batch-0001.json','sources/book.html','outputs/result.html'])assert.equal(scope.allows(file),true,file);
+      for(const file of ['working/editorial/note.json','editorial-jobs/other/analyses/batch-0001.json','translation-jobs/es/full/translations/batch-0001.json','outputs/other.html','run-state/handoff.json'])assert.equal(scope.allows(file),false,file);
+    }
+  });
+}

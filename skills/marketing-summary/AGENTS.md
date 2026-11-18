@@ -24,3 +24,8 @@ See tests/fixtures/README.md for provenance. Acceptance requires zero skipped te
 
 Job JSON and command arguments are preserved. Doctor retains its behavioral
 metadata and reports the Node.js and htmlparser2 versions.
+
+
+## Shared module dependency
+
+Batch admission and common schema builders live in `skills/scriptahub-tasks/shared/batch-io.mjs`. Import that module directly; do not copy or generate a batch-io.mjs inside this skill. Keep the skill-specific adapter here. Distribution must include the declared sibling shared dependency; this rule supersedes the former all-resources-inside-one-folder requirement for batch admission.

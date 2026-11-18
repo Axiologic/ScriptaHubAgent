@@ -97,6 +97,7 @@ test('validator rejects three sentences', async t => {
 
 test('copied runtime works outside its directory without Python or npm', async t => {
   const directory = await temporary(t), copy = path.join(directory, 'copy');
+  await fs.cp(new URL('../../scriptahub-tasks/shared/',import.meta.url),path.join(directory,'scriptahub-tasks/shared'),{recursive:true});
   for (const name of ['src', 'external', 'scripts']) await fs.cp(path.join(skill, name), path.join(copy, name), { recursive: true });
   const source = path.join(directory, 'book.html'); await fs.writeFile(source, sourceText);
   const script = path.join(copy, 'scripts/shortdescription.mjs');

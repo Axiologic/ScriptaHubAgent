@@ -2,14 +2,15 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {checkPublicationPackage} from '../publication-policy.mjs';
 import {sha256} from '../publication-transfer.mjs';
+import {combineCollections} from '../catalogue-keywords.mjs';
 const id='bk-history',directory='books/example/'+id,root='books/history';
 const json=value=>Buffer.from(JSON.stringify(value));
 const history={schemaVersion:1,bookId:id,currentEdition:'edition-1',editions:[{id:'edition-1',files:{en:'en/edition-1.html',fr:'fr/full.html'}}]};
 function fixture(schema) {
   const target={collection:'collection.json',root:''},manifest={taskType:'scriptahub.edit',bookId:id,sourceHashes:[]};
   if(schema===1){
-    const book={id,directory,editions:{en:{fullContent:directory+'/en/edition-1.html'},fr:{fullContent:directory+'/fr/full.html'}}};
-    const previous={schemaVersion:1,bookCount:1,books:[book]};
+    const book={id,directory,keywordIds:[],keywords:Object.fromEntries(['en','fr','de','es','pt','it','ro','pl'].map(code=>[code,[]])),editions:{en:{fullContent:directory+'/en/edition-1.html'},fr:{fullContent:directory+'/fr/full.html'}}};
+    const previous={schemaVersion:1,bookCount:1,books:[book],keywords:combineCollections([book]).keywords};
     const document={metadata:{id},history:structuredClone(history)};
     const candidate={...previous,books:[{...book,editions:{...book.editions,en:{fullContent:directory+'/en/edition-2.html'}}}]};
     const next={metadata:{id},history:{...structuredClone(history),currentEdition:'edition-2',editions:[...structuredClone(history.editions),{id:'edition-2'}]}};

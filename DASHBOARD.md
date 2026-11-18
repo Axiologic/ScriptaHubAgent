@@ -171,3 +171,13 @@ Legacy HTTP catalogues use the agent’s book landing page at their existing `ed
 ## Parallel processing isolation
 
 Editorial and translation commands use job-specific snapshots: the selected job subtree, its declared source/output and referenced assets. Explicit job/output paths keep the four editorial resources and each translation language/resource separate. Native calls remain serialized by the coordinator and execution lock; semantic workers may write sibling jobs while one native command runs. The addressed job/output and shared source resources stay frozen until that command merges. Returned sibling paths are rejected, and same-job/source conflicts retain the existing blocking journal. The selection is durable across retries and native job-directory cleanup. Previous broad pending snapshots are preserved for explicit reconciliation, never automatically migrated.
+
+
+## Batch contracts before generation
+
+Editorial and translation workers receive an exact batch-specific contract from the selected native skill before generating JSON. The contract carries only the current batch IDs and the selected skill's enums/schema. The coordinator submits candidate JSON through submit-batch, which validates it before atomic persistence, preserves rejected/accepted existing results, and reports actionable errors. Source and batch digests bind admission to the inspected inputs. General file patching is no longer the prescribed way to write or repair batch results; existing final validation remains mandatory. Both new commands retain the job-specific remote snapshot/merge boundary.
+
+
+## Shared batch module
+
+The four editorial skills and translate-html import one physical module at skills/scriptahub-tasks/shared/batch-io.mjs. Their descriptors declare the sibling dependency and their adapters retain skill-specific schemas. Image preparation verifies the declared shared sources; installed runtime receipts and robot-side admission both include those sources in the dependent skill fingerprints. Shared code is not regenerated into skill folders. Bundle the common directory once with exported dependent skills.

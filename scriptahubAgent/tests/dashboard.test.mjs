@@ -7,6 +7,7 @@ import crypto from 'node:crypto';
 import { once } from 'node:events';
 import { DashboardStore } from '../dashboard-store.mjs';
 import { createSiteServer } from '../server.mjs';
+import { defaultPoints } from '../points-policy.mjs';
 
 process.env.SCRIPTA_RECORD_KEY = 'test-dashboard-key-0123456789abcdef0123456789';
 const user = name => ({ id: `user:${name}`, email: `${name}@example.test`, displayName: name,
@@ -161,8 +162,8 @@ test('HTTP dashboard connects existing forms to owner and collaborator workflows
   const repeated = await request('alice', '/api/dashboard/review', { changeId: proposal.value.submissionId, decision: 'accept' });
   assert.equal(repeated.value.task, null);
   await request('alice','/api/dashboard/cancel',{taskId:creation.value.task.id});
-  assert.equal((await request('charlie','/api/dashboard/editions',{bookId,submissionId:crypto.randomUUID()})).status,403);
-  const edition = await request('alice','/api/dashboard/editions',{bookId,submissionId:crypto.randomUUID()});
+  assert.equal((await request('charlie','/api/dashboard/editions',{bookId,submissionId:crypto.randomUUID(),confirmedCost:defaultPoints.editionCost})).status,403);
+  const edition = await request('alice','/api/dashboard/editions',{bookId,submissionId:crypto.randomUUID(),confirmedCost:defaultPoints.editionCost});
   assert.equal(edition.status,200);assert.equal(edition.value.changeCount,1);
   assert.equal((await request('alice', '/api/dashboard/cancel', { taskId: edition.value.taskId })).status, 200);
   const state = (await request('bob', '/api/dashboard')).value;

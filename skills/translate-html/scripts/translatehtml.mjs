@@ -1,7 +1,8 @@
 #!/usr/bin/env node
+import {handleBatch} from '../../scriptahub-tasks/shared/batch-io.mjs';
 import { parseArgs } from 'node:util';
 const help =
-  'Usage: translatehtml doctor | prepare INPUT --to TAG [--from TAG] [--output FILE] [--job-dir DIR] | status JOB | build JOB [--overwrite] | validate SOURCE --html FILE --to TAG';
+  'Usage: translatehtml doctor | prepare INPUT --to TAG [--from TAG] [--output FILE] [--job-dir DIR] | batch-contract JOB --batch NAME | submit-batch JOB --batch NAME --batch-sha256 SHA [--replace-sha256 SHA] < analysis.json | status JOB | build JOB [--overwrite] | validate SOURCE --html FILE --to TAG';
 try {
   if (Number(process.versions.node.split('.')[0]) < 22)
     throw Error('Node.js >=22 is required. See dependencies.md.');
@@ -26,6 +27,8 @@ try {
     process.exit(0);
   }
   const specs = {
+    'batch-contract': {batch:{type:'string'}},
+    'submit-batch': {batch:{type:'string'},'batch-sha256':{type:'string'},'replace-sha256':{type:'string'}},
     doctor: {},
     status: {},
     prepare: {
@@ -83,6 +86,7 @@ try {
       output: values.output,
       jobDir: values['job-dir']
     });
+  else if (['batch-contract','submit-batch'].includes(command)) result = await handleBatch(command,input,values,'translate-html',await import('../src/batch-schema.mjs'));
   else if (command === 'status') result = await core.jobStatus(input);
   else if (command === 'build')
     result = await core.buildJob(input, { overwrite: values.overwrite });
@@ -91,7 +95,7 @@ try {
       targetLanguage: core.normalizeLanguage(values.to)
     });
   console.log(JSON.stringify(result, null, 2));
-  process.exitCode = result.status === 'failed' ? 1 : 0;
+  process.exitCode = ['failed','rejected'].includes(result.status) ? 1 : 0;
 } catch (error) {
   console.error('translatehtml: ' + error.message);
   process.exitCode = 1;

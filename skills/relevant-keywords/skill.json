@@ -8,7 +8,9 @@
     "html-keywords",
     "keyword-extraction"
   ],
-  "dependsOn": [],
+  "dependsOn": [
+    "scriptahub-tasks"
+  ],
   "outputs": [
     "relevantKeywords.txt"
   ],
@@ -18,5 +20,15 @@
     "scripts/relevantkeywords.mjs",
     "references/synonyms-format.md"
   ],
-  "selfContained": true
+  "selfContained": false,
+  "batchSubmission": {
+    "contractCommand": "batch-contract JOB --batch NAME",
+    "submitCommand": "submit-batch JOB --batch NAME --batch-sha256 SHA",
+    "payload": "JSON on stdin",
+    "validation": "Exact per-batch schema and native validation before atomic save; accepted results are immutable",
+    "correction": "Optional --replace-sha256 with the current result digest for an evidenced correction; stale replacements are refused"
+  },
+  "sourceDependencies": [
+    "scriptahub-tasks/shared"
+  ]
 }

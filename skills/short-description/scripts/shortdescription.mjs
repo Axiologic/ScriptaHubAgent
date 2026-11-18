@@ -1,7 +1,8 @@
 #!/usr/bin/env node
+import {handleBatch} from '../../scriptahub-tasks/shared/batch-io.mjs';
 import { parseArgs } from 'node:util';
 
-const help = 'Usage: shortdescription doctor | prepare INPUT [--language TAG] [--output FILE] [--job-dir DIR] | status JOB | build JOB [--overwrite] | validate SOURCE --html FILE [--language TAG]';
+const help = 'Usage: shortdescription doctor | prepare INPUT [--language TAG] [--output FILE] [--job-dir DIR] | batch-contract JOB --batch NAME | submit-batch JOB --batch NAME --batch-sha256 SHA [--replace-sha256 SHA] < analysis.json | status JOB | build JOB [--overwrite] | validate SOURCE --html FILE [--language TAG]';
 try {
   if (Number(process.versions.node.split('.')[0]) < 22) throw new Error('Node.js >=22 is required. See dependencies.md.');
   let core, validation;
@@ -10,6 +11,8 @@ try {
   const command = process.argv[2];
   if (['--help', '-h'].includes(command)) { console.log(help); process.exit(0); }
   const specs = {
+    'batch-contract': {batch:{type:'string'}},
+    'submit-batch': {batch:{type:'string'},'batch-sha256':{type:'string'},'replace-sha256':{type:'string'}},
     doctor: {}, status: {},
     prepare: { language: { type: 'string' }, output: { type: 'string' }, 'job-dir': { type: 'string' } },
     build: { overwrite: { type: 'boolean' } },
@@ -26,9 +29,10 @@ try {
   let result;
   if (command === 'doctor') result = { status: 'ok', node: process.versions.node, htmlparser2: '10.0.0' };
   else if (command === 'prepare') result = await core.prepareJob(input, { language: values.language, output: values.output, jobDir: values['job-dir'] });
+  else if (['batch-contract','submit-batch'].includes(command)) result = await handleBatch(command,input,values,'short-description',await import('../src/batch-schema.mjs'));
   else if (command === 'status') result = await core.jobStatus(input);
   else if (command === 'build') result = await core.buildJob(input, { overwrite: values.overwrite });
   else result = await validation.validateShortDescription(input, values.html, { expectedLanguage: values.language });
   console.log(JSON.stringify(result, null, 2));
-  process.exitCode = result.status === 'failed' ? 1 : 0;
+  process.exitCode = ['failed','rejected'].includes(result.status) ? 1 : 0;
 } catch (error) { console.error(`shortdescription: ${error.message}`); process.exitCode = 1; }

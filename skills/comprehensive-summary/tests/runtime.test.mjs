@@ -12,6 +12,7 @@ test('portable CLI, startup diagnostics and argument validation', async t => {
   );
   t.after(() => fs.rm(dir, { recursive: true, force: true }));
   const copy = path.join(dir, 'copy');
+  await fs.cp(new URL('../../scriptahub-tasks/shared/',import.meta.url),path.join(dir,'scriptahub-tasks/shared'),{recursive:true});
   for (const n of ['src', 'scripts', 'external', 'assets'])
     await fs.cp(path.join(skill, n), path.join(copy, n), { recursive: true });
   const script = path.join(copy, 'scripts/comprehensivesummary.mjs');

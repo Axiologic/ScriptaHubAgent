@@ -15,3 +15,8 @@ When changing behavior, update `SKILL.md`, `README.md`, `DS.md`, `references/job
 Follow the coding style and runtime section in [DS.md](DS.md). Use .mjs modules
 and Node.js built-ins; document bundled dependency exceptions in dependencies.md.
 Run `node --test tests/*.test.mjs`, syntax checks and `scripts/comprehensivesummary doctor`.
+
+
+## Shared module dependency
+
+Batch admission and common schema builders live in `skills/scriptahub-tasks/shared/batch-io.mjs`. Import that module directly; do not copy or generate a batch-io.mjs inside this skill. Keep the skill-specific adapter here. Distribution must include the declared sibling shared dependency; this rule supersedes the former all-resources-inside-one-folder requirement for batch admission.

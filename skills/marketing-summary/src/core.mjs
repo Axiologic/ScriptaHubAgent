@@ -8,8 +8,8 @@ import { parse, elements, first, named, has, meta, compact, textOf, remove, esca
 export class MarketingSummaryError extends Error {}
 const fail = message => { throw new MarketingSummaryError(message); };
 const semanticTags = new Set(['h1', 'h2', 'h3', 'h4', 'h5', 'h6', 'p', 'li', 'blockquote', 'figcaption', 'caption', 'th', 'td']);
-const themeTypes = new Set(['premise', 'question', 'stakes', 'approach', 'atmosphere', 'starting-conflict', 'reader-fit']);
-const revelationTypes = new Set(['answer', 'conclusion', 'solution', 'recommendation', 'twist', 'resolution', 'outcome']);
+export const themeTypes = new Set(['premise', 'question', 'stakes', 'approach', 'atmosphere', 'starting-conflict', 'reader-fit']);
+export const revelationTypes = new Set(['answer', 'conclusion', 'solution', 'recommendation', 'twist', 'resolution', 'outcome']);
 const nonContent = /\b(contents?|cuprins|sommaire|indice|inhaltsverzeichnis|bibliograph(?:y|ie)|bibliograf(?:ie|ia)|references?|referințe|copyright|drepturi de autor|impressum)\b/iu;
 export const sha256 = bytes => createHash('sha256').update(bytes).digest('hex');
 export const fileSha256 = async file => sha256(await fs.readFile(file));

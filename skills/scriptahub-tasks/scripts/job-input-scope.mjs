@@ -33,11 +33,11 @@ export async function jobInputScope(root, {skill,args,taskDirectory,virtualCwd,s
     return name;
   };
   const {values,positionals:[input]} = parseArgs({args:args.slice(1),allowPositionals:true,
-    options:{...Object.fromEntries(['language','minutes','wpm','count','synonyms','job-dir','output','html','to','from'].map(name=>[name,{type:'string'}])),overwrite:{type:'boolean'},help:{type:'boolean',short:'h'}}});
+    options:{...Object.fromEntries(['batch','batch-sha256','replace-sha256','language','minutes','wpm','count','synonyms','job-dir','output','html','to','from'].map(name=>[name,{type:'string'}])),overwrite:{type:'boolean'},help:{type:'boolean',short:'h'}}});
   const option = flag => values[flag.slice(2)];
   const addFile = value => { const name=relative(value); files.add(name); return name; };
   const prepare = ['prepare','analyze'].includes(args[0]);
-  const jobCommand = prepare || ['status','build'].includes(args[0]);
+  const jobCommand = prepare || ['status','build','batch-contract','submit-batch'].includes(args[0]);
   if (jobCommand) {
     const jobPath = prepare ? option('--job-dir') : input;
     if (!jobPath) throw Error('Remote editorial preparation requires --job-dir to isolate parallel jobs');

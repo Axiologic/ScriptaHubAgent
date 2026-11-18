@@ -18,7 +18,10 @@ export async function processingRuntime(root = '/opt/scriptahub/runtime') {
   const sourceDigests={};
   for (const skill of installed.skills) {
     if (typeof skill !== 'string' || !/^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(skill)) fail('Invalid installed skill receipt');
-    const entries=Object.entries(source).filter(([name])=>name.startsWith(skill+'/')).sort(([a],[b])=>a<b?-1:a>b?1:0);
+    const dependencies=installed.sourceDependencies?.[skill]||[];
+    if(!Array.isArray(dependencies)||dependencies.some(prefix=>typeof prefix!=='string'||!/^scriptahub-tasks\/shared$/.test(prefix)))fail('Invalid skill source dependencies');
+    for(const prefix of dependencies)if(!source[prefix+'/batch-io.mjs'])fail('Missing shared skill source receipt');
+    const entries=Object.entries(source).filter(([name])=>name.startsWith(skill+'/')||dependencies.some(prefix=>name.startsWith(prefix+'/'))).sort(([a],[b])=>a<b?-1:a>b?1:0);
     if (!entries.length || entries.some(([name,hash])=>name.includes('\\') || name.split('/').some(part=>!part||part==='.'||part==='..') || !/^[a-f0-9]{64}$/.test(hash))) fail('Invalid skill source receipt');
     sourceDigests[skill]=sha256(JSON.stringify(Object.fromEntries(entries)));
   }

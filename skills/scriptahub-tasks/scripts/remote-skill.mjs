@@ -283,8 +283,20 @@ export async function runRemoteSkill(input,call,{root=process.cwd(),sourceRoot=p
     if(!Array.isArray(supported)||!supported.length||supported.some(command=>typeof command!=='string'||!/^[a-z][a-z0-9-]*$/.test(command)))throw Error('The service must advertise its skill command contract before processing. Update the service and helper together.');
     if(args.includes('--help')) {stdout.write(JSON.stringify({skill,commands:supported,usage:'Read this skill’s SKILL.md for command arguments.'})+'\n');return 0;}
     if(!supported.includes(args[0]))throw Error(`Unsupported ${skill} command: ${args[0] || '(missing)'}. Supported commands: ${supported.join(', ')}.`);
-    const skillDir=await findSkill(sourceRoot,skill);let source;try{source=await inventory(skillDir,{source:true,skill});}finally{await skillDir.close();}
-    const sourceMap=Object.fromEntries(source.map(e=>[skill+'/'+e.path,e.sha256]));if(!source.length)throw new Error('Selected skill source is empty');
+    const skillDir=await findSkill(sourceRoot,skill);let source,dependencies=[];
+    try {
+      source=await inventory(skillDir,{source:true,skill});
+      try {const descriptor=await readJson(skillDir,'skill.json');dependencies=descriptor.sourceDependencies||[];}
+      catch(error){if(error.code!=='ENOENT')throw error;}
+    }finally{await skillDir.close();}
+    if(!Array.isArray(dependencies)||dependencies.some(prefix=>prefix!=='scriptahub-tasks/shared'))throw Error('Invalid skill source dependencies');
+    const entries=source.map(e=>[skill+'/'+e.path,e.sha256]);if(!source.length)throw new Error('Selected skill source is empty');
+    for(const prefix of new Set(dependencies)) {
+      const owner=await findSkill(sourceRoot,'scriptahub-tasks');let shared;
+      try {shared=await openDir(owner,'shared');const files=await inventory(shared,{source:true,skill});if(!files.some(file=>file.path==='batch-io.mjs'))throw Error('Shared batch module is unavailable');entries.push(...files.map(e=>[prefix+'/'+e.path,e.sha256]));}
+      finally {await shared?.close();await owner.close();}
+    }
+    const sourceMap=Object.fromEntries(entries.sort(([a],[b])=>a<b?-1:a>b?1:0));
     const files=args.length===1&&args[0]==='doctor'&&!stdin?[]:await inventory(taskRoot,{hook,scope}),manifest=Buffer.from(JSON.stringify(files));if(manifest.length>8*1024*1024)throw new Error('Manifest too large');
     journal={commandHash,command,jobId:crypto.randomUUID(),sourceDigest:digest(JSON.stringify(sourceMap)),inputScope,files,manifest:manifest.toString('base64'),phase:'uploading'};await atomic(control,'pending.json',journal,{exclusive:true});freshJournal=true;
   }

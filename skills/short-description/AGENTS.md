@@ -19,3 +19,8 @@ Never install dependencies during startup.
 Node.js runs the skill and its tests. The HTML parser is bundled.
 Run `node --test tests/equivalence.test.mjs`. Frozen JSON fixtures preserve
 the original outputs; see tests/fixtures/README.md for provenance.
+
+
+## Shared module dependency
+
+Batch admission and common schema builders live in `skills/scriptahub-tasks/shared/batch-io.mjs`. Import that module directly; do not copy or generate a batch-io.mjs inside this skill. Keep the skill-specific adapter here. Distribution must include the declared sibling shared dependency; this rule supersedes the former all-resources-inside-one-folder requirement for batch admission.

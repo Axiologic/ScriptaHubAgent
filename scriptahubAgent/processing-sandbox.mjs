@@ -1,13 +1,13 @@
 import path from 'node:path';
 
 const commands = Object.freeze({
-  'comprehensive-summary':['doctor','prepare','status','build','validate'],
+  'comprehensive-summary':['doctor','batch-contract','submit-batch','prepare','status','build','validate'],
   doc2pdf:['doctor','convert','validate'], html2doc:['doctor','convert','validate'],
   'humanise-html':['doctor','prepare','status','build','validate','repair'],
-  'marketing-summary':['doctor','prepare','status','build','validate'],
-  pdf2html:['doctor','convert','check','decorations','fonts'], 'relevant-keywords':['doctor','analyze','status','build'],
-  'short-description':['doctor','prepare','status','build','validate'],
-  'translate-html':['doctor','prepare','status','build','validate','repair'],
+  'marketing-summary':['doctor','batch-contract','submit-batch','prepare','status','build','validate'],
+  pdf2html:['doctor','convert','check','decorations','fonts'], 'relevant-keywords':['doctor','batch-contract','submit-batch','analyze','status','build'],
+  'short-description':['doctor','batch-contract','submit-batch','prepare','status','build','validate'],
+  'translate-html':['doctor','batch-contract','submit-batch','prepare','status','build','validate','repair'],
   'validate-book':['doctor','prepare','status','report','complete','complete-plan','complete-status','compare-edition'],
   'theatrical-audio':['providers','plan','validate','say','draft','render','verify','preview','voices','doctor'],
   'shf-presentation-creator':['install-player','analyze','compile','validate','voice-tasks','attach-voice','catalog','music','captions'],

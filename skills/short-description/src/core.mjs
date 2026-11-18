@@ -7,8 +7,8 @@ import { parse, elements, first, named, has, meta, compact, textOf, remove, esca
 export class ShortDescriptionError extends Error {}
 const fail = message => { throw new ShortDescriptionError(message); };
 const semanticTags = new Set(['h1', 'h2', 'h3', 'h4', 'h5', 'h6', 'p', 'li', 'blockquote', 'figcaption', 'caption', 'th', 'td']);
-const themeTypes = new Set(['subject', 'scope', 'context', 'question', 'tension', 'premise', 'setting', 'character', 'starting-conflict']);
-const revelationTypes = new Set(['answer', 'solution', 'conclusion', 'recommendation', 'verdict', 'twist', 'identity', 'resolution', 'outcome', 'fate', 'ending']);
+export const themeTypes = new Set(['subject', 'scope', 'context', 'question', 'tension', 'premise', 'setting', 'character', 'starting-conflict']);
+export const revelationTypes = new Set(['answer', 'solution', 'conclusion', 'recommendation', 'verdict', 'twist', 'identity', 'resolution', 'outcome', 'fate', 'ending']);
 const nonContent = /\b(contents?|cuprins|sommaire|indice|inhaltsverzeichnis|bibliograph(?:y|ie)|bibliograf(?:ie|ia)|references?|referințe|copyright|drepturi de autor|impressum)\b/iu;
 export const sha256 = bytes => createHash('sha256').update(bytes).digest('hex');
 export const fileSha256 = async file => sha256(await fs.readFile(file));
