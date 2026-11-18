@@ -38,3 +38,26 @@ test('each dependent runtime digest includes shared bytes and unrelated source s
   installed.sourceDependencies['short-description']=['../outside'];await fs.writeFile(path.join(directory,'installed.json'),JSON.stringify(installed));
   await assert.rejects(processingRuntime(directory),/Invalid skill source dependencies/);
 });
+
+test('image dependency discovery accepts callable skills without optional descriptors',async()=>{
+  const {skillDependencies}=await import('../deployment/skill-source.mjs');
+  const config=JSON.parse(await fs.readFile(path.join(root,'scriptahubAgent/deployment/skills-runtime.json')));
+  const dependencies=await skillDependencies(path.join(root,'skills'),config.skills,{'scriptahub-tasks/shared/batch-io.mjs':'a'.repeat(64)});
+  assert.deepEqual(Object.keys(dependencies).sort(),[...skills].sort());
+  assert.equal(Object.hasOwn(dependencies,'shf-presentation-creator'),false);
+});
+
+test('optional descriptor handling still rejects malformed JSON and missing or invalid dependencies',async t=>{
+  const {skillDependencies}=await import('../deployment/skill-source.mjs');
+  const directory=await fs.mkdtemp(path.join(os.tmpdir(),'skill-dependencies-'));
+  t.after(()=>fs.rm(directory,{recursive:true,force:true}));
+  await fs.mkdir(path.join(directory,'sample'));const metadata=path.join(directory,'sample/skill.json');
+  await fs.writeFile(metadata,'{bad JSON');
+  await assert.rejects(skillDependencies(directory,['sample'],{}),SyntaxError);
+  await fs.writeFile(metadata,JSON.stringify({sourceDependencies:['../outside']}));
+  await assert.rejects(skillDependencies(directory,['sample'],{}),/Invalid skill source dependencies/);
+  await fs.writeFile(metadata,JSON.stringify({sourceDependencies:['scriptahub-tasks/shared']}));
+  await assert.rejects(skillDependencies(directory,['sample'],{}),/Missing shared batch module/);
+  await fs.unlink(metadata);await fs.mkdir(metadata);
+  await assert.rejects(skillDependencies(directory,['sample'],{}),{code:'EISDIR'});
+});

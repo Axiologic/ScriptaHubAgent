@@ -3,7 +3,7 @@ import path from 'node:path';
 import os from 'node:os';
 import { createHash } from 'node:crypto';
 import { spawn } from 'node:child_process';
-import { skillSource } from './skill-source.mjs';
+import { skillSource, skillDependencies } from './skill-source.mjs';
 import { prepareNativeNotices } from './prepare-native-notices.mjs';
 import { installBuiltNative } from './install-built-native.mjs';
 
@@ -25,14 +25,8 @@ async function asset(filename, expected) {
   await fs.mkdir(path.dirname(filename),{recursive:true});await fs.writeFile(filename,bytes,{mode:0o644});
 }
 const skills=path.join(root,'skills'), pdf=path.join(skills,'pdf2html');
-const source=await skillSource(skills),sourceDependencies={};
-for(const skill of config.skills) {
-  const descriptor=JSON.parse(await fs.readFile(path.join(skills,skill,'skill.json'),'utf8'));
-  const dependencies=descriptor.sourceDependencies||[];
-  if(!Array.isArray(dependencies)||dependencies.some(prefix=>prefix!=='scriptahub-tasks/shared'))throw Error('Invalid skill source dependencies: '+skill);
-  for(const prefix of dependencies)if(!source[prefix+'/batch-io.mjs'])throw Error('Missing shared batch module for '+skill);
-  if(dependencies.length)sourceDependencies[skill]=dependencies;
-}
+const source=await skillSource(skills);
+const sourceDependencies=await skillDependencies(skills,config.skills,source);
 await fs.writeFile(path.join(root,'source.json'),JSON.stringify(source)+'\n');
 const platform=`${process.platform}-${process.arch}`;
 await installBuiltNative(root,config,platform);

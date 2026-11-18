@@ -23,3 +23,20 @@ export async function skillSource(root) {
   }
   await visit();return Object.fromEntries(Object.entries(result).sort(([a],[b])=>a<b?-1:a>b?1:0));
 }
+
+
+// Some callable skills use SKILL.md only; metadata is optional, but an existing
+// descriptor must still parse and every declared dependency must be present.
+export async function skillDependencies(root,skills,source) {
+  const result={};
+  for(const skill of skills) {
+    let descriptor={};
+    try {descriptor=JSON.parse(await fs.readFile(path.join(root,skill,'skill.json'),'utf8'));}
+    catch(error){if(error.code!=='ENOENT')throw error;}
+    const dependencies=descriptor.sourceDependencies||[];
+    if(!Array.isArray(dependencies)||dependencies.some(prefix=>prefix!=='scriptahub-tasks/shared'))throw Error('Invalid skill source dependencies: '+skill);
+    for(const prefix of dependencies)if(!source[prefix+'/batch-io.mjs'])throw Error('Missing shared batch module for '+skill);
+    if(dependencies.length)result[skill]=dependencies;
+  }
+  return result;
+}
