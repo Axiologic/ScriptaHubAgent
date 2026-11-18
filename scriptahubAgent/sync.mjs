@@ -1,3 +1,5 @@
+import { combineCollections } from './catalogue-keywords.mjs';
+export { combineCollections } from './catalogue-keywords.mjs';
 import fs from 'node:fs/promises';
 import path from 'node:path';
 import crypto from 'node:crypto';
@@ -33,38 +35,6 @@ export async function snapshotFingerprint(config) {
   return hash.digest('hex');
 }
 
-function slug(value) {
-  return String(value).normalize('NFKD').replace(/[\u0300-\u036f]/g, '').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '') || 'keyword';
-}
-
-export function combineCollections(books) {
-  const keywords = {};
-  for (const code of langCodes) {
-    const counts = new Map();
-    for (const book of books) {
-      if (!Array.isArray(book.keywordIds) || !Array.isArray(book.keywords?.[code]) || book.keywordIds.length !== book.keywords[code].length) {
-        throw new Error(`Invalid keyword catalogue for ${book.id} (${code})`);
-      }
-      for (let i = 0; i < book.keywordIds.length; i++) {
-        const id = book.keywordIds[i];
-        const label = book.keywords[code][i];
-        if (typeof id !== 'string' || typeof label !== 'string') throw new Error(`Invalid keyword in ${book.id}`);
-        const existing = counts.get(id);
-        // ScriptaHub's catalogue uses the first label for a shared keyword ID;
-        // later books may vary its case or wording in the same language.
-        counts.set(id, { id, label: existing?.label || label, slug: existing?.slug || slug(label), count: (existing?.count || 0) + 1 });
-      }
-    }
-    const values = [...counts.values()].sort((a, b) => b.count - a.count || a.label.localeCompare(b.label, code) || a.id.localeCompare(b.id));
-    const used = new Set();
-    for (const item of values) {
-      if (used.has(item.slug)) item.slug += `--${slug(item.id)}`;
-      used.add(item.slug);
-    }
-    keywords[code] = values;
-  }
-  return { schemaVersion: 1, supportedLanguages: languages.map(([code, name]) => ({ code, name })), bookCount: books.length, books, keywords };
-}
 
 async function regularFile(root, relative) {
   const parts = safeRelative(relative).split('/');

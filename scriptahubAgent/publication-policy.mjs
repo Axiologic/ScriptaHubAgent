@@ -2,7 +2,7 @@ import {translationOutcome} from './translation-outcome.mjs';
 import { isDeepStrictEqual } from 'node:util';
 import { packagePath, publicationError as fail, sha256 } from './publication-transfer.mjs';
 import { validateContentBook } from './content-v2.mjs';
-import { combineCollections } from './sync.mjs';
+import { validateCatalogueKeywords } from './catalogue-keywords.mjs';
 
 // The catalogue URL, not an executor-supplied remote, selects the Git destination.
 export function publicationTarget(catalogue, branch) {
@@ -94,16 +94,9 @@ export function checkPublicationPackage(manifest, target, bytes, oldCollection, 
     }
     if (Object.keys(collection).some(key => !Object.hasOwn(oldCollection,key) && !['books','bookCount','keywords'].includes(key))) fail('Unexpected catalogue field');
   } else if (collection.schemaVersion !== 2 || collection.books.length !== 1) fail('A new catalogue must use schema 2 and contain only the claimed book');
-  if (collection.schemaVersion === 1 && collection.keywords) {
-    const expected = combineCollections(collection.books).keywords;
-    for (const [language,entries] of Object.entries(expected)) {
-      const actual = collection.keywords[language];
-      if (!Array.isArray(actual) || actual.length !== entries.length || new Set(actual.map(item => item.id)).size !== actual.length) fail('Invalid catalogue keyword index');
-      const counts = new Map(entries.map(item => [item.id,item.count]));
-      // Index order and label capitalization do not change keyword membership.
-      if (actual.some(item => counts.get(item.id) !== item.count || typeof item.label !== 'string' || typeof item.slug !== 'string')) fail('Catalogue keyword counts do not match its books');
-    }
-  }
+  try { validateCatalogueKeywords(collection); }
+  catch (error) { fail(error.message, 400); }
+
   const book = collection.books.find(book => book.id === manifest.bookId);
   if (editing && (book.directory !== previousBook.directory || book.path !== previousBook.path)) fail('An edit cannot relocate the book');
   let allowed;

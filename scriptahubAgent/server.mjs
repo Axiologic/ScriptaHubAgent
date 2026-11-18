@@ -47,6 +47,7 @@ function remoteRoutes(siteRoot) {
   try { data = JSON.parse(fs.readFileSync(path.join(siteRoot, '..', 'remote-books.json'), 'utf8')); }
   catch (error) { if (error.code === 'ENOENT') return []; throw error; }
   if (data.schemaVersion !== 1 || !Array.isArray(data.books)) throw new Error('Invalid remote book routes');
+  const catalogue = JSON.parse(fs.readFileSync(path.join(siteRoot, 'collection.json'), 'utf8'));
   for (const route of data.books) {
     safeRelative(route.directory, 'books');
     const url = new URL(route.baseUrl);
@@ -54,12 +55,24 @@ function remoteRoutes(siteRoot) {
     if (route.format === 'content-v2') {
       validateContentBook(route.document);
       if (route.document.legacyDirectory !== route.directory || route.document.id !== route.book?.id || route.canonicalDirectory !== `books/${route.book.id}`) throw new Error('Invalid content book route');
-    }
+    } else route.book = catalogue.books.find(book => book.directory === route.directory);
   }
   return data.books.sort((a, b) => b.directory.length - a.directory.length);
 }
 
 async function serveRemoteBook(req, res, relative, route, target = relative) {
+  const language = Object.keys(route.book?.editions || {}).find(code => route.book.editions[code].book === relative);
+  const editions = Object.values(route.book?.editions || {});
+  // A legacy book.html may contain the manuscript itself. The agent owns the
+  // landing page whenever the catalogue declares independently readable resources.
+  if (language && editions.some(edition => edition.fullContent || edition.shortContent)
+    && !editions.some(edition => edition.fullContent === relative || edition.shortContent === relative)) {
+    const html = renderBookPage(route.book, language, relative);
+    res.writeHead(200, { 'content-type': 'text/html; charset=utf-8', 'cache-control': 'no-store',
+      'content-length': Buffer.byteLength(html), 'x-content-type-options': 'nosniff' });
+    res.end(req.method === 'HEAD' ? undefined : html);
+    return;
+  }
   const controller = new AbortController();
   const disconnected = () => { if (!res.writableEnded) controller.abort(); };
   res.once('close', disconnected);

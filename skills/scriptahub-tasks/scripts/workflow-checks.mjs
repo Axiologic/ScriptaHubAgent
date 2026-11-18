@@ -1,3 +1,4 @@
+import { validateCatalogueKeywords } from './catalogue-keywords.mjs';
 import {withExecutionLock} from './anchored-files.mjs';
 import {guardRemoteBackups} from './remote-skill.mjs';
 import fs from 'node:fs/promises';
@@ -108,6 +109,7 @@ export async function verifyPackage(input,{hook=async()=>{}}={}) {
   if(!names.has(collectionPath))throw new Error('Inventory must contain the catalogue update');
   const collection=JSON.parse(await fs.readFile(path.join(root,collectionPath),'utf8'));
   if(![1,2].includes(collection.schemaVersion)||!Array.isArray(collection.books)||collection.bookCount!==collection.books.length||new Set(collection.books.map(b=>b.id)).size!==collection.books.length||!collection.books.some(b=>b.id===input.bookId))throw new Error('Catalogue structure or task identity is invalid');
+  validateCatalogueKeywords(collection);
   const remote=`https://github.com/${match[1]}/${match[2]}.git`;
   const refs=await runGit(['ls-remote',remote]);
   const head=refs.split('\n').find(line=>line.split('\t')[1]==='refs/heads/'+input.branch)?.split('\t')[0]||null;

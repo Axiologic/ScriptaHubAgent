@@ -5,6 +5,7 @@ import path from 'node:path';
 import os from 'node:os';
 import crypto from 'node:crypto';
 import {insideRun, writeHandoff, requirePreflight, verifyPackage} from '../scripts/workflow-checks.mjs';
+import {combineCollections, validateCatalogueKeywords} from '../scripts/catalogue-keywords.mjs';
 
 async function inRun(callback) {
   const previous = process.cwd();
@@ -13,6 +14,7 @@ async function inRun(callback) {
   finally { process.chdir(previous); await fs.rm(root, {recursive:true, force:true}); }
 }
 const context = {executionId:'execution-one', runId:'run-one', taskId:'task-one', bookId:'book-one'};
+const emptyKeywords = Object.fromEntries(['en','fr','de','es','pt','it','ro','pl'].map(code => [code, []]));
 
 test('durable handoffs preserve execution identity and reject secrets, oversized context and symlinks', async () => inRun(async root => {
   const saved = await writeHandoff({step:'prepare-manuscript', context});
@@ -65,10 +67,39 @@ test('batch item handoffs isolate identities and reject directories outside the 
   await assert.rejects(writeHandoff({step:'apply-edit',directory:'tasks/task-one',context:secondContext}),/another execution/);
 }));
 
+test('package verification rejects incomplete keyword metadata and stale counts before remote access', async () => inRun(async () => {
+  await fs.mkdir('package');
+  const labels = Object.fromEntries(['en','fr','de','es','pt','it','ro','pl'].map(code=>[code,['Dacians']]));
+  const book = {id:context.bookId,keywordIds:['term:dacians'],keywords:labels};
+  const collection = combineCollections([book]);
+  validateCatalogueKeywords(collection);
+  const input = {...context,packageRoot:'package',inventory:'inventory.json',
+    catalogue:'https://github.com/example/books/blob/main/collection.json',branch:'main'};
+  for (const [mutate, pattern] of [
+    [value=>delete value.keywords,/Missing or invalid catalogue keyword index/],
+    [value=>{value.keywords=null;},/Missing or invalid catalogue keyword index/],
+    [value=>delete value.books[0].keywordIds,/Invalid keyword catalogue/],
+    [value=>delete value.books[0].keywords.ro,/Invalid keyword catalogue/],
+    [value=>{value.keywords.en=[];},/Invalid catalogue keyword index/],
+    [value=>{value.keywords.en[0].count=2;},/keyword counts/],
+  ]) {
+    const candidate=structuredClone(collection);mutate(candidate);
+    const bytes=Buffer.from(JSON.stringify(candidate));
+    await fs.writeFile('package/collection.json',bytes);
+    await fs.writeFile('inventory.json',JSON.stringify({executionId:context.executionId,baseCommit:null,
+      files:[{path:'collection.json',size:bytes.length,sha256:crypto.createHash('sha256').update(bytes).digest('hex')}]}));
+    await assert.rejects(verifyPackage(input),pattern);
+  }
+  assert.throws(()=>combineCollections([{...book,keywordIds:['term:dacians','term:dacians']}]),/Invalid keyword catalogue/);
+  const shared=combineCollections([book,{...book,id:'another-book'}]);
+  assert.equal(shared.keywords.en[0].count,2);
+  validateCatalogueKeywords(shared);
+}));
+
 test('a sparse non-Git publication package keeps its validated baseline when the remote advances',async()=>inRun(async root=>{
  const originalPath=process.env.PATH;
  try{
-  const sha='a'.repeat(40),head='b'.repeat(40),collection={schemaVersion:1,bookCount:1,books:[{id:context.bookId,directory:'books/current/'+context.bookId}]};
+  const sha='a'.repeat(40),head='b'.repeat(40),collection=combineCollections([{id:context.bookId,directory:'books/current/'+context.bookId,keywordIds:[],keywords:emptyKeywords}]);
   await fs.mkdir('package');await fs.mkdir('bin');
   await fs.writeFile('package/collection.json',JSON.stringify(collection));await fs.writeFile('package/book.html','current book');
   const files=[];for(const name of ['collection.json','book.html']){const bytes=await fs.readFile('package/'+name);files.push({path:name,size:bytes.length,sha256:crypto.createHash('sha256').update(bytes).digest('hex')});}
@@ -86,7 +117,7 @@ test('generated HTML is accepted without PDF only after a strict native reader/l
   const sha='b'.repeat(40);await fs.mkdir('package');await fs.mkdir('bin');await fs.mkdir('tasks/a/run-state',{recursive:true});
   await fs.writeFile('tasks/a/run-state/claimed.json',JSON.stringify({task:{type:'scriptahub.book-proposal',executionId:context.executionId,bookId:context.bookId}}));
   await fs.writeFile('package/book.html','<!doctype html><html lang="ro"><body><main><p>Cartea generată.</p></main></body></html>');
-  await fs.writeFile('package/collection.json',JSON.stringify({schemaVersion:1,bookCount:1,books:[{id:context.bookId,directory:'books/current/'+context.bookId}]}));
+  await fs.writeFile('package/collection.json',JSON.stringify(combineCollections([{id:context.bookId,directory:'books/current/'+context.bookId,keywordIds:[],keywords:emptyKeywords}])));
   const files=[];for(const name of ['collection.json','book.html']){const bytes=await fs.readFile('package/'+name);files.push({path:name,size:bytes.length,sha256:crypto.createHash('sha256').update(bytes).digest('hex')});}
   await fs.writeFile('inventory.json',JSON.stringify({executionId:context.executionId,baseCommit:sha,files}));
   await fs.writeFile('bin/git',`#!${process.execPath}\nif(process.argv.includes('ls-remote'))process.stdout.write('${sha}\\trefs/heads/main\\n');else process.exit(99);\n`,{mode:0o700});process.env.PATH=path.join(root,'bin')+path.delimiter+savedPath;

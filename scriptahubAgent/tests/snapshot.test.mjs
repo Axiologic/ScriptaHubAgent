@@ -181,3 +181,100 @@ test('content-only HTTP repository is read on demand and the running site switch
   assert.equal(await activeSite(dataDir), priorSite);
 });
 
+test('legacy reader resources use the agent landing page at the original URL, including existing snapshots', async t => {
+  const root = await fs.mkdtemp(path.join(os.tmpdir(),'scripta-legacy-reader-'));
+  const source = await fixture(path.join(root,'published'),'bk-legacy');
+  const directory = source.book.directory;
+  source.book.title = {ro:'Cartea publicată'};
+  source.book.shortDescription = {ro:'Descrierea cărții'};
+  source.book.editions = {ro:{book:`${directory}/ro/book.html`,fullContent:`${directory}/ro/full_content.html`,shortContent:`${directory}/ro/short_content.html`}};
+  await fs.mkdir(path.join(source.docs,directory,'ro'));
+  const full = '<main data-reader-content>Conținutul integral</main>';
+  const short = '<main data-reader-content>Rezumatul de zece minute</main>';
+  await fs.writeFile(path.join(source.docs,directory,'ro/book.html'),full);
+  await fs.writeFile(path.join(source.docs,directory,'ro/full_content.html'),full);
+  await fs.writeFile(path.join(source.docs,directory,'ro/short_content.html'),short);
+  await fs.writeFile(path.join(source.docs,'collection.json'),JSON.stringify({schemaVersion:1,bookCount:1,books:[source.book]}));
+  const requests = [];
+  const origin = http.createServer(async(req,res)=>{
+    requests.push(req.url);
+    try {res.end(await fs.readFile(path.join(source.docs,new URL(req.url,'http://fixture').pathname)));}
+    catch {res.writeHead(404);res.end();}
+  });
+  await new Promise(resolve=>origin.listen(0,'127.0.0.1',resolve));
+  let server;
+  t.after(async()=>{
+    if(server) await new Promise(resolve=>server.close(resolve));
+    await new Promise(resolve=>origin.close(resolve));
+    await fs.rm(root,{recursive:true,force:true});
+  });
+  const config={schemaVersion:1,repositories:[{id:'legacy',baseUrl:`http://127.0.0.1:${origin.address().port}/`}]};
+  const resolved=await resolveSources(config,{allowLocal:true});
+  const snapshot=await buildSnapshot({config,resolved,dataDir:path.join(root,'data'),allowLocal:true});
+  // Old snapshots did not retain book metadata in their routing manifest.
+  const routesFile=path.join(snapshot.site,'../remote-books.json');
+  const routes=JSON.parse(await fs.readFile(routesFile));delete routes.books[0].book;
+  await fs.writeFile(routesFile,JSON.stringify(routes));
+  server=createSiteServer(snapshot.site);
+  await new Promise(resolve=>server.listen(0,'127.0.0.1',resolve));
+  const base=`http://127.0.0.1:${server.address().port}/base-agent-additional-server/scriptahubAgent/3002/`;
+  const pageUrl=new URL(`${directory}/ro/book.html?lang=ro`,base);
+  const before=requests.length;
+  const response=await fetch(pageUrl),markup=await response.text();
+  assert.equal(response.status,200);assert.equal(response.url,pageUrl.href);
+  assert.match(markup,/Cartea publicată/);
+  assert.match(markup,/data-reading-format="short"/);assert.match(markup,/data-reading-format="read"/);
+  assert.doesNotMatch(markup,/data-download-pdf/);
+  assert.equal(requests.length,before,'landing is rendered without fetching legacy book.html');
+  for(const [format,content] of [['read',full],['short',short]]) {
+    const href=markup.match(new RegExp(`data-reading-format="${format}"[^>]*href="([^"]+)"`))[1].replaceAll('&amp;','&');
+    const reader=new URL(href,pageUrl);
+    assert.equal(reader.pathname,new URL('reader/index.html',base).pathname);
+    assert.equal(reader.searchParams.get('language'),'ro');
+    assert.equal((await fetch(reader)).status,200);
+    assert.equal(await (await fetch(new URL(reader.searchParams.get('html'),reader))).text(),content);
+  }
+  const head=await fetch(pageUrl,{method:'HEAD'});
+  assert.equal(head.status,200);assert.equal(await head.text(),'');
+});
+
+for (const format of ['fullContent', 'shortContent', 'otherLanguage']) {
+  test(`legacy ${format} sharing a book page URL remains readable`, async t => {
+    const root = await fs.mkdtemp(path.join(os.tmpdir(), 'scripta-legacy-shared-'));
+    const site = path.join(root, 'site');
+    await fs.mkdir(site);
+    const directory = 'books/legacy-shared';
+    const resource = `${directory}/en/book.html`;
+    const editions = {en: {book: resource}};
+    if (format === 'otherLanguage') editions.ro = {book: `${directory}/ro/book.html`, fullContent: resource};
+    else editions.en[format] = resource;
+    const book = {id: 'legacy-shared', directory, title: {en: 'Shared resource'}, editions};
+    await fs.writeFile(path.join(site, 'collection.json'), JSON.stringify({schemaVersion: 1, bookCount: 1, books: [book]}));
+    const manuscript = '<main data-reader-content>Original manuscript</main>';
+    const requests = [];
+    const origin = http.createServer((req, res) => {
+      requests.push(req.url);
+      res.setHeader('content-type', 'text/html');
+      res.end(req.method === 'HEAD' ? undefined : manuscript);
+    });
+    let server;
+    t.after(async () => {
+      if (server) await new Promise(resolve => server.close(resolve));
+      await new Promise(resolve => origin.close(resolve));
+      await fs.rm(root, {recursive: true, force: true});
+    });
+    await new Promise(resolve => origin.listen(0, '127.0.0.1', resolve));
+    await fs.writeFile(path.join(root, 'remote-books.json'), JSON.stringify({schemaVersion: 1,
+      books: [{directory, baseUrl: `http://127.0.0.1:${origin.address().port}/`}]}));
+    server = createSiteServer(site);
+    await new Promise(resolve => server.listen(0, '127.0.0.1', resolve));
+    const url = `http://127.0.0.1:${server.address().port}/${resource}`;
+    const response = await fetch(url);
+    assert.equal(response.status, 200);
+    assert.equal(await response.text(), manuscript);
+    const head = await fetch(url, {method: 'HEAD'});
+    assert.equal(head.status, 200);
+    assert.equal(await head.text(), '');
+    assert.deepEqual(requests, [`/${resource}`, `/${resource}`]);
+  });
+}

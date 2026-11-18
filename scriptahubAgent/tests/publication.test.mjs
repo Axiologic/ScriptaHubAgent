@@ -16,6 +16,7 @@ import { publicationTarget, checkPublicationPackage, verifyCatalogueBranch } fro
 import { publicationConfig } from '../publication-config.mjs';
 import { sha256 } from '../publication-transfer.mjs';
 import { sealRecord } from '../record-integrity.mjs';
+import { combineCollections } from '../catalogue-keywords.mjs';
 const exec = promisify(execFile), agent = 'agent:test/processor';
 process.env.SCRIPTA_RECORD_KEY = 'publication-tests-record-key-012345678901234567890';
 async function fixture(t, { schemaVersion = 1, kind = 'manuscript', manageApprovals = false, coverMode, coverImage } = {}) {
@@ -63,6 +64,11 @@ async function fixture(t, { schemaVersion = 1, kind = 'manuscript', manageApprov
     const collection=JSON.parse(files.get('collection.json'));delete collection.books[0].editions.en.pdf;
     files.set('collection.json',Buffer.from(JSON.stringify(collection)));files.delete(directory+'/en/book.pdf');
   }
+  const collection = JSON.parse(files.get('collection.json'));
+  collection.books[0].keywordIds = [];
+  collection.books[0].keywords = Object.fromEntries(['en','fr','de','es','pt','it','ro','pl'].map(code => [code, []]));
+  collection.keywords = combineCollections(collection.books).keywords;
+  files.set('collection.json', Buffer.from(JSON.stringify(collection)));
   const input = {executionId:task.executionId,catalogue,branch:'main',baseCommit,
     files:[...files].map(([path,bytes]) => ({path,size:bytes.length,sha256:sha256(bytes)})),
     validation:{executionId:task.executionId,runId:task.runId,bookId:task.bookId,publicationPermitted:true,audit:{autoCorrect:false,status:'passed_with_warnings',errorFindings:0,...(kind==='book-proposal'?{scope:'html_layout_integrity',nativeScope:'edition_layout_regression',existingFindings:0}:{})}}};
@@ -143,8 +149,10 @@ async function concurrentBook(f, id = 'bk-another') {
   await f.git(f.seed,'merge','--ff-only','origin/main');
   const collectionPath = path.join(f.seed,'collection.json');
   const collection = JSON.parse(await fs.readFile(collectionPath,'utf8'));
-  collection.books.push({id,directory:'books/another/' + id,editions:{}});
+  collection.books.push({id,directory:'books/another/' + id,editions:{},keywordIds:[],
+    keywords:Object.fromEntries(['en','fr','de','es','pt','it','ro','pl'].map(code => [code, []]))});
   collection.bookCount = collection.books.length;
+  collection.keywords = combineCollections(collection.books).keywords;
   await fs.writeFile(collectionPath,JSON.stringify(collection));
   await f.git(f.seed,'add','collection.json');
   await f.git(f.seed,'commit','-m','Publish another book');
@@ -378,6 +386,28 @@ test('keyword index ordering is immaterial but incorrect membership counts are r
   assert.throws(() => checkPublicationPackage(manifest,publicationTarget(f.input.catalogue,'main'),f.files,f.previous),/keyword counts/);
 });
 
+test('missing keyword IDs are an actionable validation error before publication registration', async t => {
+  const f = await fixture(t);
+  const collection = JSON.parse(f.files.get('collection.json'));
+  collection.books[0].keywords = {en:['Dacians']};
+  delete collection.books[0].keywordIds;
+  collection.keywords = {en:[]};
+  f.files.set('collection.json',Buffer.from(JSON.stringify(collection)));
+  const manifest = {...f.input,bookId:f.task.bookId,sourceHashes:f.task.files.map(file=>file.sha256)};
+  assert.throws(()=>checkPublicationPackage(manifest,publicationTarget(f.input.catalogue,'main'),f.files,f.previous),
+    error=>error.status===400 && error.message===`Invalid keyword catalogue for ${f.task.bookId} (en)`);
+});
+
+test('schema 1 publication rejects a missing keyword index', async t => {
+  const f = await fixture(t);
+  const collection = JSON.parse(f.files.get('collection.json'));
+  delete collection.keywords;
+  f.files.set('collection.json', Buffer.from(JSON.stringify(collection)));
+  const manifest = {...f.input, bookId:f.task.bookId, sourceHashes:f.task.files.map(file => file.sha256)};
+  assert.throws(() => checkPublicationPackage(manifest, publicationTarget(f.input.catalogue, 'main'), f.files, f.previous),
+    error => error.status === 400 && /Missing or invalid catalogue keyword index/.test(error.message));
+});
+
 
 test('catalogue branch resolution cannot redirect publication to a shorter matching branch', () => {
   const url = 'https://github.com/example/books/blob/content/stable/collection.json';
@@ -387,9 +417,10 @@ test('catalogue branch resolution cannot redirect publication to a shorter match
 });
 
 test('edit publication changes only its existing book and keeps its content location',()=>{
-  const book={id:'bk-edited',directory:'books/example/bk-edited',editions:{}};
+  const book={id:'bk-edited',directory:'books/example/bk-edited',editions:{},keywordIds:[],
+    keywords:Object.fromEntries(['en','fr','de','es','pt','it','ro','pl'].map(code => [code, []]))};
   const previous={schemaVersion:1,bookCount:1,books:[book]};
-  const collection={...previous,books:[{...book,title:{en:'Edited title'}}]};
+  const collection={...previous,books:[{...book,title:{en:'Edited title'}}],keywords:combineCollections([book]).keywords};
   const target={collection:'collection.json',root:''};
   const manifest={taskType:'scriptahub.edit',bookId:book.id,sourceHashes:[]};
   const baseline={metadata:{id:book.id},history:{bookId:book.id,editions:[]}};
@@ -597,4 +628,11 @@ test('publishing the source and one translated edition retains the omitted-langu
   const {advanceCycles}=await import('../cycle-worker.mjs');const mail=[];
   await advanceCycles(f.store,{apply:async()=>({}),send:async notice=>{mail.push(notice);return {providerMessageId:'test-mail'};},report:message=>assert.fail(message)});
   assert.ok(mail.some(notice=>notice.subject.includes('incomplete translations') && /en, ro.*es.*could not be validated/.test(notice.message)),'the owner must receive the partial-completion warning even when a reward is pending');
+});
+
+test('catalogue validation ships with the service independently of the installed skill image', async () => {
+  const serviceModule = await fs.readFile(new URL('../catalogue-keywords.mjs',import.meta.url),'utf8');
+  const skillModule = await fs.readFile(new URL('../../skills/scriptahub-tasks/scripts/catalogue-keywords.mjs',import.meta.url),'utf8');
+  assert.equal(serviceModule,skillModule,'the separately deployed service and task helper must use identical keyword rules');
+  assert.doesNotMatch(serviceModule,/\/opt\/scriptahub|\.\.\/skills/);
 });
