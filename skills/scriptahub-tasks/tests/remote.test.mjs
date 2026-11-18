@@ -416,3 +416,39 @@ test('out-of-scope result entries are rejected even when unchanged',async t=>{
  };
  await assert.rejects(runRemoteSkill({executionId:'e',taskDirectory:'tasks/a',skill:'pdf2html',args:['prepare']},call,{root:f.root,sourceRoot:f.sources,stdout:f.sink,stderr:f.sink}),/out-of-scope book resource/);
 });
+
+for(const skill of ['short-description','translate-html']) {
+  for(const mutation of ['sibling','sibling-output','source','own-output','own-analysis','foreign-output']) {
+    test(`${skill} parallel snapshot handles ${mutation} writes`,async t=>{
+      const f=await fixture(t);
+      await fs.mkdir(path.join(f.sources,skill));await fs.writeFile(path.join(f.sources,skill,'SKILL.md'),'---\nname: '+skill+'\n---\n');
+      const job=skill==='translate-html'?'translation-jobs/ro/full':'editorial-jobs/short-description';
+      const sibling=skill==='translate-html'?'translation-jobs/es/full/analyses/batch.json':'editorial-jobs/marketing-summary/analyses/batch.json';
+      const ownOutput='outputs/'+skill+'.html',siblingOutput=skill==='translate-html'?'translations/es/full.html':'editorial/marketing-summary.html';
+      const write=async(name,text)=>{await fs.mkdir(path.dirname(path.join(f.task,name)),{recursive:true});await fs.writeFile(path.join(f.task,name),text);};
+      await write('sources/book.html','<main>Immutable source</main>');
+      await write(job+'/job.json',JSON.stringify({source:path.join(f.task,'sources/book.html'),output:path.join(f.task,ownOutput)}));
+      await write(ownOutput,'own output');await write(siblingOutput,'sibling output');
+      await write(job+'/analyses/batch.json','own analysis');await write(sibling,'old sibling');
+      let files;
+      const call=async(tool,arg)=>{
+        if(tool==='scriptahub_skills_preflight')return {ok:true,skillCommands:{[skill]:['status']}};
+        if(tool.endsWith('_upload')&&arg.kind==='manifest')files=JSON.parse(Buffer.from(arg.data,'base64'));
+        if(tool.endsWith('_start')) {
+          assert.equal(files.some(entry=>entry.path===sibling),false);
+          assert.equal(files.some(entry=>entry.path===siblingOutput),false);
+          const target=mutation==='source'?'sources/book.html':mutation==='own-analysis'?job+'/analyses/batch.json':mutation==='own-output'?ownOutput:mutation==='sibling-output'?siblingOutput:sibling;
+          await write(target,'concurrent writer');
+          return {state:'succeeded',exitCode:0,resultDigest:'b'.repeat(64),diagnosticsComplete:true};
+        }
+        if(tool.endsWith('_result'))return {state:'succeeded',resultDigest:'b'.repeat(64),diagnosticsComplete:true,files:mutation==='foreign-output'?[...files,{path:sibling,size:1,sha256:hash('x')}]:files,nextCursor:null};
+        return f.call(tool,arg);
+      };
+      const run=()=>runRemoteSkill({executionId:'e',taskDirectory:'tasks/a',skill,args:['status','tasks/a/'+job]},call,{root:f.root,sourceRoot:f.sources,stdout:f.sink,stderr:f.sink});
+      if(mutation==='sibling'||mutation==='sibling-output') {
+        assert.equal(await run(),0);
+        assert.equal(await fs.readFile(path.join(f.task,mutation==='sibling'?sibling:siblingOutput),'utf8'),'concurrent writer');
+      } else await assert.rejects(run(),/conflicts|out-of-scope/);
+    });
+  }
+}

@@ -1,4 +1,5 @@
 import {bookInputScope} from './book-input-scope.mjs';
+import {jobInputScope,operationAllows} from './job-input-scope.mjs';
 import {uploadBlockSize} from './callback-budget.mjs';
 import fs from 'node:fs/promises';
 import path from 'node:path';
@@ -74,7 +75,7 @@ export async function mergeRemoteOutput({taskRoot,jobDir,journalPath,controlDir,
   const control=controlDir || await openRoot(path.dirname(journalPath));const journalName=path.basename(journalPath);
   try {
     const save=()=>atomic(control,journalName,journal);
-    const inScope=name=>!localControlPath(name)&&(!journal.inputScope||!name.startsWith('package/')||!!journal.inputScope.bookRoot&&(name===journal.inputScope.bookRoot||name.startsWith(journal.inputScope.bookRoot+'/'))||journal.inputScope.assets.includes(name));
+    const inScope=name=>!localControlPath(name)&&operationAllows(journal.inputScope?.operation,name)&&(!journal.inputScope||!name.startsWith('package/')||!!journal.inputScope.bookRoot&&(name===journal.inputScope.bookRoot||name.startsWith(journal.inputScope.bookRoot+'/'))||journal.inputScope.assets.includes(name));
     if([...journal.files,...journal.output].some(e=>!inScope(e.path)))throw new Error('Processing snapshot contains resources outside the current input scope');
     const before=new Map(journal.files.map(e=>[e.path,e])),after=new Map(journal.output.map(e=>[e.path,e]));
     if(journal.items?.some(item=>localControlPath(item.name)))throw new Error('An orchestration handoff merge already started; reconcile its retained originals first');
@@ -262,11 +263,16 @@ export async function runRemoteSkill(input,call,{root=process.cwd(),sourceRoot=p
   if(claimed.task?.executionId!==executionId || claimed.task?.taskId!==taskDirectory.slice(6) || claimed.taskDirectory!==taskDirectory)throw new Error('Task directory does not belong to this execution');
   let savedScope;try{savedScope=await readJson(control,'book-scope.json');}catch(error){if(error.code!=='ENOENT')throw error;}
   if(savedScope&&(savedScope.executionId!==executionId||savedScope.bookId!==claimed.task.bookId))throw Error('Saved book scope belongs to another execution');
-  const scope=await bookInputScope(taskRoot,{args,taskDirectory,virtualCwd:root,bookId:claimed.task.bookId,bookRootHint:savedScope?.bookRoot});
+  const bookScope=await bookInputScope(taskRoot,{args,taskDirectory,virtualCwd:root,bookId:claimed.task.bookId,bookRootHint:savedScope?.bookRoot});
+  const operation=await jobInputScope(taskRoot,{skill,args,taskDirectory,virtualCwd:root,savedScope:journal?.inputScope?.operation});
+  const scope={...bookScope,
+    allows:name=>bookScope.allows(name)&&(!operation||operation.allows(name)),
+    traverse:name=>bookScope.traverse(name)&&(!operation||operation.traverse(name))};
+  const inputScope={bookRoot:scope.bookRoot,assets:scope.assets,...(operation?{operation:{files:operation.files,trees:operation.trees}}:{})};
   if(scope.bookRoot&&!savedScope)await atomic(control,'book-scope.json',{executionId,bookId:claimed.task.bookId,bookRoot:scope.bookRoot});
   if(journal){
     if(journal.files.some(entry=>localControlPath(entry.path)||!scope.allows(entry.path)))throw Error('Pending snapshot contains resources outside the current input scope');
-    journal.inputScope={bookRoot:scope.bookRoot,assets:scope.assets};
+    journal.inputScope=inputScope;
   }
   await guardRemoteBackups(base,executionId,{ignorePending:journal?taskDirectory.slice(6):undefined});
   let freshJournal=false;
@@ -280,7 +286,7 @@ export async function runRemoteSkill(input,call,{root=process.cwd(),sourceRoot=p
     const skillDir=await findSkill(sourceRoot,skill);let source;try{source=await inventory(skillDir,{source:true,skill});}finally{await skillDir.close();}
     const sourceMap=Object.fromEntries(source.map(e=>[skill+'/'+e.path,e.sha256]));if(!source.length)throw new Error('Selected skill source is empty');
     const files=args.length===1&&args[0]==='doctor'&&!stdin?[]:await inventory(taskRoot,{hook,scope}),manifest=Buffer.from(JSON.stringify(files));if(manifest.length>8*1024*1024)throw new Error('Manifest too large');
-    journal={commandHash,command,jobId:crypto.randomUUID(),sourceDigest:digest(JSON.stringify(sourceMap)),inputScope:{bookRoot:scope.bookRoot,assets:scope.assets},files,manifest:manifest.toString('base64'),phase:'uploading'};await atomic(control,'pending.json',journal,{exclusive:true});freshJournal=true;
+    journal={commandHash,command,jobId:crypto.randomUUID(),sourceDigest:digest(JSON.stringify(sourceMap)),inputScope,files,manifest:manifest.toString('base64'),phase:'uploading'};await atomic(control,'pending.json',journal,{exclusive:true});freshJournal=true;
   }
   const {jobId,files}=journal, manifest=Buffer.from(journal.manifest,'base64');
   let status;
