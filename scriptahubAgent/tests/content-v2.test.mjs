@@ -96,6 +96,7 @@ test('fork requests require an explicit reusable source licence before fetching 
   await savePointsPolicy(path.join(root,'data'), {forkCost:0});
   const site = path.join(root,'site'), id = 'bk-licence', directory = 'books/' + id;
   await fs.mkdir(site);
+  await fs.writeFile(path.join(site,'collection.json'),JSON.stringify({books:[]}));
   const user = {id:'user:reader',email:'reader@example.test',installationAdministratorId:'user:admin'};
   let downloads = 0;
   const origin = http.createServer((_req,res)=>{downloads++;res.end('<main>Original book</main>');});
