@@ -1,3 +1,4 @@
+import {themeTypes, revelationTypes} from '../../scriptahub-tasks/shared/editorial-analysis.mjs';
 import fs from 'node:fs/promises';
 import path from 'node:path';
 import os from 'node:os';
@@ -7,8 +8,7 @@ import { parse, elements, first, named, has, meta, compact, textOf, remove, esca
 export class ShortDescriptionError extends Error {}
 const fail = message => { throw new ShortDescriptionError(message); };
 const semanticTags = new Set(['h1', 'h2', 'h3', 'h4', 'h5', 'h6', 'p', 'li', 'blockquote', 'figcaption', 'caption', 'th', 'td']);
-export const themeTypes = new Set(['subject', 'scope', 'context', 'question', 'tension', 'premise', 'setting', 'character', 'starting-conflict']);
-export const revelationTypes = new Set(['answer', 'solution', 'conclusion', 'recommendation', 'verdict', 'twist', 'identity', 'resolution', 'outcome', 'fate', 'ending']);
+export {themeTypes, revelationTypes};
 const nonContent = /\b(contents?|cuprins|sommaire|indice|inhaltsverzeichnis|bibliograph(?:y|ie)|bibliograf(?:ie|ia)|references?|referințe|copyright|drepturi de autor|impressum)\b/iu;
 export const sha256 = bytes => createHash('sha256').update(bytes).digest('hex');
 export const fileSha256 = async file => sha256(await fs.readFile(file));
@@ -43,10 +43,15 @@ export function normalizeLanguage(value) {
 export const factTokens = value => new Set((value.match(/https?:\/\/\S+|www\.\S+|\b[\w.+-]+@[\w.-]+\.\w+\b|\b10\.\d{4,9}\/\S+|\b\d+(?:[.,]\d+)*(?:%|‰|°|[A-Za-z]{1,5})?\b/gu) ?? []).map(item => item.replace(/[.,;:!?)"\]}]+$/gu, '').toLowerCase()));
 const normalized = value => (value.toLowerCase().match(/[\p{L}\p{N}]+/gu) ?? []).join(' ');
 
-export function extract(sourceText) {
+export function extract(sourceText, {sharedEditorial = false} = {}) {
   const soup = parse(sourceText);
-  const kind = meta(soup, 'marketing-summary-generator') === 'marketingsummary-skill' ? 'marketing-summary' : meta(soup, 'summary-generator') === 'comprehensivesummary-skill' ? 'comprehensive-summary' : 'semantic-html';
-  const root = kind === 'semantic-html' ? first(soup, node => ['main', 'article'].includes(node.name)) ?? named(soup, 'body') : first(soup, node => node.name === 'article' && has(node, kind === 'marketing-summary' ? 'data-marketing-summary' : 'data-summary-body'));
+  const kind = !sharedEditorial && meta(soup, 'marketing-summary-generator') === 'marketingsummary-skill' ? 'marketing-summary' : meta(soup, 'summary-generator') === 'comprehensivesummary-skill' ? 'comprehensive-summary' : 'semantic-html';
+  const semanticRoot = sharedEditorial
+    ? first(soup, node => node.name === 'main' && has(node, 'data-reader-content')) ?? named(soup, 'main') ?? named(soup, 'body') ?? soup
+    : first(soup, node => ['main', 'article'].includes(node.name)) ?? named(soup, 'body');
+  const root = kind === 'semantic-html'
+    ? semanticRoot
+    : first(soup, node => node.name === 'article' && has(node, kind === 'marketing-summary' ? 'data-marketing-summary' : 'data-summary-body'));
   if (!root) fail(`${kind} input has no usable semantic content container.`);
   const content = structuredClone(root);
   const clone = { type: 'root', children: [content] };
@@ -98,7 +103,7 @@ export async function prepareJob(input, options = {}) {
   let sourceText;
   try { sourceText = new TextDecoder('utf-8', { fatal: true }).decode(bytes); } catch { fail('Input HTML must be UTF-8 encoded.'); }
   const soup = parse(sourceText), language = normalizeLanguage(options.language || named(soup, 'html')?.attribs.lang || '');
-  const { kind, title, chapters, units } = extract(sourceText);
+  const { kind, title, chapters, units } = extract(sourceText, options);
   const output = await resolve(options.output ?? path.join(path.dirname(source), 'shortDescription.html'));
   if (output === source) fail('Short-description output must be separate from the source.');
   const workspace = await resolve(options.jobDir ?? path.join(path.dirname(source), '.shortdescription-jobs', `${path.parse(source).name}-${sha256(bytes).slice(0, 16)}`));

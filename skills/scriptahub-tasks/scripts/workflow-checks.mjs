@@ -7,7 +7,7 @@ import os from 'node:os';
 import crypto from 'node:crypto';
 import { constants } from 'node:fs';
 import { execFile } from 'node:child_process';
-import { promisify } from 'node:util';
+import { isDeepStrictEqual, promisify } from 'node:util';
 import { fileURLToPath } from 'node:url';
 const execute = promisify(execFile);
 const hash = bytes => crypto.createHash('sha256').update(bytes).digest('hex');
@@ -30,7 +30,7 @@ async function jsonArtifact(value) {
   if ((await fs.stat(filename)).size > 16*1024*1024) throw new Error('JSON artifact is too large');
   return JSON.parse(await fs.readFile(filename,'utf8'));
 }
-async function atomicJson(relative, value) {
+export async function atomicJson(relative, value) {
   const root = await fs.realpath(process.cwd());
   const parts = relative.split('/'); let current = root;
   for (const part of parts.slice(0,-1)) {
@@ -48,7 +48,7 @@ function itemArtifact(directory = '.',name) {
   return (directory === '.' ? '' : directory + '/') + 'run-state/' + name;
 }
 export async function writeHandoff(input) {
-  const steps = ['claim-edit','apply-edit','validate-edit','submit-edit','resume-book','prepare-manuscript','process-content','translate-resources','review-correct','validate-final','publish-result'];
+  const steps = ['claim-edit','apply-edit','prepare-edit-package','validate-edit','submit-edit','resume-book','prepare-manuscript','comprehensive-summary','relevant-keywords','shared-editorial-analysis','marketing-summary','short-description','process-content','translate-resources','review-correct','validate-final','publish-result'];
   if (!steps.includes(input.step) || !input.context || typeof input.context !== 'object' || Array.isArray(input.context)) throw new Error('Provide the step and a context object');
   for (const key of ['executionId','runId','taskId','bookId']) if (!/^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$/.test(input.context[key] || '')) throw new Error('Invalid handoff identity: '+key);
   const handoffPath = itemArtifact(input.directory,'handoff.json');
@@ -61,6 +61,13 @@ export async function writeHandoff(input) {
     const proposed = input.context.editorialSource;
     if (proposed && ['path','sha256','language'].some(key => proposed[key] !== pinned[key])) throw new Error('Editorial source is pinned; do not replace or regenerate the book');
     input = {...input, context:{...input.context, editorialSource:pinned}};
+  }
+  if (old) {
+    const context = {...old.context, ...input.context};
+    if (old.context.editorialResults || input.context.editorialResults) {
+      context.editorialResults = {...old.context.editorialResults, ...input.context.editorialResults};
+    }
+    input = {...input, context};
   }
   const text = JSON.stringify(input.context);
   if (Buffer.byteLength(text)>24000) throw new Error('Keep handoff context under 24 KB; reference large inventories and reports by path');
@@ -103,10 +110,11 @@ export async function verifyPackage(input,{hook=async()=>{}}={}) {
   // Remote reads remain credential-free and restricted to the actual configured catalogue.
   const catalogue=new URL(input.catalogue);
   if(catalogue.protocol!=='https:'||catalogue.username||catalogue.password||catalogue.port||catalogue.search||catalogue.hash)throw new Error('Invalid catalogue destination');
-  const match=/^\/([\w.-]+)\/([\w.-]+)\/(?:blob\/)?(.+)$/.exec(catalogue.pathname);
-  if(!['github.com','raw.githubusercontent.com'].includes(catalogue.hostname)||!match||!input.branch||!match[3].startsWith(input.branch+'/')||!/^refs\/heads\/[A-Za-z0-9][A-Za-z0-9._/-]*$/.test('refs/heads/'+input.branch))throw new Error('Catalogue/branch mismatch');
+  const match=catalogue.hostname==='github.com' ? /^\/([\w.-]+)\/([\w.-]+)\/blob\/(.+)$/.exec(catalogue.pathname)
+    : catalogue.hostname==='raw.githubusercontent.com' ? /^\/([\w.-]+)\/([\w.-]+)\/(.+)$/.exec(catalogue.pathname) : null;
+  if(!match||!input.branch||!match[3].startsWith(input.branch+'/')||!/^refs\/heads\/[A-Za-z0-9][A-Za-z0-9._/-]*$/.test('refs/heads/'+input.branch))throw new Error('Catalogue/branch mismatch');
   const collectionPath=match[3].slice(input.branch.length+1);
-  if(!names.has(collectionPath))throw new Error('Inventory must contain the catalogue update');
+  if(path.posix.basename(collectionPath)!=='collection.json'||!names.has(collectionPath))throw new Error('Inventory must contain the catalogue update');
   const collection=JSON.parse(await fs.readFile(path.join(root,collectionPath),'utf8'));
   if(![1,2].includes(collection.schemaVersion)||!Array.isArray(collection.books)||collection.bookCount!==collection.books.length||new Set(collection.books.map(b=>b.id)).size!==collection.books.length||!collection.books.some(b=>b.id===input.bookId))throw new Error('Catalogue structure or task identity is invalid');
   validateCatalogueKeywords(collection);
@@ -117,30 +125,120 @@ export async function verifyPackage(input,{hook=async()=>{}}={}) {
   // Keep the validated baseline pinned. ScriptaHub checks whether the current
   // remote tip can accept the package when it actually publishes.
   const report={ok:true,executionId:input.executionId,bookId:input.bookId,fileCount:names.size,bytes,baseCommit:inventory.baseCommit,checkedAt:new Date().toISOString()};
-  if(input.audit){
-    const audit=await jsonArtifact(input.audit);
-    if(!['passed','passed_with_warnings'].includes(audit.status)||!Array.isArray(audit.findings)||audit.findings.some(f=>f.severity==='error'))throw Error('Independent book audit has not passed');
-    let scope=audit.scope;
-    if(audit.scope==='edition_layout_regression') {
-      const claimed=await jsonArtifact(itemArtifact(input.directory,'claimed.json'));
-      const generated=['scriptahub.book-proposal','scriptahub.fork'].includes(claimed.task?.type);
-      if(claimed.task?.executionId!==input.executionId||claimed.task?.bookId!==input.bookId)throw Error('HTML audit belongs to another task');
-      if(generated) {
-        if(audit.autoCorrect!==false||audit.errorFindings!==0||audit.existingFindings!==0)throw Error('Generated HTML must pass all integrity checks; baseline defects cannot be accepted as warnings');
-        scope='html_layout_integrity';
-      } else if(claimed.task?.type!=='scriptahub.edit')throw Error('An uploaded manuscript requires its source-based audit');
-      if(!audit.candidate?.file||!names.has(path.relative(root,audit.candidate.file).split(path.sep).join('/')))throw Error('HTML audit candidate is outside the verified package');
-      const candidate=await insideRun(path.relative(process.cwd(),audit.candidate.file));
-      if(hash(await fs.readFile(candidate))!==audit.candidate.sha256)throw Error('HTML changed after its independent audit');
-    } else {
-      if(audit.scope!=='layout_and_structure')throw Error('Independent book audit has not passed');
-      if(!Array.isArray(audit.documents)||!audit.documents.length||audit.documents.some(doc=>!names.has(path.relative(root,doc.file).split(path.sep).join('/'))))throw Error('Audit documents are outside the verified package');
+  if (input.audit || input.audits || input.finalize) {
+    const claimed = await jsonArtifact(itemArtifact(input.directory, 'claimed.json'));
+    const task = claimed.task;
+    if (task?.executionId !== input.executionId || task?.bookId !== input.bookId) throw Error('Audit belongs to another task');
+    const generated = ['scriptahub.book-proposal', 'scriptahub.fork'].includes(task.type);
+    const editing = task.type === 'scriptahub.edit';
+    const scope = generated ? 'html_layout_integrity' : editing ? 'edition_layout_regression' : 'layout_and_structure';
+    const entries = input.audits ?? (input.audit ? [{report: input.audit}] : []);
+    if (input.audit && input.audits || !Array.isArray(entries) || !entries.length) throw Error('Provide the independent native audit reports');
+    const readers = input.finalize ? await editionReaders(root, collectionPath, collection, input.bookId, names, !editing) : null;
+    const plan = input.finalize && (editing || generated) ? (await jsonArtifact(input.editionPlan)).editions : null;
+    if (input.finalize && (editing || generated) && (!Array.isArray(plan) || !plan.length)) throw Error('Missing edition validation plan');
+    if (plan && new Set(plan.map(item => item.language)).size !== plan.length) throw Error('The edit plan repeats an affected language');
+    const expected = readers && generated ? [...readers.keys()] : plan?.map(item => item.language);
+    if (expected && plan && (plan.length !== expected.length || plan.some(item => !expected.includes(item.language)))) throw Error('Edition plan must cover every required edition');
+    if (plan && editing && (task.requests ?? []).some(request => request.language && !expected.includes(request.language))) {
+      throw Error('Edition plan omits a language from the approved requests');
     }
-    report.audit={scope,...(scope==='html_layout_integrity'?{nativeScope:audit.scope,existingFindings:0}:{}),status:audit.status,errorFindings:0,warningFindings:audit.findings.length};
+    if (expected && (entries.length !== expected.length || new Set(entries.map(item => item.language)).size !== entries.length
+      || entries.some(item => !expected.includes(item.language)))) throw Error('Independent audits must cover every required edition');
+    const candidates = new Set(), reports = [];
+    let warningFindings = 0, existingFindings = 0, withWarnings = false;
+    for (const entry of entries) {
+      const reportPath = await insideRun(entry.report);
+      const audit = await jsonArtifact(entry.report);
+      if (!['passed','passed_with_warnings'].includes(audit.status) || !Array.isArray(audit.findings)
+        || audit.findings.some(finding => finding.severity === 'error')) throw Error('Independent book audit has not passed');
+      withWarnings ||= audit.status === 'passed_with_warnings';
+      warningFindings += audit.findings.length;
+      if (generated || editing) {
+        if (audit.scope !== 'edition_layout_regression' || audit.autoCorrect !== false || audit.errorFindings !== 0) throw Error('Independent HTML audit has not passed');
+        if (generated && audit.existingFindings !== 0) throw Error('Generated HTML must pass all integrity checks; baseline defects cannot be accepted as warnings');
+        if (!Number.isSafeInteger(audit.existingFindings) || audit.existingFindings < 0) throw Error('HTML audit finding counts are invalid');
+        existingFindings += audit.existingFindings;
+        const name = await auditedFile(root, names, audit.candidate);
+        if (candidates.has(name) || (readers && readers.get(entry.language) !== name)) throw Error('HTML audit must identify the current reader for this language');
+        candidates.add(name);
+        if (plan) {
+          const edition = plan.find(item => item.language === entry.language);
+          const baseline = await insideRun(edition.baselineHtml), changes = await insideRun(edition.changesPath), candidate = await insideRun(edition.candidateHtml);
+          if (generated && !isDeepStrictEqual(await jsonArtifact(edition.changesPath), [])) throw Error('Generated HTML must be audited with an empty change plan');
+          if (audit.baseline?.file !== baseline || audit.baseline.sha256 !== edition.baselineSha256
+            || hash(await fs.readFile(baseline)) !== edition.baselineSha256
+            || !audit.inputs?.some(file => file.file === changes && file.sha256 === edition.changesSha256)
+            || hash(await fs.readFile(changes)) !== edition.changesSha256 || candidate !== path.join(root, name)) {
+            throw Error('Audit does not match the pinned baseline and change plan for ' + entry.language);
+          }
+        }
+      } else {
+        if (audit.scope !== scope || !Array.isArray(audit.documents) || !audit.documents.length || audit.corrections?.length
+          || (input.finalize && audit.autoCorrect !== false)) throw Error('The manuscript requires a read-only source-based audit');
+        const nativeJob = await jsonArtifact(path.join(path.dirname(entry.report), 'job.json'));
+        if (!isDeepStrictEqual(nativeJob.result, audit)) throw Error('Manuscript audit differs from its native job');
+        const audited = [];
+        for (const document of audit.documents) {
+          const recorded = nativeJob.inputs?.find(file => file.file === document.file);
+          audited.push(await auditedFile(root, names, recorded));
+        }
+        if (readers) {
+          if (!readers.get(input.sourceLanguage) || !audited.includes(readers.get(input.sourceLanguage))) throw Error('Manuscript audit does not cover the published source edition');
+          const source = await insideRun(input.referencePdf);
+          const sourceSha256 = hash(await fs.readFile(source));
+          if (!nativeJob.inputs?.some(file => file.file === source && file.sha256 === sourceSha256)) throw Error('Manuscript audit does not match the verified PDF reference');
+        }
+      }
+      reports.push({...(entry.language && {language: entry.language}), path: entry.report, sha256: hash(await fs.readFile(reportPath))});
+    }
+    report.audit = {scope, ...(generated && {nativeScope:'edition_layout_regression'}), autoCorrect:false,
+      status: withWarnings ? 'passed_with_warnings' : 'passed', errorFindings:0, warningFindings,
+      ...((editing || generated) && {existingFindings})};
+    if (input.finalize) {
+      if (typeof task.runId !== 'string' || !task.runId) throw Error('Missing claimed run identity');
+      const validationRoot = path.posix.join(input.directory || '.', 'validation');
+      const approved = await atomicJson(validationRoot + '/verified-inventory.json', {...inventory, publicationPermitted: true});
+      const validation = await atomicJson(validationRoot + '/final-report.json', {
+        executionId: input.executionId, runId: task.runId, bookId: input.bookId, publicationPermitted: true,
+        audit: report.audit, reports, inventorySha256: approved.sha256,
+        destination: {catalogue: input.catalogue, branch: input.branch, baseCommit: inventory.baseCommit},
+        ...(input.translationOutcome && {translationOutcome: input.translationOutcome})
+      });
+      report.approval = {inventory: approved.path, validation: validation.path};
+    }
   }
   await atomicJson(itemArtifact(input.directory,'package-check.json'),report);
   return report;
   });
+}
+
+async function auditedFile(root, names, entry) {
+  const name = typeof entry?.file === 'string' && path.relative(root, entry.file).split(path.sep).join('/');
+  if (!names.has(name)) throw Error('Audit documents are outside the verified package');
+  if (hash(await fs.readFile(path.join(root, name))) !== entry.sha256) throw Error('HTML changed after its independent audit');
+  return name;
+}
+
+async function editionReaders(root, collectionPath, collection, bookId, names, requireAll) {
+  const book = collection.books.find(entry => entry.id === bookId);
+  const prefix = path.posix.dirname(collectionPath);
+  const resource = value => typeof value === 'string' ? path.posix.join(prefix, value) : null;
+  let editions = book.editions, resources;
+  if (collection.schemaVersion === 2) {
+    const metadata = resource(book.path);
+    if (!names.has(metadata)) throw Error('Missing current book metadata in the verified package');
+    const document = JSON.parse(await fs.readFile(path.join(root, metadata), 'utf8'));
+    editions = document.metadata?.editions;
+    resources = document.resources;
+  }
+  const readers = new Map();
+  for (const [language, edition] of Object.entries(editions || {})) {
+    if (!requireAll && !edition?.fullContent) continue;
+    readers.set(language, resource(resources ? resources[edition?.fullContent] : edition?.fullContent));
+  }
+  if (!readers.size || [...readers.values()].some(name => !names.has(name))) throw Error('Published editions must identify the verified full HTML readers');
+  return readers;
 }
 
 export async function requirePreflight(now = Date.now()) {

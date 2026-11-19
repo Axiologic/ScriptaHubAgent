@@ -71,7 +71,7 @@ async function fixture(t, { schemaVersion = 1, kind = 'manuscript', manageApprov
   files.set('collection.json', Buffer.from(JSON.stringify(collection)));
   const input = {executionId:task.executionId,catalogue,branch:'main',baseCommit,
     files:[...files].map(([path,bytes]) => ({path,size:bytes.length,sha256:sha256(bytes)})),
-    validation:{executionId:task.executionId,runId:task.runId,bookId:task.bookId,publicationPermitted:true,audit:{autoCorrect:false,status:'passed_with_warnings',errorFindings:0,...(kind==='book-proposal'?{scope:'html_layout_integrity',nativeScope:'edition_layout_regression',existingFindings:0}:{})}}};
+    validation:{executionId:task.executionId,runId:task.runId,bookId:task.bookId,publicationPermitted:true,audit:{autoCorrect:false,status:'passed_with_warnings',errorFindings:0,...(kind==='book-proposal'?{scope:'html_layout_integrity',nativeScope:'edition_layout_regression',existingFindings:0}:{scope:'layout_and_structure'})}}};
   const upload = () => {
     const result = publisher.prepare(agent,input,config);
     for (const [file,bytes] of files) publisher.upload(agent,{executionId:task.executionId,file,offset:0,data:bytes.toString('base64')});
@@ -185,7 +185,9 @@ test('a non-fast-forward rejection is resumed from the current branch without re
   assert.equal(f.publisher.row(f.task.executionId).commit_id,null);
   assert.throws(() => f.service.finish(agent,{executionId:f.task.executionId,state:'failed',error:'Premature finish'}),/reconciled/);
   for (let i = 0; i < 3; i++) assert.equal((await resume(f)).publicationPending,true);
-  assert.equal((await resume(f)).state,'completed');
+  const completed = await resume(f);
+  assert.equal(completed.state,'completed');
+  assert.match(completed.publication.commit,/^[a-f0-9]{40}$/);
   const catalogue = JSON.parse(await f.git(f.remote,'show','main:collection.json'));
   assert.deepEqual(catalogue.books.map(book => book.id),['bk-concurrent-1','bk-concurrent-2','bk-concurrent-3','bk-concurrent-4',f.task.bookId]);
   assert.equal(f.pushes(),5);

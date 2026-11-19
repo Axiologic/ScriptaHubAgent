@@ -25,9 +25,9 @@ test('existing defects are warnings, while worsening and additional occurrences 
 
 test('native edit checks accept a table change and reject lost text, images and new display damage',
   {skip:!process.env.VALIDATEBOOK_TEST_CHROMIUM,timeout:180000},async t=>{
-  const root=await fs.mkdtemp(path.join(os.tmpdir(),'edition-regression-'));t.after(()=>fs.rm(root,{recursive:true,force:true}));
+  const root=await fs.realpath(await fs.mkdtemp(path.join(os.tmpdir(),'edition-regression-')));t.after(()=>fs.rm(root,{recursive:true,force:true}));
   const baseline=path.join(root,'baseline.html'),candidate=path.join(root,'edited.html');
-  const readerCss=fileURLToPath(new URL('../../../site/reader/reader.css',import.meta.url));
+  const readerCss=fileURLToPath(new URL('../../../scriptahubAgent/site/reader/reader.css',import.meta.url));
   const pixel='data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+a5u8AAAAASUVORK5CYII=';
   const table='<table><tr><th>Investment Decision</th><th>Proposed Position</th></tr></table>';
   const html=(passage,extra='')=>`<!doctype html><html lang="en"><head><meta charset="utf-8"></head><body><article style="position:relative"><h1>Edition check</h1><p>Retain this exact narrative.</p>${passage}<p style="display:none">An existing hidden note.</p><img src="${pixel}" alt="Existing image" width="24" height="24">${extra}</article></body></html>`;

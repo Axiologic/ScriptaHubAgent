@@ -61,7 +61,7 @@ Use `exec` with executionId, taskDirectory, canonical skill, args and optional s
 
 An uncertain reply resumes the identical command. Retain sources, pending journals and conflicting versions until reconciliation. Use the explicit release operations only under their documented terminal-state/evidence requirements. The helper handles scoped transfers, hashing, retained backups and reuse of matching bytes.
 
-Prepare each editorial resource with an explicit job directory and output, except relevant-keywords whose output is relevantKeywords.txt beside its input. Translation jobs are separate for each target/resource. Freeze the shared source and glossary. Pause writers for the addressed job/output during its snapshot/merge. Sibling workers may continue only in disjoint working notes outside native-managed files. Use up to four available semantic workers in total; use serial execution when worker tools are unavailable.
+Prepare each editorial resource with an explicit job directory and output, except relevant-keywords whose output is relevantKeywords.txt beside its input. Create book executes editorial work sequentially, one stage at a time. Translation jobs are separate for each target/resource and may use up to four semantic workers on disjoint working notes. Freeze the source and glossary. Pause writers for the addressed job/output during its snapshot/merge.
 
 ## Batch admission and editorial completion
 
@@ -69,9 +69,15 @@ Before assigning a batch, exec the selected skill with `["batch-contract",JOB,"-
 
 The worker returns a complete candidate JSON object. The coordinator execs `["submit-batch",JOB,"--batch",NAME,"--batch-sha256",SHA]` with input=JSON.stringify(candidate). The native command validates identity, schema and source references before atomic saving. Keep analyses/translations files under this native admission path. Correct rejected fields in memory and resubmit. For an evidenced correction to accepted content, reread the contract and supply --replace-sha256 with existing.sha256. Audit flags assert completed review.
 
-Each worker owns its resource through semantic work, repair, build and validation. Read native status as the next action: complete listed analyses, synthesis, draft or review, then build and independently validate as that skill requires. Keywords completes selection.json and build. Record source/parameters, output hash and success receipt path/hash before marking a resource accepted. Keep receipts outside temporary native job directories. Reuse matching accepted work on resume.
+In Create book, the presentation and short description use the completed shared analysis. Project batches from the saved evidence and admit them through each native CLI. Read native status for the next required synthesis, draft or review, then build and independently validate as required by the skill. Keywords completes selection.json and build. Record in editorialResults the skill, pinned source path/hash, effective parameters, job, output path/hash and successful receipt path/hash. Keep receipts in editorial/receipts/ outside native job directories. Reuse matching accepted work on resume.
 
 Invalid enum values, references outside the assigned batch, schema/word-budget findings and failed local edits are repairable work. Use the actual batch/schema and resubmit corrections. Other JSON artifacts use schema-aware editing against current bytes. Preserve accepted sibling resources. Missing future artifacts, unavailable optional workers and estimated duration are reasons to continue the documented procedure, not to declare a blocker. A blocker report names the concrete failed operation/error, attempted recovery and missing resource/access/capability.
+
+### Shared editorial synchronization and correction
+
+For a shared job, read `shared-editorial status` and update the handoff with its evidence if `needsHandoff=true`. Work on the assigned role. Project each batch listed in its `pendingBatches` and send the returned candidate through native `submit-batch` with the returned batch digest and optional `--replace-sha256`. Leave matching native batches intact. For a changed projection, inspect synthesis/draft against the new evidence, repair concrete findings, redo the independent semantic review, rebuild (use `--overwrite` if the existing output differs) and independently validate. Record the output and receipt hashes together with `projectionSha256` from the role's projection in the handoff. Reuse matching accepted receipts and outputs when there are no pending batches and the projection digest matches.
+
+If a review identifies an error in the common evidence, request its current batch contract and submit a correction using `replaceSha256` and the concrete finding as `reason`. Save the returned evidence in the handoff. Complete the current role from the corrected projection. The routing stage applies the same procedure to any earlier role affected by this correction before verifying both roles. Corrections are for the shared evidence; use the native replacement only to synchronize that evidence into the role's job.
 
 ## Translation outcomes
 
@@ -83,7 +89,9 @@ Record translationOutcome={sourceLanguage,requestedLanguages,publishedLanguages,
 
 ## Acceptance and publication
 
-Prepare an immutable sparse package, catalogue update and inventoried hashes before final validation. Final validation is read-only: record findings and prohibit approval when a required check fails. Apply authorized repairs during preparation, then obtain fresh independent acceptance.
+In preparation, stage a sparse package under the task's package directory with this book's metadata, referenced resources and collection.json update. Keep baselines, briefs and diagnostics outside the package. Preserve other catalogue entries, the configured schema, historical edition bytes and resource aliases. Resolve actual book paths in that schema, including schema 2 virtual reader mappings and resource aliases, and update the book.json digest when applicable. Write review/package-inventory.json with executionId, baseCommit and files=[{path,sha256,size}] relative to the package root. Run verify-package without finalization to check the draft inventory and destination. Final validation is read-only for package bytes.
+
+For schema 1 keep unique stable keywordIds and aligned label arrays for en, fr, de, es, pt, it, ro and pl. Keep existing IDs on edits. For new keywords reuse an exact matching configured ID or derive term: plus a stable SHA-256 prefix of the normalized source label. Reuse the accepted source label for missing catalogue-language labels. Rebuild the global index from catalogue metadata with combineCollections(collection.books).keywords from scripts/catalogue-keywords.mjs in this skill. Do this before hashing the inventory.
 
 | Source profile | Required independent audit |
 | --- | --- |
@@ -91,9 +99,11 @@ Prepare an immutable sparse package, catalogue update and inventoried hashes bef
 | Manuscript PDF reference | Audit-only validate-book preparation against the verified uploaded/converted manuscript PDF and staged HTML. Record scope=layout_and_structure. PDF/source overrides are audit-only CLI arguments. |
 | Revised edition | compare-edition against each immutable language baseline and its authorized changesPath. Require zero new errors; preserve existing findings as warnings. Record scope=edition_layout_regression, autoCorrect=false. |
 
-Use verify-package with the native audit and the exact inventory for final approval. Save final-report.json and verified-inventory.json with execution identity, publicationPermitted=true, actual audit status, zero errorFindings, native report path/hash and applicable existingFindings/translationOutcome. Package bytes must continue matching the approved inventory.
+Use verify-package with finalize=true, the native audit evidence and the exact draft inventory for final approval. Save its returned approval paths. The helper writes the final report and approved inventory, binds their hashes, and uses the actual native findings and report hashes. A changed package requires fresh independent approval.
 
-The workflow robot authorizes publication after independent acceptance. ScriptaHub verifies the configured destination, immutable package and evidence, then commits/pushes and updates collection.json. A completed service state with a publication receipt confirms success. Reconcile an uncertain response through retry-publication for the same registered package. Preserve pending publication evidence until confirmed.
+### Submit or reconcile the approved package
+
+Check service status immediately before publication. A terminal status is forwarded as saved. For a confirmed pending publication, use retry-publication on the same execution. For a confirmed stop with no pending publication, acknowledge it with finish state=cancelled. A processing item needs this execution's approved inventory and final validation to call publish. If publication or upload is interrupted, check status. When pending is confirmed, reconcile it; if the task is still running with no pending publication, repeat publish with the same approved files to resume an interrupted upload. Preserve uncertainty for parent reconciliation. ScriptaHub confirms success with a completed state and publication receipt. Save the actual service response to run-state/publication-result.json under the task.
 
 Owners/admins review correction proposals. UserPersisto manages balances and debits before paid edition/fork processing. ScriptaHub grants rewards after confirmed publication, once per new-book request or contributor/book/published edition. Workflow steps leave points accounting to those services.
 

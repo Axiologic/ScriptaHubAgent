@@ -6,6 +6,7 @@ import os from 'node:os';
 import crypto from 'node:crypto';
 import {insideRun, writeHandoff, requirePreflight, verifyPackage} from '../scripts/workflow-checks.mjs';
 import {combineCollections, validateCatalogueKeywords} from '../scripts/catalogue-keywords.mjs';
+import {publishPackage} from '../scripts/run.mjs';
 
 async function inRun(callback) {
   const previous = process.cwd();
@@ -130,6 +131,63 @@ test('generated HTML is accepted without PDF only after a strict native reader/l
   await fs.writeFile('audit.json',JSON.stringify({...native,candidate:{...native.candidate,sha256:'0'.repeat(64)}}));
   await assert.rejects(verifyPackage(input),/HTML changed/);
  }finally{process.env.PATH=savedPath;}
+}));
+
+test('final edit approval requires every affected reader and binds the exact inventory to publication', async () => inRun(async root => {
+  const previousPath = process.env.PATH, commit = 'a'.repeat(40), directory = 'tasks/task-one';
+  const save = (file, value) => fs.writeFile(file, JSON.stringify(value));
+  const digest = bytes => crypto.createHash('sha256').update(bytes).digest('hex');
+  const editions = [], audits = [], files = [], readers = {};
+  try {
+    await fs.mkdir(directory + '/run-state', {recursive: true});
+    await fs.mkdir('package');
+    await fs.mkdir('bin');
+    await fs.writeFile('bin/git', `#!${process.execPath}\nprocess.stdout.write('${commit}\\trefs/heads/main\\n');\n`, {mode: 0o700});
+    process.env.PATH = path.join(root, 'bin') + path.delimiter + previousPath;
+    const requests = [{language: 'en'}, {language: 'ro'}];
+    await save(directory + '/run-state/claimed.json', {task: {...context, type: 'scriptahub.edit', requests}});
+    for (const {language} of requests) {
+      const file = language + '.html', candidateHtml = 'package/' + file, baselineHtml = language + '-original.html', changesPath = language + '-changes.json';
+      const candidate = '<main>Revised ' + language + '</main>', baseline = '<main>Original ' + language + '</main>';
+      await fs.writeFile(candidateHtml, candidate);
+      await fs.writeFile(baselineHtml, baseline);
+      await save(changesPath, [{before: 'Original', after: 'Revised'}]);
+      const changesSha256 = digest(await fs.readFile(changesPath)), baselineSha256 = digest(baseline);
+      const report = language + '-audit.json';
+      await save(report, {scope:'edition_layout_regression', status:'passed', autoCorrect:false, errorFindings:0, existingFindings:0, findings:[],
+        candidate:{file:path.join(root, candidateHtml), sha256:digest(candidate)},
+        baseline:{file:path.join(root, baselineHtml), sha256:baselineSha256},
+        inputs:[{file:path.join(root, changesPath), sha256:changesSha256}]});
+      readers[language] = {fullContent: file};
+      files.push({path:file, size:Buffer.byteLength(candidate), sha256:digest(candidate)});
+      editions.push({language, baselineHtml, baselineSha256, candidateHtml, changesPath, changesSha256});
+      audits.push({language, report});
+    }
+    const collection = JSON.stringify(combineCollections([{id:context.bookId, editions:readers, keywordIds:[], keywords:emptyKeywords}]));
+    await fs.writeFile('package/collection.json', collection);
+    files.push({path:'collection.json', size:Buffer.byteLength(collection), sha256:digest(collection)});
+    await save('inventory.json', {executionId:context.executionId, baseCommit:commit, files});
+    await save('edition-plan.json', {editions});
+    const input = {...context, directory, packageRoot:'package', inventory:'inventory.json', editionPlan:'edition-plan.json',
+      catalogue:'https://github.com/example/books/blob/main/collection.json', branch:'main', finalize:true};
+    await assert.rejects(verifyPackage({...input, audits:audits.slice(0, 1)}), /cover every required edition/);
+    await save('edition-plan.json', {editions:editions.slice(0, 1)});
+    await assert.rejects(verifyPackage({...input, audits:audits.slice(0, 1)}), /omits a language/);
+    await save('edition-plan.json', {editions});
+    const approved = await verifyPackage({...input, audits});
+    assert.equal(approved.audit.scope, 'edition_layout_regression');
+    const validation = JSON.parse(await fs.readFile(approved.approval.validation));
+    assert.deepEqual(validation.reports.map(report => report.language), ['en', 'ro']);
+    assert.equal(validation.inventorySha256, digest(await fs.readFile(approved.approval.inventory)));
+    await assert.rejects(publishPackage(() => assert.fail('unexpected remote call'),
+      {...input, ...approved.approval, catalogue:'https://github.com/example/other/blob/main/collection.json'}), /destination differs/);
+    await fs.appendFile(editions[1].changesPath, '\n');
+    await assert.rejects(verifyPackage({...input, audits}), /pinned baseline and change plan for ro/);
+    await fs.appendFile(approved.approval.inventory, '\n');
+    await assert.rejects(publishPackage(() => assert.fail('unexpected remote call'), {...input, ...approved.approval}), /differs from the final validation/);
+  } finally {
+    process.env.PATH = previousPath;
+  }
 }));
 
 test('editorial, review and final validation preserve the pinned source and accepted output receipt', async () => inRun(async () => {

@@ -50,6 +50,10 @@ export class PublicationTransfer {
     if(['scriptahub.book-proposal','scriptahub.fork'].includes(task.type) && (validation.audit.scope!=='html_layout_integrity'||validation.audit.nativeScope!=='edition_layout_regression'||validation.audit.existingFindings!==0)) publicationError('Generated HTML requires independent HTML integrity validation without existing layout defects');
     if(task.type==='scriptahub.edit'&&validation.audit.scope!=='edition_layout_regression')
       publicationError('Edited editions require a layout regression check against the original edition');
+    if(task.type==='scriptahub.manuscript'&&validation.audit.scope!=='layout_and_structure')
+      publicationError('Uploaded manuscripts require source-based layout and structure validation');
+    if (validation.destination && (validation.destination.catalogue !== catalogue || validation.destination.branch !== branch
+      || validation.destination.baseCommit !== baseCommit)) publicationError('Publication destination differs from the final validation');
     if (!Array.isArray(files) || files.length < 2 || files.length > 500) publicationError('Provide between 2 and 500 validated files');
     const seen = new Set(); let bytes = 0;
     for (const file of files) {

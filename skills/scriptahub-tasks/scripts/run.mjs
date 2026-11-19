@@ -2,6 +2,7 @@ import {uploadBlockSize} from './callback-budget.mjs';
 import {withExecutionLock} from './anchored-files.mjs';
 import fs from 'node:fs/promises';
 import {runBatchOperation} from './task-batch.mjs';
+import {sharedEditorial} from './shared-editorial.mjs';
 import {runRemoteSkill,runRemoteSequence,releaseIncompleteRemote,discardTranslationJob,guardRemoteBackups} from './remote-skill.mjs';
 import {preflight,writeHandoff,verifyPackage,requirePreflight} from './workflow-checks.mjs';
 import { constants } from 'node:fs';
@@ -122,14 +123,20 @@ export async function publishPackage(call, input, {hook=async()=>{}}={}) {
         }
         return filename;
     };
-    const readJson = async value => {
+    const readEvidence = async value => {
         const filename = await localPath(value);
         if ((await fs.stat(filename)).size > 100000) throw new Error('Publication evidence is too large');
-        return JSON.parse(await fs.readFile(filename,'utf8'));
+        return await fs.readFile(filename);
     };
-    const inventory = await readJson(input.inventory);
-    const validation = await readJson(input.validation);
+    const inventoryBytes = await readEvidence(input.inventory);
+    const inventory = JSON.parse(inventoryBytes);
+    const validation = JSON.parse(await readEvidence(input.validation));
     if (inventory.executionId !== input.executionId || inventory.publicationPermitted !== true || !Array.isArray(inventory.files)) throw new Error('Inventory does not approve this execution');
+    if (validation.inventorySha256 && validation.inventorySha256 !== crypto.createHash('sha256').update(inventoryBytes).digest('hex')) {
+        throw new Error('Approved inventory differs from the final validation');
+    }
+    if (validation.destination && (validation.destination.catalogue !== input.catalogue || validation.destination.branch !== input.branch
+        || validation.destination.baseCommit !== inventory.baseCommit)) throw new Error('Publication destination differs from the final validation');
     const root = await localPath(input.packageRoot);
     const files = inventory.files.map(({path: file,sha256,size}) => ({path:file,sha256,size}));
     for (const entry of files) {
@@ -169,7 +176,7 @@ async function main() {
   let client;
   try {
     const operation = process.argv[2];
-    if (process.argv.length !== 3 || (!operations[operation] && !['batch-start', 'batch-status', 'batch-next', 'batch-close', 'batch-defer', 'exec', 'exec-sequence', 'release-incomplete', 'discard-translation-job', 'download', 'choose', 'publish', 'retry-publication', 'preflight', 'handoff', 'verify-package'].includes(operation))) throw new Error('Use batch-start, batch-status, batch-next, batch-close, batch-defer, exec, exec-sequence, preflight, claim, status, download, choose, handoff, verify-package, publish, retry-publication or finish');
+    if (process.argv.length !== 3 || (!operations[operation] && !['batch-start', 'batch-status', 'batch-next', 'batch-close', 'batch-defer', 'exec', 'exec-sequence', 'release-incomplete', 'discard-translation-job', 'download', 'choose', 'publish', 'retry-publication', 'preflight', 'handoff', 'verify-package', 'shared-editorial'].includes(operation))) throw new Error('Use batch-start, batch-status, batch-next, batch-close, batch-defer, exec, exec-sequence, preflight, claim, status, download, choose, handoff, shared-editorial, verify-package, publish, retry-publication or finish');
     const chunks = [];
     let size = 0;
     for await (const chunk of process.stdin) {
@@ -182,6 +189,10 @@ async function main() {
     if (['handoff','verify-package'].includes(operation)) {
         const result = operation === 'handoff' ? await writeHandoff(input) : await verifyPackage(input);
         process.stdout.write(JSON.stringify(result) + '\n'); return;
+    }
+    if (operation === 'shared-editorial') {
+        process.stdout.write(JSON.stringify(await sharedEditorial(input)) + '\n');
+        return;
     }
     if (operation === 'choose') {
         process.stdout.write(JSON.stringify(chooseRepository(input)) + '\n');

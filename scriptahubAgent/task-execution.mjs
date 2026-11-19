@@ -192,9 +192,11 @@ export class TaskExecution {
   }
   status(executor, { executionId } = {}) {
     const row = this.execution(executor, executionId);
-    const pending = !row.finished_at && this.store.db.prepare('SELECT 1 AS pending FROM task_publications WHERE execution_id=? AND (retry_at IS NOT NULL OR commit_id IS NOT NULL OR receipt IS NOT NULL)').get(executionId)?.pending;
+    const saved = this.store.db.prepare('SELECT retry_at, commit_id, receipt FROM task_publications WHERE execution_id=?').get(executionId);
+    const pending = !row.finished_at && saved && (saved.retry_at !== null || saved.commit_id || saved.receipt);
     return { executionId: row.id, taskId: row.task_id, state: row.state, result: row.result, taskError: row.error,
-      ...(pending ? { publicationPending: true } : {}) };
+      ...(pending ? { publicationPending: true } : {}),
+      ...(row.state === 'completed' && saved?.receipt ? {publication: JSON.parse(saved.receipt)} : {}) };
   }
   async document(executor, { executionId, index, offset = 0, length = 196608 } = {}) {
     const row = this.execution(executor, executionId);

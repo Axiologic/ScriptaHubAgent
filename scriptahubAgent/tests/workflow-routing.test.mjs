@@ -17,7 +17,8 @@ test('only requested translation may branch and every publication path passes va
   visit(graph.entryTaskId);
   assert.equal(paths.length,2,'only the translation/no-translation alternatives exist');
   assert.equal(paths.filter(path=>path.includes('translate-resources')).length,1,'translation must be bypassable');
-  const required=['resume-book','prepare-manuscript','process-content','review-correct','validate-final','publish-result','book-result'];
+  const stages=['comprehensive-summary','relevant-keywords','shared-editorial-analysis','marketing-summary','short-description'];
+  const required=['resume-book','prepare-manuscript',...stages,'process-content','review-correct','validate-final','publish-result','book-result'];
   for(const path of paths)assert.deepEqual(path.filter(id=>id!=='translate-resources'),required);
   const translated=paths.find(path=>path.includes('translate-resources'));
   assert.ok(translated.indexOf('process-content')<translated.indexOf('translate-resources'));
@@ -26,6 +27,10 @@ test('only requested translation may branch and every publication path passes va
   const editorial=nodes.get('process-content'),translation=nodes.get('translate-resources');
   assert.ok(!editorial.skillsets.includes('ScriptaHubAgent/translate-html'),'only the separate translation step may run the translator');
   assert.ok(translation.skillsets.includes('ScriptaHubAgent/translate-html'));
+  for(const role of ['marketing-summary','short-description']) {
+    assert.match(nodes.get(role).prompt,/sharedEditorialAnalysis/);
+    assert.deepEqual(nodes.get(role).skillsets,['ScriptaHubAgent/scriptahub-tasks','ScriptaHubAgent/'+role]);
+  }
 });
 
 test('only the parent traverses requests and explicitly isolates failed book subflows',async()=>{
@@ -45,9 +50,20 @@ test('batch startup is outside traversal loops for both book and edit workflows'
     assert.ok(next,'continuation selects within the saved snapshot');
     assert.ok(graph.edges.some(edge=>edge.targetTaskId===next.id));
     assert.ok(graph.edges.some(edge=>edge.sourceTaskId===next.id&&edge.targetTaskId==='batch-result'));
-    assert.match(next.prompt,/Call only batch-next/);
-    if(name==='add-books')assert.equal(next.continueOnChildFailure,true);
+    assert.match(next.prompt,/Call only batch-next/i);
+    assert.equal(next.continueOnChildFailure,true);
+    assert.ok(graph.edges.some(edge=>edge.sourceTaskId===next.id&&edge.targetTaskId==='reconcile-task'));
   }
+});
+
+test('a normal edit reaches publication only after package preparation and validation',async()=>{
+  const parent=await flow('edit-book'),child=await flow('edit-edition');
+  assert.match(parent.tasks.find(task=>task.id==='select-task').prompt,/workflow=edit-edition/);
+  assert.equal(parent.tasks.find(task=>task.id==='select-task').continueOnChildFailure,true);
+  const chain=['claim-edit','apply-edit','prepare-edit-package','validate-edit','submit-edit'];
+  assert.equal(child.entryTaskId,chain[0]);
+  assert.deepEqual(child.edges.map(edge=>[edge.sourceTaskId,edge.targetTaskId]),chain.slice(1).map((id,index)=>[chain[index],id]));
+  assert.ok(child.tasks.every(task=>!task.creator));
 });
 
 test('all distributed workflow prompts fit RoboTeam native 16000-character admission limit',async()=>{
