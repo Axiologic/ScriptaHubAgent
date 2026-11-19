@@ -118,3 +118,16 @@ test('frozen reference batch payloads satisfy the live contract and native valid
   }
   assert.ok(checked>0,'must exercise actual reference batch artifacts');
 });
+
+test('batch admission works in a remote snapshot without an empty analyses directory',async t=>{
+  const f=await setup(t);
+  const results=path.dirname(f.output);
+  await fs.rmdir(results);
+  const contract=await handleBatch('batch-contract',f.job,{batch:f.name},skill,{schemaFor,validate});
+  assert.equal(contract.existing,null);
+  assert.equal(contract.batchSha256,f.contract.batchSha256);
+  assert.equal((await f.submit('{bad JSON')).result.status,'rejected');
+  await assert.rejects(fs.stat(results),{code:'ENOENT'});
+  assert.equal((await f.submit(f.value)).result.status,'accepted');
+  assert.deepEqual(JSON.parse(await fs.readFile(f.output,'utf8')),f.value);
+});

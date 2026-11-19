@@ -246,12 +246,44 @@ export async function discardTranslationJob(input,call,{root=process.cwd(),pollM
     return {discarded:true,originalExitCode};
   } finally {await evidence?.jobDir.close();await lock?.close();await control?.close();await taskRoot?.close();await base.close();}
 }
-export async function runRemoteSkill(input,call,{root=process.cwd(),sourceRoot=path.resolve(path.dirname(fileURLToPath(import.meta.url)),'../..'),stdout=process.stdout,stderr=process.stderr,pollMs=1000,hook=async()=>{}}={}) {
+export function runRemoteSkill(input,call,options) {
+  return runCommands(input.executionId,[input],call,options);
+}
+
+// One coordinator owns the execution from the first snapshot through the last
+// release. Each command sees the files merged by its predecessor.
+export function runRemoteSequence({executionId,taskDirectory,commands},call,options) {
+  if(!Array.isArray(commands)||commands.length<1||commands.length>16)throw new Error('Provide 1 to 16 native commands');
+  return runCommands(executionId,commands.map(command=>{
+    if(!command||typeof command!=='object'||Array.isArray(command))throw new Error('Invalid native sequence entry');
+    return {...command,executionId,taskDirectory};
+  }),call,options);
+}
+
+async function runCommands(executionId,commands,call,{root=process.cwd(),sourceRoot=path.resolve(path.dirname(fileURLToPath(import.meta.url)),'../..'),stdout=process.stdout,stderr=process.stderr,pollMs=1000,hook=async()=>{}}={}) {
+  for(const command of commands)validateRemoteCommand(command);
+  root=await fs.realpath(root);
+  const base=await openRoot(root);
+  let lock;
+  try {
+    lock=await executionLock(base,executionId);
+    for(const command of commands) {
+      const code=await runLockedCommand(command,call,{root,base,sourceRoot,stdout,stderr,pollMs,hook});
+      if(code!==0)return code;
+    }
+    return 0;
+  } finally {await lock?.close();await base.close();}
+}
+
+function validateRemoteCommand(input) {
   const {executionId,taskDirectory,skill,args=[],input:stdin=''}=input;
   if(!id(executionId)||!/^tasks\/[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$/.test(taskDirectory||'')||!/^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(skill||'')||!Array.isArray(args)||args.length>256||args.some(a=>typeof a!=='string'||a.includes('\0'))||Buffer.byteLength(JSON.stringify(args))>60000||typeof stdin!=='string'||Buffer.byteLength(stdin)>65536) throw new Error('Invalid remote skill command');
-  root=await fs.realpath(root); const base=await openRoot(root);let taskRoot,control,lock,jobDir;
+}
+
+async function runLockedCommand(input,call,{root,base,sourceRoot,stdout,stderr,pollMs,hook}) {
+  const {executionId,taskDirectory,skill,args=[],input:stdin=''}=input;
+  let taskRoot,control,jobDir;
   try {
-  lock=await executionLock(base,executionId);
   taskRoot=await openDir(base,taskDirectory);
   control=await openDir(taskRoot,'run-state/remote-processing',{create:true});
   const journalPath=at(control,'pending.json');let journal;
@@ -333,5 +365,5 @@ export async function runRemoteSkill(input,call,{root=process.cwd(),sourceRoot=p
   journal.phase='release_pending';journal.release={resultDigest:status.resultDigest,exitCode,evidence:{directory:jobId,receipt:'result.json',stdout:'stdout',stderr:'stderr',...(status.state==='succeeded'?{retained:'retained.json'}:{})}};
   await atomic(control,'pending.json',journal);
   return await releaseJournal(call,executionId,journal,journalPath);
-  } finally {await jobDir?.close();await lock?.close();await control?.close();await taskRoot?.close();await base.close();}
+  } finally {await jobDir?.close();await control?.close();await taskRoot?.close();}
 }

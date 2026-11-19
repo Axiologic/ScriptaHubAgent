@@ -37,9 +37,11 @@ async function read(file) {
   try {const stat=await handle.stat();if(!stat.isFile()||stat.nlink!==1||stat.size>32*1024*1024)throw Error('Unsafe batch resource');return await handle.readFile();}
   finally {await handle.close();}
 }
-async function child(directory,name) {
+async function child(directory,name,{optional=false}={}) {
   const result=path.join(directory,name);
-  const stat=await fs.lstat(result);
+  let stat;
+  try {stat=await fs.lstat(result);}
+  catch(error){if(optional&&error.code==='ENOENT')return null;throw error;}
   if(!stat.isDirectory()||stat.isSymbolicLink())throw Error('Unsafe batch directory');
   return result;
 }
@@ -54,9 +56,13 @@ export async function batchCommand({command,directory,batchName,batchSha256,repl
   const contract={skill,batch:batchName,batchPath,batchSha256:hash(bytes),sourceSha256:sourceHash,
     allowedSourceUnitIds:skill==='translate-html'?schema.properties.units.items.properties.id.enum:batch.units.map(unit=>unit.id),schema,
     instructions:'Read this batch and its context. Use only this schema and these source IDs. Audit true means you actually reviewed the content. Submit the whole JSON through submit-batch; never patch an analysis file. A rejected submission leaves the existing file unchanged. Continue the native lifecycle after acceptance.'};
-  const targetDir=await child(dir,skill==='translate-html'?'translations':'analyses'),target=path.join(targetDir,batchName);
+  const resultName=skill==='translate-html'?'translations':'analyses';
+  const existingDir=await child(dir,resultName,{optional:true});
+  const target=path.join(dir,resultName,batchName);
   let previous=null;
-  try {previous=await read(target);}catch(error){if(error.code!=='ENOENT')throw error;}
+  if(existingDir) {
+    try {previous=await read(target);}catch(error){if(error.code!=='ENOENT')throw error;}
+  }
   contract.existing=previous?{path:target,sha256:hash(previous)}:null;
   if(command==='batch-contract')return {status:'contract',...contract};
   if(batchSha256!==contract.batchSha256)throw Error('Batch digest mismatch; request batch-contract again before submitting');
@@ -74,6 +80,12 @@ export async function batchCommand({command,directory,batchName,batchSha256,repl
     if(accepted&&replaceSha256!==hash(previous))return {status:'rejected',errors:['An accepted batch already exists; preserve it or use its exact --replace-sha256 for an evidenced correction'],contract};
   }
   if(replaceSha256&&!previous)return {status:'rejected',errors:['Existing batch digest mismatch; reread batch-contract'],contract};
+  // Remote snapshots reconstruct directories from files. Create the result
+  // directory only after accepting the payload.
+  if(!existingDir) {
+    await fs.mkdir(path.join(dir,resultName),{mode:0o700}).catch(error=>{if(error.code!=='EEXIST')throw error;});
+  }
+  const targetDir=await child(dir,resultName);
   const temp=path.join(targetDir,'.submit-'+randomUUID());
   try {
     await fs.writeFile(temp,encoded,{flag:'wx',mode:0o600});
