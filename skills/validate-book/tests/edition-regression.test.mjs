@@ -23,6 +23,35 @@ test('existing defects are warnings, while worsening and additional occurrences 
   assert.equal(newLayoutFindings([finding],[finding]).existing[0].severity,'warning');
 });
 
+test('a five-column timeline fits the 390px reader and staged layout without changing the source',
+  {skip: !process.env.VALIDATEBOOK_TEST_CHROMIUM, timeout: 30000}, async t => {
+  const root = await fs.realpath(await fs.mkdtemp(path.join(os.tmpdir(), 'reader-timeline-')));
+  t.after(() => fs.rm(root, {recursive: true, force: true}));
+  const baseline = path.join(root, 'authored.html');
+  const candidate = path.join(root, 'staged.html');
+  const readerCss = fileURLToPath(new URL('../../../scriptahubAgent/site/reader/reader.css', import.meta.url));
+  const table = `<table><caption>Working timeline of 14 August 1998</caption>
+    <thead><tr><th>Time</th><th>Clara’s recollection</th><th>Lena’s statement</th><th>Photographic evidence</th><th>Reconstructed sequence</th></tr></thead>
+    <tbody><tr><td>About 7:15</td><td>Three people arrived at the dock.</td><td>Three of them walked together.</td><td>The photograph shows the boathouse.</td><td>Contemporaneous testimony offers independent corroboration.</td></tr>
+    <tr><td>About 7:35</td><td>Their disagreement started quietly.</td><td>Clara left the dock.</td><td>The jacket remained on the bench.</td><td>The reconstruction distinguishes chronology from interpretation.</td></tr></tbody></table>`;
+  const html = `<!doctype html><html lang="en"><head><meta charset="utf-8"></head><body><main data-reader-content><h1>Timeline</h1>${table}</main></body></html>`;
+  await fs.writeFile(baseline, html);
+  const staged = html.replace('</head>', '<style>@media(max-width:650px){table{width:100%;table-layout:fixed}th,td,caption{overflow-wrap:anywhere}}</style></head>');
+  await fs.writeFile(candidate, staged);
+  const originalHash = await fileHash(baseline);
+  const stagedHash = await fileHash(candidate);
+  const result = await compareEdition(baseline, {
+    candidate, root, readerCss, chromium: process.env.VALIDATEBOOK_TEST_CHROMIUM, jobDir: path.join(root, 'audit')
+  });
+  assert.deepEqual(result.measurements.find(item => item.width === 390 && item.presentation === 'reader'),
+    {width: 390, presentation: 'reader', baselineFindings: 0, newFindings: 0}, JSON.stringify(result.existing));
+  assert.ok(result.measurements.find(item => item.width === 390 && item.presentation === 'standalone').baselineFindings > 0);
+  assert.equal(result.errorFindings, 0, JSON.stringify(result.findings));
+  assert.equal(result.existingFindings, 0, JSON.stringify(result.existing));
+  assert.equal(await fileHash(baseline), originalHash);
+  assert.equal(await fileHash(candidate), stagedHash);
+});
+
 test('native edit checks accept a table change and reject lost text, images and new display damage',
   {skip:!process.env.VALIDATEBOOK_TEST_CHROMIUM,timeout:180000},async t=>{
   const root=await fs.realpath(await fs.mkdtemp(path.join(os.tmpdir(),'edition-regression-')));t.after(()=>fs.rm(root,{recursive:true,force:true}));

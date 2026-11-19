@@ -335,6 +335,9 @@ function cleanReadableDocument(sourceDocument, sourceUrl) {
   const original = sourceDocument.querySelector('[data-reader-content], article, main, .edition-reading') || sourceDocument.body;
   const content = document.createElement('article');
   content.className = 'reader-html-content';
+  for (const marker of ['data-pdf-fidelity', 'data-validatebook-root']) {
+    if (original.hasAttribute(marker)) content.setAttribute(marker, original.getAttribute(marker));
+  }
   const clone = original.cloneNode(true);
   clone.querySelectorAll('script, style, noscript, iframe, form, nav, header, footer').forEach((node) => node.remove());
   clone.querySelectorAll('*').forEach((element) => {

@@ -175,6 +175,15 @@ button { cursor: pointer; }
   .reader-page-label input { width: 30px; padding: 3px; border-radius: 3px; font-size: .62rem; }
   .reader-page-label span { font-size: .62rem; }
   .reader-html-content { width: 100%; padding: 32px 25px 72px; border-inline: 0; box-shadow: none; }
+  .reader-html-content:not([data-pdf-fidelity]):not([data-validatebook-root]) table:not(.pdf-table, .pdf-table-wrap table) {
+    width: 100%;
+    max-width: 100%;
+    table-layout: fixed;
+  }
+  .reader-html-content:not([data-pdf-fidelity]):not([data-validatebook-root]) table:not(.pdf-table, .pdf-table-wrap table) :is(caption, th, td) {
+    white-space: normal;
+    overflow-wrap: anywhere;
+  }
   .reader-stage { width: 100%; }
   .reader-pdf-page { padding: 8px; }
   .reader-audio { width: min(108px, 34vw); max-width: 108px; order: 0; flex: none; }

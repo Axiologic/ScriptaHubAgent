@@ -74,7 +74,9 @@ export async function measure(browser, file, presentation = null, sourcePages = 
 export function importReaderArticle(settings) {
   const original=document.querySelector('[data-reader-content], article, main, .edition-reading')||document.body;
   const article=document.createElement('article');article.className='reader-html-content';
-  article.setAttribute('data-pdf-fidelity',original.getAttribute('data-pdf-fidelity'));
+  for (const marker of ['data-pdf-fidelity','data-validatebook-root']) {
+    if (original.hasAttribute(marker)) article.setAttribute(marker,original.getAttribute(marker));
+  }
   const managed=document.querySelector('link[data-validatebook-presentation]');
   const managedHref=managed?.href;
   const bookStyles=settings.generic?[...document.querySelectorAll('link[rel~="stylesheet"][href]')].map(n=>n.href).filter(href=>href.startsWith(settings.booksRoot)):[];
