@@ -4,7 +4,7 @@ This skill is provider-, host-, and model-independent. The active LLM performs g
 
 Accept `.html` and `.htm` inputs only. Preserve the source byte-for-byte. Never invent claims, promises, testimonials, prices, author details, purchase links, or reader outcomes. Never expose answers, conclusions, solutions, prescriptions, twists, resolutions, or outcomes merely because they occur in the source.
 
-Keep persistent documentation, schemas, code, tests, and comments in English. The job contract is exact and unversioned; do not add legacy branches or schema-version fields. Use `scripts/marketingsummary` as the normal entrypoint and keep jobs beside the source by default.
+Keep persistent documentation, schemas, code, tests, and comments in English. Maintain the exact current job contract. Use `scripts/marketingsummary` as the normal entrypoint and keep jobs beside the source by default.
 
 The workflow runs end to end without per-batch questions. If permissions are required, request one combined approval before starting. Analyze up to four batches concurrently when workers are available, then synthesize, draft, review, build, and independently validate.
 
@@ -24,8 +24,3 @@ See tests/fixtures/README.md for provenance. Acceptance requires zero skipped te
 
 Job JSON and command arguments are preserved. Doctor retains its behavioral
 metadata and reports the Node.js and htmlparser2 versions.
-
-
-## Shared module dependency
-
-Batch admission and common schema builders live in `skills/scriptahub-tasks/shared/batch-io.mjs`. Import that module directly; do not copy or generate a batch-io.mjs inside this skill. Keep the skill-specific adapter here. Distribution must include the declared sibling shared dependency; this rule supersedes the former all-resources-inside-one-folder requirement for batch admission.

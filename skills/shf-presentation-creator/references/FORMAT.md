@@ -143,7 +143,7 @@ State is sampled from absolute local time on every frame. Seeking to A, B and ba
 }
 ```
 
-Voice clips are ordered, non-overlapping and contained in the scene. They share the measured scene clock. Legacy single-clip `scene.audio` remains accepted with offset zero; do not combine it with `audioClips`. Captions are optional ordered non-overlapping cues; if absent, the player uses short approximate cards from spoken beats. `captionsVTT` exports explicit cues or line-level beats, not synthesized word timestamps.
+Voice clips are ordered, non-overlapping and contained in the scene. They share the measured scene clock. Single-clip `scene.audio` uses offset zero; do not combine it with `audioClips`. Captions are optional ordered non-overlapping cues; if absent, the player uses short approximate cards from spoken beats. `captionsVTT` exports explicit cues or line-level beats, not synthesized word timestamps.
 
 Film `soundtrack` or scene `music` identifies one asset, optional `gain`, `loop` and `offsetMs`. `scene.music:null` disables the film soundtrack for that scene. Default user music is off. Audio production and exact mixing behavior are specified in `VOICE_AND_MUSIC.md`.
 

@@ -181,3 +181,14 @@ Editorial and translation workers receive an exact batch-specific contract from 
 ## Shared batch module
 
 The four editorial skills and translate-html import one physical module at skills/scriptahub-tasks/shared/batch-io.mjs. Their descriptors declare the sibling dependency and their adapters retain skill-specific schemas. Image preparation verifies the declared shared sources; installed runtime receipts and robot-side admission both include those sources in the dependent skill fingerprints. Shared code is not regenerated into skill folders. Bundle the common directory once with exported dependent skills.
+
+
+## Starting and continuing a reserved batch
+
+A saved open batch may contain only cancelled/completed/failed items after an interrupted workflow. On a new batch-start, the task helper closes such an exhausted batch through the strict service API and then reserves the current eligible queue without wasting an empty run. Empty old batches are handled the same way. Active, stop-requested, queued and uncertain-publication reservations remain bound to their existing batch; a lost/refused close reply retains the local identity for recovery. Existing evidence is not deleted or regenerated.
+
+Both add-books and edit-book enter through select-task once and continue through select-next-task. Item-result edges cannot return to the startup selector. Continuation calls only batch-next, so requests arriving during processing wait for the next parent execution. Existing captured workflow graphs are not rewritten; use the updated definitions for new executions.
+
+## Native child-workflow admission
+
+RoboTeam rejects an entire workflow definition when a task prompt exceeds its native 16,000-character limit. The distributed Create book prompts reference the loaded scriptahub-tasks contract instead of repeating long shared execution rules. Workflow routing tests enforce that limit for every shipped definition, and the local native validator/catalogue check includes create-book as a runnable child. The Add books selectors check for create-book in the supplied child catalogue before claiming a request; a missing definition cannot be replaced by edit-book. An existing claim remains tied to its original execution/handoff for recovery after catalogue repair.

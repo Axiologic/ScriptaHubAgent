@@ -31,7 +31,7 @@ Preserve meaning, factual claims, uncertainty, terminology, tone, chronology, ex
 
 Units marked `verify-only` must use `action: "keep"` with exact source text. This includes bibliographies and reference lists, copyright/legal text, citation-only blocks, identifier-heavy metadata, and page accessibility labels.
 
-Document declarations and processing instructions are protected markup, never editorial units. Preserve their presence without converting an XML declaration or doctype into visible prose. If an older prepared job exposed a declaration as a text unit, retain its evidence and prepare a fresh job; transfer only reviewed units whose complete source and protection data still match.
+Document declarations and processing instructions are protected markup, never editorial units. Preserve their presence without converting an XML declaration or doctype into visible prose.
 
 ## Large-document rules
 

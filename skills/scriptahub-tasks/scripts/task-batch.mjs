@@ -61,17 +61,20 @@ export async function runBatchOperation(call,operation,input,{root=process.cwd()
   await directory(root,'run-state');
   const filename = path.join(root,'run-state/task-batch.json');
   const persist = async replace => {
+    let created = false;
     const state = {batchId:crypto.randomUUID(),taskType:input.taskType};
     const temp = filename + '.' + crypto.randomUUID() + '.tmp';
     try {
       await fs.writeFile(temp,JSON.stringify(state)+'\n',{flag:'wx',mode:0o600});
       if (replace) await fs.rename(temp,filename);
-      else await fs.link(temp,filename).catch(error=>{if(error.code!=='EEXIST')throw error;});
+      else await fs.link(temp,filename).then(()=>{created=true;}).catch(error=>{if(error.code!=='EEXIST')throw error;});
     } finally { await fs.rm(temp,{force:true}); }
+    return created;
   };
+  let fresh = false;
   if (operation === 'batch-start') {
     if (!types.has(input.taskType)) throw new Error('Provide manuscript, book-proposal, add-book or edit taskType');
-    await persist(false);
+    fresh = await persist(false);
   }
   let state = await readState(filename);
   const upgradingBookBatch = operation === 'batch-start' && state.taskType === 'manuscript' && input.taskType === 'add-book';
@@ -84,8 +87,25 @@ export async function runBatchOperation(call,operation,input,{root=process.cwd()
     if (snapshot.closed || !identifier(input.taskId) || !identifier(input.executionId) || !item || !['running','stop_requested'].includes(item.state) || typeof input.reason !== 'string' || !input.reason.trim() || input.reason.length>1000) throw new Error('Defer only an identified active item from this open batch with its actual reason');
     return call('scriptahub_task_batch_settle',{batchId:state.batchId,taskId:item.taskId,runId:item.runId,executionId:item.executionId,defer:true,reason:input.reason});
   }
-  // A Cron job reuses its run folder, so a batch an earlier run closed is replaced
-  // by a new one. An open or paused batch is resumed, never replaced.
+  // Startup may inherit an open batch whose last item became terminal while the
+  // previous flow was stopped. Close that exhausted traversal before reserving
+  // today's queue. Do not refresh from batch-next: arrivals during traversal wait.
+  if (operation === 'batch-start' && !fresh && !snapshot.closed) {
+    if (!Array.isArray(snapshot.items)) throw new Error('ScriptaHub did not return the reserved batch items');
+    const exhausted = snapshot.items.every(item => !item.publicationPending && (item.released || terminal.has(item.state)));
+    if (exhausted) {
+      for (const item of snapshot.items) {
+        if (!identifier(item.taskId)) throw new Error('Invalid reserved task identity');
+        if (!item.released && item.runId && item.runId !== itemRunId(state.batchId,item.taskId)) throw new Error('Reserved task belongs to a different execution');
+      }
+      // Persist a replacement only after the service confirms closure. Strict
+      // close refuses a racing active task; an ambiguous reply retains our ID.
+      const closed = await call('scriptahub_task_batch_close',{batchId:state.batchId});
+      if (closed.batchId !== state.batchId || closed.closed !== true) throw new Error('ScriptaHub did not confirm batch closure');
+      snapshot = {...snapshot,closed:true};
+    }
+  }
+  // Active/queued open batches are resumed; closed traversals start a new one.
   if (operation === 'batch-start' && snapshot.closed === true) {
     await persist(true);
     state = await readState(filename);

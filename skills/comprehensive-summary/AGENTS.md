@@ -4,7 +4,7 @@ This skill is provider-, host-, and model-independent. The active LLM performs c
 
 Accept complete semantic HTML only. Never translate, mutate the source, invent claims, or silently omit a source chapter from analysis. Copyright, contents pages, navigation, page labels, and unannotated bibliographies are classified as non-content and recorded rather than summarized.
 
-Keep persistent documentation, schemas, code, tests, and comments in English. The job contract is unversioned and exact; do not add legacy schema branches. Use `scripts/comprehensivesummary` as the normal runtime and keep job artifacts in the source workspace by default.
+Keep persistent documentation, schemas, code, tests, and comments in English. Maintain the exact current job contract. Use `scripts/comprehensivesummary` as the normal runtime and keep job artifacts in the source workspace by default.
 
 The workflow runs end to end without per-batch questions. If the host requires permission, request one combined approval before work begins. After preparation, process up to four chapter batches in parallel, then complete synthesis, drafting, build, and independent validation.
 
@@ -15,8 +15,3 @@ When changing behavior, update `SKILL.md`, `README.md`, `DS.md`, `references/job
 Follow the coding style and runtime section in [DS.md](DS.md). Use .mjs modules
 and Node.js built-ins; document bundled dependency exceptions in dependencies.md.
 Run `node --test tests/*.test.mjs`, syntax checks and `scripts/comprehensivesummary doctor`.
-
-
-## Shared module dependency
-
-Batch admission and common schema builders live in `skills/scriptahub-tasks/shared/batch-io.mjs`. Import that module directly; do not copy or generate a batch-io.mjs inside this skill. Keep the skill-specific adapter here. Distribution must include the declared sibling shared dependency; this rule supersedes the former all-resources-inside-one-folder requirement for batch admission.

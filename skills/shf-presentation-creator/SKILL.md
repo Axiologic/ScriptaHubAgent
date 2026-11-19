@@ -257,8 +257,7 @@ The completed package must answer: **What did we preserve? Why is it interesting
 
 Default to a flat, quiet color field in **all three themes**, including Light and
 Dark. Do not add background outlines, frames, stacked panels, ornamental lines,
-recesses, glowing borders, blobs or busy scenery. `minimal` (and the legacy
-`studio` alias) has no decorative backdrop nodes. Color comes from meaningful
+recesses, glowing borders, blobs or busy scenery. `minimal` (also accepted as `studio`) has no decorative backdrop nodes. Color comes from meaningful
 foreground objects; retain lines only when they explain an actual relationship
 or define an object. Explicit scenery must be justified by the source and request.
 

@@ -65,4 +65,4 @@ Apply source-supported repairs until no further file changes occur. Unresolved v
 
 ## Semantic translation template
 
-Read [the canonical translation contract](semantic-template.md). Verification and correction share the same extractor, alignment and renderer. Existing prose is immutable; longer translations extend their semantic page in normal flow. No legacy template path, sentence-count rewriting or full-book translation is used.
+Read [the canonical translation contract](semantic-template.md). Verification and correction share the same extractor, alignment and renderer. Existing prose is immutable; longer translations extend their semantic page in normal flow. Use the native semantic-template contract for presentation checks and preserve existing prose.

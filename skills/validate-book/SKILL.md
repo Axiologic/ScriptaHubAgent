@@ -37,7 +37,7 @@ Unmapped or ambiguous English paragraphs are errors regardless of token overlap.
 
 The required pdf2html `decorations` response includes hash-bound `tables`: closed grids, complete fill partitions, or geometrically certified borderless two-column tables, including repeated-header continuations on the next PDF page. Evidence records source page width, cell text and spans, widths, fills, individual border edges, vertical alignment and uniform typography. Old providers without table evidence fail explicitly. Chromium compares cell presentation and actual rendered font identity at the original PDF page width in standalone and imported readers; responsive views check delivery integrity. Complete text/span correspondence is required; partial, duplicate, mixed-font or unsupported tables remain errors. Source font lookup retains full face names, including bold MT variants.
 
-Paginated readers scale text, leading and paragraph gaps by clamp(1, rendered page width / source CSS-pixel page width, 1.2), which caps upscaling at 1.2× so a wide screen cannot inflate type indefinitely. The page box is the container query for --validatebook-page-scale; nested containers inherit that number. Narrow screens retain physical source font sizes and allow page growth; larger pages preserve text-to-page proportions. The host keeps its outer width and padding. A source-fidelity marker neutralizes legacy iframe inflation, and imported parity compares sizes normalized by the independently measured page widths. Managed CSS keeps the measured standalone size. Repairs remain stable across CSS consolidation and reruns.
+Paginated readers scale text, leading and paragraph gaps by clamp(1, rendered page width / source CSS-pixel page width, 1.2), which caps upscaling at 1.2× so a wide screen cannot inflate type indefinitely. The page box is the container query for --validatebook-page-scale; nested containers inherit that number. Narrow screens retain physical source font sizes and allow page growth; larger pages preserve text-to-page proportions. The host keeps its outer width and padding. A source-fidelity marker neutralizes host iframe inflation, and imported parity compares sizes normalized by the independently measured page widths. Managed CSS keeps the measured standalone size. Repairs remain stable across CSS consolidation and reruns.
 
 Existing translations use the single native semantic-template workflow described in [semantic-template](references/semantic-template.md). Reuse existing translated text and inline markers unchanged. English page containers define semantic groups that may grow across displayed pages. Align shared, language-independent anchors, then match ordered slots with a tolerant, order-preserving alignment that keeps translated-only blocks in place, reports missing or regrouped units and never rewrites prose. Only content loss, reordered identities, table-grid mismatch or an unalignable interval blocks the rebuild.
 
@@ -56,15 +56,9 @@ Converter placeholders such as a visible `Figure from PDF page N` figcaption are
 
 This skill performs layout, display and structural-integrity validation and correction. It checks every PDF page and the complete existing HTML, including paragraphs, headings, tables, images, contents, references, local assets and fonts. English is the presentation and translation-structure master. Existing translated pages are preserved only when their canonical block and sentence-count structure matches English.
 
-Existing translations use the single native semantic-template workflow described in [semantic-template](references/semantic-template.md). Reuse existing translated text and inline markers unchanged. English page containers define semantic groups that may grow across displayed pages. Align shared, language-independent anchors, then match ordered slots with a tolerant, order-preserving alignment that keeps translated-only blocks in place, reports missing or regrouped units and never rewrites prose. Only content loss, reordered identities, table-grid mismatch or an unalignable interval blocks the rebuild.
-
-Existing translations use the single native semantic-template workflow described in [semantic-template](references/semantic-template.md). Reuse existing translated text and inline markers unchanged. English page containers define semantic groups that may grow across displayed pages. Align shared, language-independent anchors, then match ordered slots with a tolerant, order-preserving alignment that keeps translated-only blocks in place, reports missing or regrouped units and never rewrites prose. Only content loss, reordered identities, table-grid mismatch or an unalignable interval blocks the rebuild.
-
 Read [contracts](references/contracts.md), [execution](references/execution.md), [batch workflow](references/batch-workflow.md) and [dependencies](dependencies.md) before running.
 
 ## Workflow
-
-Existing translations use the single native semantic-template workflow described in [semantic-template](references/semantic-template.md). Reuse existing translated text and inline markers unchanged. English page containers define semantic groups that may grow across displayed pages. Align shared, language-independent anchors, then match ordered slots with a tolerant, order-preserving alignment that keeps translated-only blocks in place, reports missing or regrouped units and never rewrites prose. Only content loss, reordered identities, table-grid mismatch or an unalignable interval blocks the rebuild.
 
 ## Commands
 
@@ -83,8 +77,6 @@ scripts/validatebook complete-status /private/layout-coordinator/complete.json
 Source-dependent English errors block automatic presentation propagation until resolved. A missing image, uncertain table structure or unmapped paragraph is not silently accepted. Repairs are not universally automatic: complex PDF layout cannot be reconstructed reliably from text counts or font names alone.
 
 ## Deterministic And Agent Translation Loop
-
-Existing translations use the single native semantic-template workflow described in [semantic-template](references/semantic-template.md). Reuse existing translated text and inline markers unchanged. English page containers define semantic groups that may grow across displayed pages. Align shared, language-independent anchors, then match ordered slots with a tolerant, order-preserving alignment that keeps translated-only blocks in place, reports missing or regrouped units and never rewrites prose. Only content loss, reordered identities, table-grid mismatch or an unalignable interval blocks the rebuild.
 
 `passed` certifies English visual checks and exact translated page/block/sentence-count structure. It does not certify literary quality or factual equivalence. `needs_attention` means unresolved structural/display findings. Do not claim interactive application testing.
 
@@ -116,13 +108,11 @@ Preserve the host-approved reading width and padding. Typography calibration mus
 
 For imported HTML, the host reader owns the page width, maximum width, centering and outer padding. Source-fidelity CSS must not override those properties on `.reader-html-content`, including through a later stylesheet or a media query. Check the computed container geometry against the host rule, not just the text of reader.css. Preserve source typography inside that container.
 
-Treat both `data-pdf-fidelity` and `data-validatebook-root` as book-owned presentation markers. Shared reader and standalone CSS may expose control variables such as `--reader-font-size` and may set the wrapper width and centering, but they must not add wrapper padding that duplicates page-owned margins. Every descendant typography, colour, table, image and internal spacing default must exclude both markers. General presentation defaults are for legacy or unstyled documents only. Book-specific exceptions are forbidden in shared reader CSS. Spacing between page sheets may belong to the reader; margins, padding and reserved space inside each page belong to the book stylesheet. Validate this isolation contract before certifying either delivery path.
+Treat both `data-pdf-fidelity` and `data-validatebook-root` as book-owned presentation markers. Shared reader and standalone CSS may expose control variables such as `--reader-font-size` and may set the wrapper width and centering, but they must not add wrapper padding that duplicates page-owned margins. Every descendant typography, colour, table, image and internal spacing default must exclude both markers. General presentation defaults are for host or unstyled documents only. Book-specific exceptions are forbidden in shared reader CSS. Spacing between page sheets may belong to the reader; margins, padding and reserved space inside each page belong to the book stylesheet. Validate this isolation contract before certifying either delivery path.
 
 ## Source pagination
 
 A page anchor alone does not preserve pagination. Use `prepare BOOK --auto-correct --paginate` after layout correction to create distinct `.pdf-source-page` containers. Before splitting, normalize duplicate, skipped or out-of-order `page_N` anchors in document order and update same-document links to the first matching normalized anchor; preserve narrative text and non-page IDs. The cover and title page stay separate. Use English PDF dimensions for the page aspect and require complete English page-number coverage. Insert a missing English blank page only when PDF extraction confirms that it has no text except its printed page number. Missing nonblank boundaries require source evidence. Translation repair uses the corresponding canonical English page and never inserts placeholder content.
-
-Existing translations use the single native semantic-template workflow described in [semantic-template](references/semantic-template.md). Reuse existing translated text and inline markers unchanged. English page containers define semantic groups that may grow across displayed pages. Align shared, language-independent anchors, then match ordered slots with a tolerant, order-preserving alignment that keeps translated-only blocks in place, reports missing or regrouped units and never rewrites prose. Only content loss, reordered identities, table-grid mismatch or an unalignable interval blocks the rebuild.
 
 Derive page-body padding from recurring PDF text bounds, excluding blank rows and printed folios; retain the host outer width and centering. Do not substitute arbitrary clamp padding for measured margins. Reject ambiguous or mixed-size geometry. Rebuild matched contents presentation with dotted leaders, source indentation and row leading. Preserve link labels and targets. English labels use printed PDF folios; translated labels use their own reader page markers. Never present English folios as translated page numbers. Unmatched entries remain recorded for review.
 
@@ -142,8 +132,6 @@ The pdf2html source extractor also returns numbered and bulleted list groups fro
 
 ## Executable completion
 
-Existing translations use the single native semantic-template workflow described in [semantic-template](references/semantic-template.md). Reuse existing translated text and inline markers unchanged. English page containers define semantic groups that may grow across displayed pages. Align shared, language-independent anchors, then match ordered slots with a tolerant, order-preserving alignment that keeps translated-only blocks in place, reports missing or regrouped units and never rewrites prose. Only content loss, reordered identities, table-grid mismatch or an unalignable interval blocks the rebuild.
-
 Sparse centered or left-aligned display pages are checked independently from prose and reader parity. Source XML groups establish separate title, subtitle, italic description and year blocks, their font sizes, explicit line groups and vertical gaps. Repair requires complete normalized text agreement and a verified embedded source family. Rebuild the groups before the single CSS consolidation step; retain page anchors and responsive wrapping. Check grouping, alignment, emphasis, sizes, leading and margins at each viewport in both reader paths. A repeated running title must not exempt the title-page heading from these checks.
 
 Detect false headings inside paragraphs from source continuity on both sides. Merge a heading with its adjacent paragraphs only when the source line is not bold, sizes and baseline spacing match ordinary continuous text, and the entire combined text occurs on the same source page. Preserve anchors and exact text; verify the merged result and keep source evidence in the correction log. The same detector can run without mutation during audit.
@@ -159,11 +147,7 @@ Generated page boxes own PDF-derived outer insets. Undecorated normal-flow main/
 
 ## Independent translation pagination
 
-Existing translations use the single native semantic-template workflow described in [semantic-template](references/semantic-template.md). Reuse existing translated text and inline markers unchanged. English page containers define semantic groups that may grow across displayed pages. Align shared, language-independent anchors, then match ordered slots with a tolerant, order-preserving alignment that keeps translated-only blocks in place, reports missing or regrouped units and never rewrites prose. Only content loss, reordered identities, table-grid mismatch or an unalignable interval blocks the rebuild.
-
 ## Autonomous transactional completion
-
-Existing translations use the single native semantic-template workflow described in [semantic-template](references/semantic-template.md). Reuse existing translated text and inline markers unchanged. English page containers define semantic groups that may grow across displayed pages. Align shared, language-independent anchors, then match ordered slots with a tolerant, order-preserving alignment that keeps translated-only blocks in place, reports missing or regrouped units and never rewrites prose. Only content loss, reordered identities, table-grid mismatch or an unalignable interval blocks the rebuild.
 
 ## Authorized publisher restoration
 
@@ -190,7 +174,7 @@ Apply source-supported repairs until no further file changes occur. Unresolved v
 
 ## Semantic translation template
 
-Read [the canonical translation contract](references/semantic-template.md). Verification and correction share the same extractor, alignment and renderer. Existing prose is immutable; longer translations extend their semantic page in normal flow. No legacy template path, sentence-count rewriting or full-book translation is used.
+Read [the canonical translation contract](references/semantic-template.md). Verification and correction share the same extractor, alignment and renderer. Existing prose is immutable; longer translations extend their semantic page in normal flow. Use the native semantic-template contract for presentation checks and preserve existing prose.
 
 ## Fixed-page converter adaptation
 

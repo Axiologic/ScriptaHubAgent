@@ -31,7 +31,30 @@ test('only requested translation may branch and every publication path passes va
 test('only the parent traverses requests and explicitly isolates failed book subflows',async()=>{
   const parent=await flow('add-books'), child=await flow('create-book');
   assert.equal(parent.tasks.find(task=>task.id==='select-task').continueOnChildFailure,true);
-  assert.ok(parent.edges.some(edge=>edge.sourceTaskId==='reconcile-task'&&edge.targetTaskId==='select-task'));
+  assert.ok(parent.edges.some(edge=>edge.sourceTaskId==='reconcile-task'&&edge.targetTaskId==='select-next-task'));
   assert.ok(!child.tasks.some(task=>task.creator||task.kind==='run-workflows'));
   assert.ok(!child.edges.some(edge=>edge.targetTaskId==='select-task'));
+});
+
+test('batch startup is outside traversal loops for both book and edit workflows',async()=>{
+  for(const name of ['add-books','edit-book']) {
+    const graph=await flow(name);
+    assert.equal(graph.entryTaskId,'select-task');
+    assert.equal(graph.edges.some(edge=>edge.targetTaskId==='select-task'),false,'never restart a lot inside its traversal');
+    const next=graph.tasks.find(task=>task.id==='select-next-task');
+    assert.ok(next,'continuation selects within the saved snapshot');
+    assert.ok(graph.edges.some(edge=>edge.targetTaskId===next.id));
+    assert.ok(graph.edges.some(edge=>edge.sourceTaskId===next.id&&edge.targetTaskId==='batch-result'));
+    assert.match(next.prompt,/Call only batch-next/);
+    if(name==='add-books')assert.equal(next.continueOnChildFailure,true);
+  }
+});
+
+test('all distributed workflow prompts fit RoboTeam native 16000-character admission limit',async()=>{
+  const directory=new URL('../../flows/',import.meta.url);
+  for(const file of await fs.readdir(directory)) {
+    if(!file.endsWith('.json'))continue;
+    const graph=JSON.parse(await fs.readFile(new URL(file,directory),'utf8'));
+    for(const task of graph.tasks)assert.ok((task.prompt||'').length<=16000,`${file}/${task.id}: ${(task.prompt||'').length} characters would remove the whole workflow from the native catalogue`);
+  }
 });

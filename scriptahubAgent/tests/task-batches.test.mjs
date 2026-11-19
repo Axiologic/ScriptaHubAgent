@@ -177,7 +177,7 @@ test('book workflows traverse their fixed batch using ordinary graph edges, with
     const graph=JSON.parse(await fs.readFile(new URL('../../flows/'+name+'.json',import.meta.url),'utf8'));
     assert.equal(graph.entryTaskId,'select-task');
     assert.equal(graph.taskQueueAgent,undefined);assert.equal(graph.taskType,undefined);
-    assert.ok(graph.edges.some(edge=>['result-to-next','item-to-next'].includes(edge.id)&&edge.targetTaskId==='select-task'));
+    assert.ok(graph.edges.some(edge=>['result-to-next','item-to-next'].includes(edge.id)&&edge.targetTaskId==='select-next-task'));
     assert.ok(graph.edges.some(edge=>edge.id==='batch-to-result'&&edge.targetTaskId==='batch-result'));
     assert.equal(graph.edges.filter(edge=>edge.sourceTaskId==='batch-result').length,0);
     assert.doesNotMatch(JSON.stringify(graph),/queueTask|batch management belongs to RoboTeam/);
@@ -239,4 +239,108 @@ test('a deferred active book does not block other books or future batches and ca
   // Recovery of the retained original execution still works after batch traversal closed.
   f.service.finish(executor,{executionId:first.executionId,state:'failed',error:'Original processing reconciled'});
   f.service.settle(executor,{batchId:batch.batchId,taskId:first.taskId,runId:first.runId});
+});
+
+for(const finalState of ['cancelled','failed','completed']) {
+  test(`startup replaces an old open ${finalState}-only batch and dispatches the current queue immediately`,async t=>{
+    const {runBatchOperation}=await import('../../skills/scriptahub-tasks/scripts/task-batch.mjs');
+    const f=await fixture(t),old=f.add('book-proposal');
+    const methods={scriptahub_task_batch_snapshot:'snapshot',scriptahub_task_batch_close:'closeBatch',scriptahub_task_batch_settle:'settle',scriptahub_task_claim:'claim'};
+    const run=(op,input={})=>runBatchOperation(async(tool,args)=>f.service[methods[tool]](executor,args),op,input,{root:f.root});
+    const initial=await run('batch-start',{taskType:'add-book'}),claimed=await run('batch-next');
+    await fs.writeFile(path.join(f.root,claimed.taskDirectory,'retained.txt'),'keep previous execution evidence');
+    if(finalState==='cancelled') {f.store.cancel({id:'user:owner'},old.task.id);f.service.finish(executor,{executionId:claimed.task.executionId,state:'cancelled'});}
+    else if(finalState==='failed')f.service.finish(executor,{executionId:claimed.task.executionId,state:'failed',error:'Existing attempt ended'});
+    else {
+      // This fixture isolates terminal-batch cleanup; publication itself has dedicated tests.
+      f.store.db.prepare("UPDATE tasks SET state='completed' WHERE id=?").run(old.task.id);
+      f.store.db.prepare('UPDATE task_executions SET finished_at=? WHERE id=?').run(new Date().toISOString(),claimed.task.executionId);
+    }
+    const later=f.add('book-proposal');
+    assert.equal((await run('batch-status')).closed,false,'old terminal lot was not closed by the interrupted flow');
+    const next=await run('batch-start',{taskType:'add-book'});
+    assert.notEqual(next.batchId,initial.batchId);assert.deepEqual(next.taskIds,[later.task.id]);
+    assert.equal(f.service.snapshot(executor,{batchId:initial.batchId,taskType:'add-book'}).closed,true);
+    assert.equal((await run('batch-next')).task.taskId,later.task.id,'no wasted empty workflow run');
+    assert.equal(await fs.readFile(path.join(f.root,claimed.taskDirectory,'retained.txt'),'utf8'),'keep previous execution evidence');
+    assert.equal(f.store.db.prepare('SELECT COUNT(*) AS n FROM task_executions WHERE task_id=?').get(old.task.id).n,1);
+  });
+}
+
+test('empty saved batches rotate at startup, while a fresh empty batch and read-only status stay unchanged',async t=>{
+  const {runBatchOperation}=await import('../../skills/scriptahub-tasks/scripts/task-batch.mjs');
+  const f=await fixture(t),calls=[];
+  const run=(op,input={})=>runBatchOperation(async(tool,args)=>{calls.push(tool);return f.service[{scriptahub_task_batch_snapshot:'snapshot',scriptahub_task_batch_close:'closeBatch'}[tool]](executor,args);},op,input,{root:f.root});
+  const empty=await run('batch-start',{taskType:'add-book'});assert.deepEqual(empty.items,[]);
+  assert.equal(calls.includes('scriptahub_task_batch_close'),false);
+  const later=f.add('book-proposal');
+  assert.equal((await run('batch-status')).batchId,empty.batchId,'status cannot rotate an exhausted lot');
+  const next=await run('batch-start',{taskType:'add-book'});
+  assert.notEqual(next.batchId,empty.batchId);assert.deepEqual(next.taskIds,[later.task.id]);
+});
+
+test('startup preserves active, queued, stopped and uncertain-publication batches and excludes later arrivals',async t=>{
+  const {runBatchOperation}=await import('../../skills/scriptahub-tasks/scripts/task-batch.mjs');
+  const f=await fixture(t);f.add('book-proposal');
+  const methods={scriptahub_task_batch_snapshot:'snapshot',scriptahub_task_batch_close:'closeBatch',scriptahub_task_claim:'claim'};
+  const run=(op,input={})=>runBatchOperation(async(tool,args)=>f.service[methods[tool]](executor,args),op,input,{root:f.root});
+  const initial=await run('batch-start',{taskType:'add-book'});f.add('book-proposal');
+  assert.deepEqual(await run('batch-start',{taskType:'add-book'}),initial,'queued reservations still belong to this fixed batch');
+  const claimed=await run('batch-next');
+  const stateFile=path.join(f.root,'run-state/task-batch.json'),before=await fs.readFile(stateFile,'utf8');
+  assert.equal((await run('batch-start',{taskType:'add-book'})).batchId,initial.batchId,'active execution cannot be replaced');
+  f.store.db.prepare('INSERT INTO task_publications(execution_id,manifest,digest,retry_at) VALUES(?,?,?,?)').run(claimed.task.executionId,'{}','digest',0);
+  const pending=await run('batch-start',{taskType:'add-book'});
+  assert.equal(pending.batchId,initial.batchId);assert.equal(pending.items[0].publicationPending,1);
+  f.store.cancel({id:'user:owner'},claimed.task.taskId);
+  assert.equal((await run('batch-start',{taskType:'add-book'})).batchId,initial.batchId,'stop_requested needs confirmation, not rollover');
+  assert.equal(await fs.readFile(stateFile,'utf8'),before);
+});
+
+test('uncertain batch closure retains its identity and retries without losing queued work',async t=>{
+  const {runBatchOperation}=await import('../../skills/scriptahub-tasks/scripts/task-batch.mjs');
+  const f=await fixture(t);f.add('book-proposal');let loseClose=false;
+  const methods={scriptahub_task_batch_snapshot:'snapshot',scriptahub_task_batch_close:'closeBatch',scriptahub_task_claim:'claim'};
+  const run=(op,input={})=>runBatchOperation(async(tool,args)=>{
+    const result=f.service[methods[tool]](executor,args);
+    if(tool==='scriptahub_task_batch_close'&&loseClose){loseClose=false;throw Error('Closure reply was lost');}
+    return result;
+  },op,input,{root:f.root});
+  const initial=await run('batch-start',{taskType:'add-book'}),claimed=await run('batch-next');
+  f.service.finish(executor,{executionId:claimed.task.executionId,state:'failed',error:'Known terminal failure'});
+  const later=f.add('book-proposal'),stateFile=path.join(f.root,'run-state/task-batch.json'),before=await fs.readFile(stateFile,'utf8');
+  loseClose=true;await assert.rejects(run('batch-start',{taskType:'add-book'}),/Closure reply was lost/);
+  assert.equal(await fs.readFile(stateFile,'utf8'),before,'do not replace before receiving closure confirmation');
+  const next=await run('batch-start',{taskType:'add-book'});
+  assert.notEqual(next.batchId,initial.batchId);assert.deepEqual(next.taskIds,[later.task.id]);
+  assert.equal((await run('batch-next')).task.taskId,later.task.id);
+});
+
+test('continuation closes a fixed batch without pulling in new arrivals after its last item',async t=>{
+  const {runBatchOperation}=await import('../../skills/scriptahub-tasks/scripts/task-batch.mjs');
+  const f=await fixture(t);f.add('book-proposal');
+  const methods={scriptahub_task_batch_snapshot:'snapshot',scriptahub_task_batch_close:'closeBatch',scriptahub_task_batch_settle:'settle',scriptahub_task_claim:'claim'};
+  const run=(op,input={})=>runBatchOperation(async(tool,args)=>f.service[methods[tool]](executor,args),op,input,{root:f.root});
+  const initial=await run('batch-start',{taskType:'add-book'}),claimed=await run('batch-next'),later=f.add('book-proposal');
+  f.service.finish(executor,{executionId:claimed.task.executionId,state:'failed',error:'Completed this attempt'});
+  const end=await run('batch-next');
+  assert.equal(end.batchId,initial.batchId);assert.equal(end.task,null);assert.equal(end.closed,true);
+  assert.equal(f.service.snapshot(executor,{batchId:'later-workflow',taskType:'add-book'}).taskIds[0],later.task.id);
+});
+
+test('a strict service refusal during exhausted-batch cleanup preserves the active execution and saved identity',async t=>{
+  const {runBatchOperation}=await import('../../skills/scriptahub-tasks/scripts/task-batch.mjs');
+  const f=await fixture(t);f.add('book-proposal');let staleTerminal=false;
+  const methods={scriptahub_task_batch_snapshot:'snapshot',scriptahub_task_batch_close:'closeBatch',scriptahub_task_claim:'claim'};
+  const run=(op,input={})=>runBatchOperation(async(tool,args)=>{
+    const result=f.service[methods[tool]](executor,args);
+    return tool==='scriptahub_task_batch_snapshot'&&staleTerminal?{...result,items:result.items.map(item=>({...item,state:'cancelled'}))}:result;
+  },op,input,{root:f.root});
+  const initial=await run('batch-start',{taskType:'add-book'}),claimed=await run('batch-next');
+  const stateFile=path.join(f.root,'run-state/task-batch.json'),before=await fs.readFile(stateFile,'utf8');
+  staleTerminal=true;
+  await assert.rejects(run('batch-start',{taskType:'add-book'}),/Settle the active task/);
+  assert.equal(await fs.readFile(stateFile,'utf8'),before);
+  assert.equal(f.service.status(executor,{executionId:claimed.task.executionId}).state,'running');
+  assert.equal(f.service.snapshot(executor,{batchId:initial.batchId,taskType:'add-book'}).closed,false);
 });

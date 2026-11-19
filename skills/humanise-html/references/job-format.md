@@ -1,6 +1,6 @@
 # Job format
 
-The job contract is intentionally unversioned. Consumers must follow this current schema exactly; no legacy variants are accepted.
+Use the exact job contract below.
 
 ## Layout
 
@@ -43,10 +43,7 @@ Each batch provides `language`, chapter metadata, the frozen editorial rubric, a
 Inline elements use balanced `⟦OPEN:T000001⟧`, `⟦CLOSE:T000001⟧`, and `⟦VOID:T000001⟧` tokens. URLs, email addresses, DOI values, citations, numbers, and dates use `⟦PROTECT:P000001⟧` tokens. Preserve every token exactly once and preserve nesting.
 
 Top-level doctypes and processing instructions are not text units. Declarations
-nested inside an extracted block remain protected markup tokens. Build preserves
-the source declarations; it does not add a doctype. A stale job that extracted a
-declaration as prose needs fresh preparation, with retained prior evidence and
-exact source/protection matching before any reviewed results are transferred.
+nested inside an extracted block remain protected markup tokens. Build preserves the source declarations as markup.
 
 ## Rewrite output
 

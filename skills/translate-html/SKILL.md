@@ -22,7 +22,7 @@ The active host-provided LLM performs the translation. Never select, name, confi
 - Translate visible prose plus `<title>`, meta description, `alt`, `title`, and `aria-label`.
 - Never translate `script`, `style`, `code`, `pre`, `kbd`, `samp`, `math`, `svg`, or content under `translate="no"`.
 - Never OCR or translate text inside images.
-- Preserve document declarations and processing instructions as markup. Do not translate a doctype or XML declaration as visible text. If an older job extracted one as a unit, retain that job as evidence and prepare a fresh job; transfer reviewed translations only where source text, placeholders and protections still match.
+- Preserve document declarations and processing instructions as markup. Do not translate a doctype or XML declaration as visible text.
 - Preserve each unit ID and its placeholder multiset exactly. Inline placeholders may move only as required by target-language word order, while remaining correctly nested.
 - Preserve names and bibliography metadata unless ordinary descriptive wording requires translation. Never modify citations, URLs, journal coordinates, or identifiers.
 - Do not claim that structural heuristics prove semantic correctness. They detect incomplete translation and structural damage; the bootstrap review supplies the limited semantic check.
@@ -199,13 +199,8 @@ Use `scripts/translatehtml repair --report REPORT_JSON` for localized fixes to a
 
 ## Constrained batch input and submission
 
-Before analyzing or translating a batch, run `scripts/translatehtml batch-contract JOB --batch batch-NNNN.json`. Read the returned skill-specific JSON Schema, exact batch identity, allowed source-unit IDs, source hash and batch digest together with the actual batch and frozen job context. Pass this contract unchanged to the assigned worker. Do not reuse another skill's enum values or another batch's IDs. The contract is read-only; it does not approve semantic content.
+Read the [shared batch command contract](../scriptahub-tasks/shared/README.md#batch-command-contract). Use `scripts/translatehtml batch-contract JOB --batch NAME` before assigning each batch and `scripts/translatehtml submit-batch JOB --batch NAME --batch-sha256 SHA` with the complete JSON candidate on stdin. For ScriptaHub execution, the coordinator invokes these through scriptahub-tasks exec. Continue this skill's remaining semantic/build/validation stages after acceptance.
 
-Submit the complete analysis/translation JSON on standard input to `scripts/translatehtml submit-batch JOB --batch batch-NNNN.json --batch-sha256 SHA`. Use the digest returned by batch-contract. In ScriptaHub, invoke both commands through `scriptahub-tasks exec`; put the serialized candidate JSON in `input` for submit-batch, not in a shell argument. Native calls remain serialized by the coordinator; workers return candidate JSON to it and never patch the analyses/translations files directly.
+## Shared dependency
 
-Submission verifies the source hash, batch digest, exact schema and native analysis rules before saving formatted JSON atomically to that batch's own result path. A rejected submission returns structured errors and its exact contract, exits nonzero and leaves existing bytes unchanged. Correct the candidate in memory and resubmit; never use apply_patch to repair the stored batch. An identical accepted result is idempotent; a different candidate cannot replace an accepted batch by default. For a concrete later review finding, reread batch-contract and supply --replace-sha256 with existing.sha256; a stale digest is rejected, and the replacement must pass every admission check. Analysis acceptance does not replace synthesis, drafting, semantic review, build or independent final validation. Audit flags may be true only after actual review. Translation markup tokens and exact required unit membership are checked before saving; final language/structure checks remain mandatory.
-
-
-### Shared batch runtime dependency
-
-This skill imports `../../scriptahub-tasks/shared/batch-io.mjs` from its scripts and source modules. Distribute it together with the sibling `scriptahub-tasks/shared/` directory, keeping the `skills/<skill>/` and `skills/scriptahub-tasks/shared/` layout. There are no generated batch-io copies or synchronization step. The skill owns only its `src/batch-schema.mjs` adapter and native vocabulary/validator. Its descriptor declares `dependsOn` and `sourceDependencies`; hosted runtime receipts and RoboTeam source verification include the shared module's hashes. Shared runtime changes require rebuilding the agent image.
+Distribute this folder alongside `scriptahub-tasks/shared/`. Its descriptor declares the common runtime dependency; src/batch-schema.mjs supplies this skill's vocabulary and native validator.
