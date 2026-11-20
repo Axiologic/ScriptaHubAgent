@@ -4,9 +4,10 @@ import fs from 'node:fs/promises';
 import path from 'node:path';
 import os from 'node:os';
 import crypto from 'node:crypto';
-import {insideRun, writeHandoff, requirePreflight, verifyPackage} from '../scripts/workflow-checks.mjs';
+import {editionReaders, insideRun, writeHandoff, requirePreflight, verifyPackage} from '../scripts/workflow-checks.mjs';
 import {combineCollections, validateCatalogueKeywords} from '../scripts/catalogue-keywords.mjs';
 import {publishPackage} from '../scripts/run.mjs';
+import {prepareReadingRoutes} from '../scripts/prepare-reading-routes.mjs';
 
 async function inRun(callback) {
   const previous = process.cwd();
@@ -16,6 +17,69 @@ async function inRun(callback) {
 }
 const context = {executionId:'execution-one', runId:'run-one', taskId:'task-one', bookId:'book-one'};
 const emptyKeywords = Object.fromEntries(['en','fr','de','es','pt','it','ro','pl'].map(code => [code, []]));
+
+for (const schemaVersion of [1, 2]) test('preparation writes the reading routes for schema ' + schemaVersion, {skip:process.platform!=='linux'}, async () => inRun(async () => {
+  const directory = 'tasks/task-one', bookDir = 'books/example';
+  const pkg = directory + '/package', book = pkg + '/' + bookDir;
+  const metadataPath = book + (schemaVersion === 1 ? '/manifest.json' : '/book.json');
+  const metadata = {id:context.bookId, title:{en:'Example'}, editions:{en:{book:'en/book.html',fullContent:'en/book.html'}}};
+  const entry = schemaVersion === 1 ? {...metadata, directory:bookDir} : {id:context.bookId,path:bookDir+'/book.json'};
+  const full = schemaVersion === 1 ? 'en/full_content.html' : 'en/manuscript.html';
+  const short = 'en/comprehensive-summary.html';
+  await fs.mkdir(directory+'/run-state',{recursive:true});
+  await fs.mkdir(book+'/en',{recursive:true});
+  await fs.writeFile(directory+'/run-state/claimed.json',JSON.stringify({task:{...context,type:'scriptahub.book-proposal'}}));
+  await fs.writeFile(pkg+'/collection.json',JSON.stringify({schemaVersion,books:[entry]}));
+  await fs.writeFile(metadataPath,JSON.stringify(schemaVersion===1?metadata:{metadata,resources:{}}));
+  await fs.writeFile(book+'/'+full,'<main>Full text</main>');
+  await fs.writeFile(book+'/'+short,'<meta name="summary-generator" content="comprehensivesummary-skill">');
+  const input = {directory,executionId:context.executionId,collectionPath:'collection.json',
+    editions:{en:{fullContent:full,comprehensiveSummary:short,shortDescription:'Short description',aboutBook:['Presentation']}}};
+  const result = await prepareReadingRoutes(input);
+  assert.equal(result.editions.en.fullContent,book+'/'+full);
+  assert.deepEqual(await prepareReadingRoutes(input),result);
+  const catalogue = JSON.parse(await fs.readFile(pkg+'/collection.json','utf8'));
+  const bytes = await fs.readFile(metadataPath);
+  const saved = JSON.parse(bytes);
+  const finalMetadata = schemaVersion===1 ? saved : saved.metadata;
+  assert.deepEqual(finalMetadata.editions.en,{book:'en/book.html',fullContent:'en/full_content.html',shortContent:short});
+  assert.deepEqual(finalMetadata.aboutBook.en,['Presentation']);
+  if (schemaVersion===1) {
+    assert.equal(catalogue.books[0].editions.en.fullContent,bookDir+'/'+full);
+    assert.match(await fs.readFile(book+'/en/book.html','utf8'),/href="comprehensive-summary.html"/);
+  } else {
+    assert.equal(saved.resources['en/full_content.html'],bookDir+'/'+full);
+    assert.equal(catalogue.books[0].sha256,crypto.createHash('sha256').update(bytes).digest('hex'));
+  }
+}));
+
+test('both catalogue schemes bind each reading action to its own resource', async () => inRun(async root => {
+  const full = 'en/full.html', short = 'en/summary.html', landing = 'en/book.html';
+  await fs.mkdir('en');
+  await fs.writeFile(short, '<meta name="summary-generator" content="comprehensivesummary-skill">');
+  const routes = {book:landing, fullContent:full, shortContent:short};
+  const metadata = {id:context.bookId, aboutBook:{en:['An editorial presentation.']}, editions:{en:routes}};
+  const files = new Set([full, short, landing, 'book.json']);
+  const check = collection => editionReaders(root, 'collection.json', collection, context.bookId, files, true, true);
+  const legacy = {schemaVersion:1, books:[metadata]};
+  assert.equal((await check(legacy)).get('en'), full);
+  routes.fullContent = landing;
+  await assert.rejects(check(legacy), /distinct routes/);
+  routes.fullContent = full;
+  await fs.writeFile(short, '<meta name="short-description-generator" content="shortdescription-skill">');
+  await assert.rejects(check(legacy), /must open the comprehensive summary/);
+  await fs.writeFile(short, '<meta content="comprehensivesummary-skill" name="summary-generator">');
+
+  const modern = {schemaVersion:2, books:[{id:context.bookId,path:'book.json'}]};
+  const resources = {[full]:'en/reader.html', [short]:'en/summary.html'};
+  files.delete(landing);
+  files.add(resources[full]);
+  await fs.writeFile('book.json', JSON.stringify({metadata, resources}));
+  assert.equal((await check(modern)).get('en'), resources[full]);
+  resources[short] = resources[full];
+  await fs.writeFile('book.json', JSON.stringify({metadata, resources}));
+  await assert.rejects(check(modern), /distinct routes/);
+}));
 
 test('durable handoffs preserve execution identity and reject secrets, oversized context and symlinks', async () => inRun(async root => {
   const saved = await writeHandoff({step:'prepare-manuscript', context});

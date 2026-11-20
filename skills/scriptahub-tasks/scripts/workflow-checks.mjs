@@ -31,6 +31,9 @@ async function jsonArtifact(value) {
   return JSON.parse(await fs.readFile(filename,'utf8'));
 }
 export async function atomicJson(relative, value) {
+  return atomicFile(relative, Buffer.from(JSON.stringify(value,null,2)+'\n'));
+}
+export async function atomicFile(relative, bytes) {
   const root = await fs.realpath(process.cwd());
   const parts = relative.split('/'); let current = root;
   for (const part of parts.slice(0,-1)) {
@@ -38,7 +41,6 @@ export async function atomicJson(relative, value) {
     if (!(await fs.lstat(current)).isDirectory()) throw new Error('Output parent is not a real directory');
   }
   const target = path.join(root,relative), temp = target+'.'+crypto.randomUUID()+'.tmp';
-  const bytes = Buffer.from(JSON.stringify(value,null,2)+'\n');
   try { await fs.writeFile(temp,bytes,{flag:'wx',mode:0o600});await fs.rename(temp,target); }
   finally {await fs.rm(temp,{force:true});}
   return {path:relative,sha256:hash(bytes)};
@@ -118,6 +120,7 @@ export async function verifyPackage(input,{hook=async()=>{}}={}) {
   const collection=JSON.parse(await fs.readFile(path.join(root,collectionPath),'utf8'));
   if(![1,2].includes(collection.schemaVersion)||!Array.isArray(collection.books)||collection.bookCount!==collection.books.length||new Set(collection.books.map(b=>b.id)).size!==collection.books.length||!collection.books.some(b=>b.id===input.bookId))throw new Error('Catalogue structure or task identity is invalid');
   validateCatalogueKeywords(collection);
+  if (input.checkReadingRoutes) await editionReaders(root, collectionPath, collection, input.bookId, names, true, true);
   const remote=`https://github.com/${match[1]}/${match[2]}.git`;
   const refs=await runGit(['ls-remote',remote]);
   const head=refs.split('\n').find(line=>line.split('\t')[1]==='refs/heads/'+input.branch)?.split('\t')[0]||null;
@@ -134,7 +137,7 @@ export async function verifyPackage(input,{hook=async()=>{}}={}) {
     const scope = generated ? 'html_layout_integrity' : editing ? 'edition_layout_regression' : 'layout_and_structure';
     const entries = input.audits ?? (input.audit ? [{report: input.audit}] : []);
     if (input.audit && input.audits || !Array.isArray(entries) || !entries.length) throw Error('Provide the independent native audit reports');
-    const readers = input.finalize ? await editionReaders(root, collectionPath, collection, input.bookId, names, !editing) : null;
+    const readers = input.finalize ? await editionReaders(root, collectionPath, collection, input.bookId, names, !editing, !editing) : null;
     const plan = input.finalize && (editing || generated) ? (await jsonArtifact(input.editionPlan)).editions : null;
     if (input.finalize && (editing || generated) && (!Array.isArray(plan) || !plan.length)) throw Error('Missing edition validation plan');
     if (plan && new Set(plan.map(item => item.language)).size !== plan.length) throw Error('The edit plan repeats an affected language');
@@ -220,22 +223,42 @@ async function auditedFile(root, names, entry) {
   return name;
 }
 
-async function editionReaders(root, collectionPath, collection, bookId, names, requireAll) {
+export async function editionReaders(root, collectionPath, collection, bookId, names, requireAll, checkReadingRoutes = false) {
   const book = collection.books.find(entry => entry.id === bookId);
   const prefix = path.posix.dirname(collectionPath);
   const resource = value => typeof value === 'string' ? path.posix.join(prefix, value) : null;
-  let editions = book.editions, resources;
+  let metadata = book, resources;
   if (collection.schemaVersion === 2) {
-    const metadata = resource(book.path);
-    if (!names.has(metadata)) throw Error('Missing current book metadata in the verified package');
-    const document = JSON.parse(await fs.readFile(path.join(root, metadata), 'utf8'));
-    editions = document.metadata?.editions;
+    const filename = resource(book.path);
+    if (!names.has(filename)) throw Error('Missing current book metadata in the verified package');
+    const document = JSON.parse(await fs.readFile(path.join(root, filename), 'utf8'));
+    metadata = document.metadata;
     resources = document.resources;
   }
+  const resolve = value => resource(resources ? resources[value] : value);
   const readers = new Map();
-  for (const [language, edition] of Object.entries(editions || {})) {
+  const editions = Object.entries(metadata?.editions || {});
+  const landingRoutes = new Set(editions.map(([, edition]) => edition?.book));
+  for (const [language, edition] of editions) {
     if (!requireAll && !edition?.fullContent) continue;
-    readers.set(language, resource(resources ? resources[edition?.fullContent] : edition?.fullContent));
+    const full = resolve(edition?.fullContent);
+    if (checkReadingRoutes) {
+      const short = resolve(edition?.shortContent);
+      const landing = resource(edition?.book);
+      if (!landing || landingRoutes.has(edition.fullContent) || landingRoutes.has(edition.shortContent) || full === short
+        || full === landing || short === landing || (resources && [full, short].includes(resolve(edition.book)))) {
+        throw Error('View Book, Read Online and Read in 10 Min need distinct routes for ' + language);
+      }
+      if ((!resources && !names.has(landing)) || !names.has(short)) throw Error('Missing landing page or comprehensive summary for ' + language);
+      const summary = await fs.readFile(path.join(root, short), 'utf8');
+      if (!/<meta\b(?=[^>]*\bname\s*=\s*["']summary-generator["'])(?=[^>]*\bcontent\s*=\s*["']comprehensivesummary-skill["'])[^>]*>/i.test(summary)) {
+        throw Error('Read in 10 Min must open the comprehensive summary for ' + language);
+      }
+      if (!Array.isArray(metadata.aboutBook?.[language]) || !metadata.aboutBook[language].some(text => typeof text === 'string' && text.trim())) {
+        throw Error('Missing About Book presentation for ' + language);
+      }
+    }
+    readers.set(language, full);
   }
   if (!readers.size || [...readers.values()].some(name => !names.has(name))) throw Error('Published editions must identify the verified full HTML readers');
   return readers;

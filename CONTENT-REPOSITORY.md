@@ -102,6 +102,8 @@ books/
 
 Manifestul, istoricul edițiilor, fișierele PDF și traducerile sunt publicate numai când există; catalogul nu trebuie să anunțe un fișier care nu a fost încă publicat. Paginile Editions și Contributors au nevoie de metadatele aferente când sunt folosite. Agentul nu regenerează conținut lipsă.
 
+La publicarea unei cărți noi, `book`, `fullContent` și `shortContent` desemnează trei rute distincte. `fullContent` deschide textul integral, iar `shortContent` deschide rezumatul de 10 minute. Descrierea scurtă intră în `shortDescription`, iar paragrafele de prezentare în `aboutBook`, în limba ediției. Aceleași roluri se aplică schemei 2, unde pagina de prezentare este virtuală, iar cititorul rezolvă cele două resurse HTML prin aliasuri.
+
 ### Catalogul schemei 1
 
 Se păstrează schema `collection.json` din ScriptaHub: obiect cu `schemaVersion: 1`, `bookCount` și `books`. `bookCount` trebuie să corespundă numărului de elemente din `books`. Fiecare carte folosește:

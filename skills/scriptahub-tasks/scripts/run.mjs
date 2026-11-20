@@ -3,6 +3,7 @@ import {withExecutionLock} from './anchored-files.mjs';
 import fs from 'node:fs/promises';
 import {runBatchOperation} from './task-batch.mjs';
 import {sharedEditorial} from './shared-editorial.mjs';
+import {prepareReadingRoutes} from './prepare-reading-routes.mjs';
 import {runRemoteSkill,runRemoteSequence,releaseIncompleteRemote,discardTranslationJob,guardRemoteBackups} from './remote-skill.mjs';
 import {preflight,writeHandoff,verifyPackage,requirePreflight} from './workflow-checks.mjs';
 import { constants } from 'node:fs';
@@ -176,7 +177,7 @@ async function main() {
   let client;
   try {
     const operation = process.argv[2];
-    if (process.argv.length !== 3 || (!operations[operation] && !['batch-start', 'batch-status', 'batch-next', 'batch-close', 'batch-defer', 'exec', 'exec-sequence', 'release-incomplete', 'discard-translation-job', 'download', 'choose', 'publish', 'retry-publication', 'preflight', 'handoff', 'verify-package', 'shared-editorial'].includes(operation))) throw new Error('Use batch-start, batch-status, batch-next, batch-close, batch-defer, exec, exec-sequence, preflight, claim, status, download, choose, handoff, shared-editorial, verify-package, publish, retry-publication or finish');
+    if (process.argv.length !== 3 || (!operations[operation] && !['batch-start', 'batch-status', 'batch-next', 'batch-close', 'batch-defer', 'exec', 'exec-sequence', 'release-incomplete', 'discard-translation-job', 'download', 'choose', 'publish', 'retry-publication', 'preflight', 'handoff', 'verify-package', 'prepare-reading-routes', 'shared-editorial'].includes(operation))) throw new Error('Use batch-start, batch-status, batch-next, batch-close, batch-defer, exec, exec-sequence, preflight, claim, status, download, choose, handoff, shared-editorial, prepare-reading-routes, verify-package, publish, retry-publication or finish');
     const chunks = [];
     let size = 0;
     for await (const chunk of process.stdin) {
@@ -192,6 +193,10 @@ async function main() {
     }
     if (operation === 'shared-editorial') {
         process.stdout.write(JSON.stringify(await sharedEditorial(input)) + '\n');
+        return;
+    }
+    if (operation === 'prepare-reading-routes') {
+        process.stdout.write(JSON.stringify(await prepareReadingRoutes(input)) + '\n');
         return;
     }
     if (operation === 'choose') {
