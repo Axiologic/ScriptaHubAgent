@@ -94,10 +94,30 @@ test('installedEntries returns exactly the maximal entries that skillSource leav
   await assert.rejects(installedEntries(root),/symlinks/);
 });
 
-test('skillSource output is unchanged by the isInstalledPath refactor on the real skills tree',async()=>{
-  const source=await skillSource(path.join(repo,'skills'));
-  assert.ok(Object.keys(source).length>1000);
-  assert.equal(Object.keys(source).some(name=>isInstalledPath(name)),false);
+// RoboTeam hashes skills with its own copy of the exclusion rule (remote-skill.mjs), so the service rule must
+// classify every name exactly as that copy does, or the 409 coherence check reports skew that is not there.
+test('isInstalledPath classifies every name exactly as the RoboTeam helper sourceSkip does',async()=>{
+  const helper=await fs.readFile(path.join(repo,'skills/scriptahub-tasks/scripts/remote-skill.mjs'),'utf8');
+  const lines=['sourceExcluded','sourceSkip'].map(name=>helper.split('\n').find(line=>line.startsWith(`const ${name} = `)));
+  assert.ok(lines.every(Boolean),'remote-skill.mjs must define sourceExcluded and sourceSkip on single lines');
+  const sourceSkip=new Function(`${lines.join('\n')}\nreturn sourceSkip;`)();
+  const names=[];
+  const walk=async relative=>{
+    for(const entry of await fs.readdir(path.join(repo,'skills',relative),{withFileTypes:true})) {
+      const name=relative?relative+'/'+entry.name:entry.name;names.push(name);
+      if(entry.isDirectory()&&!entry.isSymbolicLink()&&!isInstalledPath(name))await walk(name);
+    }
+  };
+  await walk('');
+  assert.ok(names.length>1000);
+  const nearMiss=['a/.env','a/.env.local','a/.env.example','a/x.pyc','a/x.actual.html','a/x.zip','a/node_modules','a/node_modules2','a/output',
+    'a/outputs','a/cache','a/caches','a/.cache','a/__pycache__','a/.venv','a/target','a/.DS_Store','a/.idea','a/.git','a/.apikeys','a/audio.config.json',
+    'a/external/browser','a/external/browsers','a/external/tools/x','a/external/docling-source/x','a/external/native/licenses/x',
+    'a/external/native/models','a/external/native/linux-x64/x','a/external/native/darwin-arm64','a/external/native/win32-x64','a/external/native/integrity.json',
+    'theatrical-audio/models','theatrical-audio/runtime/qwen','theatrical-audio/runtime/kokoro.json','theatrical-audio/runtime/piper.resolved.txt',
+    'theatrical-audio/runtime/kokoro.requirements.txt','theatrical-audio/runtime/qwen.requirements.txt','x/previews','x/theatrical-audio/models'];
+  for(const name of [...names,...nearMiss])assert.equal(isInstalledPath(name),sourceSkip(name),name);
+  for(const name of Object.keys(await skillSource(path.join(repo,'skills'))))assert.equal(sourceSkip(name),false,name);
 });
 
 test('install partition accepts only the linux-x64 integrity rewrite and builds the receipt',()=>{
