@@ -115,9 +115,9 @@ Two images carry this work. Their Dockerfiles and publishing workflows live in `
 | Image | Contents | Dockerfile |
 | --- | --- | --- |
 | `docker.io/assistos/scriptahub-assets` (multi-architecture, `FROM scratch`) | Only downloaded model and native files: the Docling models, the native PDF engine, its notices, the Eigen archive and the Kokoro, Qwen and Piper models. Each file is checked by SHA-256 against inventories committed here. | `container-image-builds/images/scriptahub-assets/Dockerfile` |
-| `docker.io/assistos/scriptahub-agent:runtime` | ScriptaHub service, isolated skill runtime and verified assets. | `container-image-builds/images/scriptahub-agent/Dockerfile` |
+| `docker.io/assistos/scriptahub-agent:runtime` | ScriptaHub service and the installed skill dependencies (node_modules, Python environments, native files, models, notices), with verified assets. It also keeps a transition copy of the skill source, `source.json` and the legacy source labels so a deployment can roll back to older service code; the sandbox never executes that copy. | `container-image-builds/images/scriptahub-agent/Dockerfile` |
 
-The agent image uses the digest-pinned assets image and verifies its native and model inventories before copying. The service hosts the skill runtime. RoboTeam uses its normal runtime and calls the service through authenticated MCP; it does not need the ScriptaHub native dependencies. The helper records each job before upload and checks downloaded hashes before merging results into the selected task directory. Reconcile a pending job before starting a different command.
+The agent image uses the digest-pinned assets image and verifies its native and model inventories before copying. The service hosts the skill runtime, which runs skills from the deployed checkout, not from the image (see below). RoboTeam uses its normal runtime and calls the service through authenticated MCP; it does not need the ScriptaHub native dependencies. The helper records each job before upload and checks downloaded hashes before merging results into the selected task directory. Reconcile a pending job before starting a different command.
 
 `edit-book` remains the scheduled batch workflow for editions and delegates each request to [`edit-edition`](flows/edit-edition.json). The child applies the approved snapshot, prepares the sparse package, independently audits each affected language with `validate-book compare-edition`, then submits the approved inventory. Existing layout findings are warnings; new regressions block the whole edition. A failed or deferred edition is reconciled separately so the batch can process its other items. Both create and edit bind approval to the exact inventory and resume an interrupted upload with the same approved files.
 
@@ -127,7 +127,23 @@ The repository keeps authored skill code, dependency manifests/lockfiles, immuta
 
 The assets image build compiles the Docling addon on AMD64 in a pinned Rust stage and takes the checksum-verified ARM64 addon from the inventory; the agent build uses the verified assets. Its complete notice set, including the Docling license, is restored from the pinned source and checked against `deployment/native-notices.json`. An optional developer rebuild with `build-native.mjs` requires obtaining the matching external Docling workspace separately; that local checkout remains ignored.
 
-Runtime source fingerprints exclude these external source/notice trees. Rebuild the agent image after adopting this packaging change so its captured source inventory matches a clean checkout; do not edit installed receipts to bypass the deployment checks. No publication credential or installed runtime belongs in Git.
+Runtime source fingerprints exclude these external source/notice trees. Do not edit installed receipts to bypass the deployment checks. No publication credential or installed runtime belongs in Git.
+
+#### Skill source mount and dependency fingerprint
+
+Skills run from a service-private, hash-verified snapshot of the deployed ScriptaHubAgent checkout. The service finds the checkout through the global-mode workspace bind by matching its own `/code` directory, copies the skill sources into the snapshot and verifies their hashes. The sandbox binds the snapshot read-only at `/opt/scriptahub/runtime` and binds the image's installed dependencies (node_modules, Python environments, native files, models, notices) read-only at the same paths. A skill source or `SKILL.md` change therefore needs a restart or redeploy of the checkout, not an image rebuild. The manifest must stay in global mode; the discovery was checked for a top-level Podman bind on the Mac and on apparatus, and is not verified inside Ploinky Box.
+
+The image must still match the checkout's dependencies. The dependency fingerprint is a SHA-256 over the header `scriptahub-dependency-fingerprint-v1` and one `<git blob id> <path>` line per file of the committed list [`scriptahubAgent/deployment/dependency-inputs.txt`](scriptahubAgent/deployment/dependency-inputs.txt), in list order (v1 definition in `dependency-fingerprint.mjs`). Print it with:
+
+```
+node scriptahubAgent/deployment/dependency-fingerprint.mjs .
+```
+
+Rebuild and publish the agent image only when this fingerprint changes. The image records the value in `/opt/scriptahub/runtime/dependencies.json` and in the label `io.assistos.scriptahub.dependency-fingerprint`. Preflight fails with a message to rebuild the image when the value differs from the checkout's, and with "predates mounted skill sources" when the image has no such receipt. Do not edit the receipt or the label to pass these checks.
+
+The per-skill `sourceDigest` check (HTTP 409) now confirms that what RoboTeam hashed is what the agent executes. On deployments both read the same workspace checkout, so executed skill code is no longer tied to a published image revision. To compare a deployment with a commit, recompute the preflight receipt's `sourceDigests` with `skillSource()` from a clean checkout of the deployed commit.
+
+Any edit to the checkout changes the runtime identity. Jobs prepared before the edit get 409 at start, and preflight answers 503 while a job is running until it ends.
 
 Create book runs the editorial stages in sequence. It builds and validates the comprehensive summary, completes keyword selection, saves a common analysis of safe hooks, themes and protected revelations in `tasks/<taskId>/editorial/shared-analysis.json`, then drafts and validates the presentation and short description individually from that analysis. Each stage uses the same pinned full HTML. Completed analysis batches and validated artifacts are reused on resume when their hashes and evidence match. Requested translations follow the editorial checks and consume the accepted resources. Existing runs retain their captured graph. Deploy the workflow and task helper together for new runs.
 

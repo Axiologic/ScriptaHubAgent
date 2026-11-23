@@ -3,7 +3,8 @@ import path from 'node:path';
 import os from 'node:os';
 import { createHash } from 'node:crypto';
 import { spawn } from 'node:child_process';
-import { skillSource, skillDependencies } from './skill-source.mjs';
+import { skillSource, skillDependencies, installedEntries, installOverrides, dependencyReceipt } from './skill-source.mjs';
+import { dependencyFingerprint, imageReader } from './dependency-fingerprint.mjs';
 import { prepareNativeNotices } from './prepare-native-notices.mjs';
 import { installBuiltNative } from './install-built-native.mjs';
 
@@ -29,6 +30,8 @@ const source=await skillSource(skills);
 const sourceDependencies=await skillDependencies(skills,config.skills,source);
 await fs.writeFile(path.join(root,'source.json'),JSON.stringify(source)+'\n');
 const platform=`${process.platform}-${process.arch}`;
+// F and the source capture come from the copied files, before installation rewrites any of them.
+const {fingerprint}=await dependencyFingerprint(imageReader(root));
 await installBuiltNative(root,config,platform);
 const integrity=JSON.parse(await fs.readFile(path.join(pdf,'external/native/integrity.json'),'utf8'));
 if(!Object.keys(integrity.files).some(name=>name.startsWith(platform+'/')))throw new Error(`No verified pdf2html native assets for ${platform}; deployment is refused`);
@@ -62,4 +65,7 @@ for(const engine of config.audioEngines) {
 const receipt={sourceDependencies,schemaVersion:1,platform,skills:config.skills,audioEngines:config.audioEngines,node:process.version,
   python:'python3',preparedAt:new Date().toISOString(),architecture:os.arch()};
 await fs.writeFile(path.join(root,'installed.json'),JSON.stringify(receipt,null,2)+'\n');
+const overrides=installOverrides(source,await skillSource(skills),platform);
+await fs.writeFile(path.join(root,'dependencies.json'),JSON.stringify(dependencyReceipt({dependencyFingerprint:fingerprint,platform,skills:config.skills,
+  installed:await installedEntries(skills),overrides}),null,2)+'\n',{mode:0o644});
 console.log('ScriptaHub skill dependencies installed. Runtime verification is a separate required build gate.');

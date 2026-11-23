@@ -73,4 +73,4 @@ These live checks currently require an operator and are **not implemented as an 
 
 ## CI
 
-`.github/workflows/test-scriptahub.yml` runs both deterministic groups twice on Linux for pushes and pull requests, and retains JUnit/manifest artifacts. Configure the `regression` status as a required branch check in GitHub to block merging on failure; merely adding the workflow does not change branch protection. Deployment must use the image built from the tested commit and its matching source lock.
+`.github/workflows/test-scriptahub.yml` runs both deterministic groups twice on Linux for pushes and pull requests, and retains JUnit/manifest artifacts. Configure the `regression` status as a required branch check in GitHub to block merging on failure; merely adding the workflow does not change branch protection. Deployment requires an agent image whose dependency fingerprint equals the checkout's; skill source changes run from the checkout without an image rebuild.

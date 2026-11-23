@@ -43,9 +43,26 @@ export function validateSkillCommand(skill,args,input) {
   }
 }
 
+const RUNTIME='/opt/scriptahub/runtime';
+const safeAbsolute=value=>typeof value==='string'&&value.startsWith('/')&&value!=='/'&&!/[\0\r\n\\]/.test(value)&&path.posix.normalize(value)===value;
+// The view is the service-owned source snapshot plus image dependency paths; each dependency keeps its image path in the sandbox.
+// The baked image tree is never bound, so the sandbox runs exactly the captured source.
+function runtimeBinds(view,imageRoot) {
+  const invalid=()=>{throw Object.assign(new Error('Processing runtime view is required'),{status:503});};
+  if(!safeAbsolute(imageRoot)||!view||typeof view!=='object'||!safeAbsolute(view.snapshot)||!Array.isArray(view.binds)
+    ||[imageRoot,RUNTIME].some(root=>view.snapshot===root||view.snapshot.startsWith(root+'/')||root.startsWith(view.snapshot+'/')))invalid();
+  return view.binds.flatMap(bind=>{
+    if(!bind||typeof bind!=='object'||!safeAbsolute(bind.source)||!bind.source.startsWith(imageRoot+'/'))invalid();
+    const relative=bind.source.slice(imageRoot.length+1);
+    if(!relative.startsWith('skills/')||relative.split('/').some(part=>!part||part==='.'||part==='..')||bind.destination!==RUNTIME+'/'+relative)invalid();
+    return ['--ro-bind',bind.source,bind.destination];
+  });
+}
+
 // jobDirectory is service-generated and never derived from virtualCwd.
-export function sandboxCommand({virtualCwd,taskId,jobDirectory,skill,args,input}) {
+export function sandboxCommand({virtualCwd,taskId,jobDirectory,skill,args,input,view},{imageRoot=RUNTIME}={}) {
   validateVirtualCwd(virtualCwd); validateSkillCommand(skill,args,input);
+  const binds=runtimeBinds(view,imageRoot);
   if (!/^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$/.test(taskId || '') || !path.isAbsolute(jobDirectory)) fail('Invalid processing task');
   const parents=[]; let current='';
   for (const part of virtualCwd.slice(1).split('/')) { current += '/'+part; parents.push('--dir',current); }
@@ -55,7 +72,7 @@ export function sandboxCommand({virtualCwd,taskId,jobDirectory,skill,args,input}
   const bwrap=['--die-with-parent','--new-session','--unshare-all','--cap-drop','ALL','--clearenv',
     '--ro-bind','/usr','/usr','--symlink','usr/bin','/bin','--symlink','usr/sbin','/sbin',
     '--symlink','usr/lib','/lib','--symlink','usr/lib64','/lib64',
-    '--dir','/opt','--dir','/opt/scriptahub','--ro-bind','/opt/scriptahub/runtime','/opt/scriptahub/runtime',
+    '--dir','/opt','--dir','/opt/scriptahub','--ro-bind',view.snapshot,RUNTIME,...binds,
     '--dir','/etc','--ro-bind','/etc/fonts','/etc/fonts','--ro-bind','/etc/chromium.d','/etc/chromium.d','--ro-bind','/etc/libreoffice','/etc/libreoffice',
     '--proc','/proc','--dev','/dev','--size','67108864','--tmpfs','/dev/shm',
     '--size','1073741824','--tmpfs','/tmp','--dir','/tmp/home','--dir','/tmp/cache',

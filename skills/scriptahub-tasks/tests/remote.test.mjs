@@ -182,19 +182,18 @@ test('tool errors retain their real message and admission status',()=>{
  assert.deepEqual(unwrap({ok:true,message:'Display text'}),{ok:true,message:'Display text'});
 });
 import {ProcessingService} from '../../../scriptahubAgent/processing-service.mjs';
-import {processingRuntime} from '../../../scriptahubAgent/processing-runtime.mjs';
+import {runtimeFixture} from '../../../scriptahubAgent/tests/runtime-fixture.mjs';
 test('absence and transient errors cross the real tool wrapper and supervisor correctly',async t=>{
- const f=await fixture(t),data=path.join(f.root,'servicedata'),runtime=path.join(f.root,'runtime'),stubRoot=path.join(f.root,'ploinky');
- await fs.mkdir(runtime);await fs.writeFile(path.join(runtime,'source.json'),JSON.stringify({'pdf2html/SKILL.md':'a'.repeat(64)}));await fs.writeFile(path.join(runtime,'installed.json'),JSON.stringify({platform:`${process.platform}-${process.arch}`,skills:['pdf2html']}));
+ const f=await fixture(t),data=path.join(f.root,'servicedata'),stubRoot=path.join(f.root,'ploinky'),source=await runtimeFixture();t.after(source.remove);
  await fs.mkdir(path.join(stubRoot,'lib'),{recursive:true});await fs.writeFile(path.join(stubRoot,'lib/invocation-auth.mjs'),'export const authInfoFromInvocation=invocation=>({invocation});');
- const agent='agent:test/worker',service=new ProcessingService(data,{runtimeRoot:runtime,launch:({jobDirectory})=>({command:process.execPath,args:['-e','process.exit(0)',jobDirectory]})});
+ const agent='agent:test/worker',service=new ProcessingService(data,{...source.options,launch:({jobDirectory})=>({command:process.execPath,args:['-e','process.exit(0)',jobDirectory]})});
  t.after(()=>service.drain());
  const db=service.store.db,now=new Date().toISOString();
  db.prepare('INSERT INTO books(id,owner,title,origin,created_at) VALUES(?,?,?,?,?)').run('book','owner','Book','test',now);
  db.prepare('INSERT INTO changes(id,book_id,author,kind,state,base_revision,payload,created_at) VALUES(?,?,?,?,?,?,?,?)').run('change','book','owner','manuscript','accepted',0,'{}',now);
  db.prepare('INSERT INTO tasks(id,change_id,kind,state,created_at,updated_at) VALUES(?,?,?,?,?,?)').run('task','change','manuscript','running',now,now);
  db.prepare('INSERT INTO task_executions(id,task_id,executor_agent_id,run_id,created_at) VALUES(?,?,?,?,?)').run('e',  'task',agent,'run',now);
- const receipt=await processingRuntime(runtime),manifest=Buffer.from('[]');
+ const {view,...receipt}=await service.runtime(),manifest=Buffer.from('[]');
  service.receipt={ok:true,...receipt,checks:[{status:'passed',name:'installed-runtime'}],checkedAt:new Date().toISOString()};
  await service.prepare(agent,{executionId:'e',jobId:'job',virtualCwd:'/workspace/run',skill:'pdf2html',args:['doctor'],input:'',sourceDigest:receipt.sourceDigests.pdf2html,manifestSha256:hash(manifest),manifestSize:2});
  service.upload(agent,{executionId:'e',jobId:'job',kind:'manifest',offset:0,data:manifest.toString('base64')});

@@ -1,30 +1,11 @@
-import crypto from 'node:crypto';
-import fs from 'node:fs/promises';
-import path from 'node:path';
+import { imageReceipt, locateSkills, captureRuntime, RUNTIME_PATH } from './processing-source.mjs';
 
-const fail = (message, status=503) => { throw Object.assign(new Error(message),{status}); };
-const sha256 = value => crypto.createHash('sha256').update(value).digest('hex');
-
-// source.json is captured before native installation, so installed files are not
-// rehashed here as if they were the original selected skill sources.
-export async function processingRuntime(root = '/opt/scriptahub/runtime') {
-  let source, installed;
-  try {
-    source=JSON.parse(await fs.readFile(path.join(root,'source.json'),'utf8'));
-    installed=JSON.parse(await fs.readFile(path.join(root,'installed.json'),'utf8'));
-  } catch { fail('ScriptaHub processing runtime is unavailable'); }
-  if (!source || typeof source !== 'object' || Array.isArray(source)
-    || installed?.platform !== `${process.platform}-${process.arch}` || !Array.isArray(installed.skills)) fail('ScriptaHub processing runtime does not support this platform');
-  const sourceDigests={};
-  for (const skill of installed.skills) {
-    if (typeof skill !== 'string' || !/^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(skill)) fail('Invalid installed skill receipt');
-    const dependencies=installed.sourceDependencies?.[skill]||[];
-    if(!Array.isArray(dependencies)||dependencies.some(prefix=>typeof prefix!=='string'||!/^scriptahub-tasks\/shared$/.test(prefix)))fail('Invalid skill source dependencies');
-    for(const prefix of dependencies)if(!source[prefix+'/batch-io.mjs'])fail('Missing shared skill source receipt');
-    const entries=Object.entries(source).filter(([name])=>name.startsWith(skill+'/')||dependencies.some(prefix=>name.startsWith(prefix+'/'))).sort(([a],[b])=>a<b?-1:a>b?1:0);
-    if (!entries.length || entries.some(([name,hash])=>name.includes('\\') || name.split('/').some(part=>!part||part==='.'||part==='..') || !/^[a-f0-9]{64}$/.test(hash))) fail('Invalid skill source receipt');
-    sourceDigests[skill]=sha256(JSON.stringify(Object.fromEntries(entries)));
-  }
-  const runtimeId=sha256(JSON.stringify({platform:installed.platform,sourceDigests}));
-  return {runtimeId,platform:installed.platform,sourceDigests};
+// The sandbox runs a verified snapshot of the mounted checkout's skill source; the image only supplies the
+// installed dependencies its dependencies.json receipt names. Every call recaptures, so runtimeId changes with
+// any checkout edit. view holds service paths and must never leave the service.
+export async function processingRuntime({runtimeRoot=RUNTIME_PATH,codeRoot,workspace,skillsDir,snapshotRoot,pinned=new Set(),identity,hook,limits,pathMode}={}) {
+  if(typeof codeRoot!=='string'||typeof snapshotRoot!=='string')throw Object.assign(new Error('ScriptaHub processing runtime is unavailable'),{status:503});
+  const image=await imageReceipt(runtimeRoot);
+  const {repoRoot,skillsRoot}=locateSkills({codeRoot,workspace,skillsDir,identity});
+  return captureRuntime({runtimeRoot,codeRoot,skillsRoot,repoRoot,image,snapshotRoot,pinned,hook,limits,pathMode});
 }

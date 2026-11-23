@@ -6,6 +6,7 @@ import os from 'node:os';
 import crypto from 'node:crypto';
 import {fileURLToPath} from 'node:url';
 import {processingRuntime} from '../processing-runtime.mjs';
+import {runtimeFixture,roboTeamDigest} from './runtime-fixture.mjs';
 const root=fileURLToPath(new URL('../../',import.meta.url));
 const skills=['comprehensive-summary','marketing-summary','short-description','relevant-keywords','translate-html'];
 const hash=value=>crypto.createHash('sha256').update(value).digest('hex');
@@ -21,22 +22,23 @@ test('batch IO is one shared module and every dependent skill declares and impor
   }
 });
 test('each dependent runtime digest includes shared bytes and unrelated source stays independent',async t=>{
-  const directory=await fs.mkdtemp(path.join(os.tmpdir(),'batch-runtime-'));
-  t.after(()=>fs.rm(directory,{recursive:true,force:true}));
-  const source={'short-description/SKILL.md':'a'.repeat(64),'scriptahub-tasks/shared/batch-io.mjs':'b'.repeat(64),'pdf2html/SKILL.md':'c'.repeat(64)};
-  const installed={platform:`${process.platform}-${process.arch}`,skills:['short-description','pdf2html'],sourceDependencies:{'short-description':['scriptahub-tasks/shared']}};
-  await fs.writeFile(path.join(directory,'installed.json'),JSON.stringify(installed));
-  const update=()=>fs.writeFile(path.join(directory,'source.json'),JSON.stringify(source));await update();
-  const first=await processingRuntime(directory);
-  assert.equal(first.sourceDigests['short-description'],hash(JSON.stringify({'scriptahub-tasks/shared/batch-io.mjs':'b'.repeat(64),'short-description/SKILL.md':'a'.repeat(64)})));
-  source['scriptahub-tasks/shared/batch-io.mjs']='d'.repeat(64);await update();
-  const second=await processingRuntime(directory);
+  const descriptor=JSON.stringify({sourceDependencies:['scriptahub-tasks/shared']});
+  const f=await runtimeFixture({skills:['short-description','pdf2html'],files:{'skills/short-description/SKILL.md':'short\n','skills/short-description/skill.json':descriptor}});
+  t.after(f.remove);
+  const shared=path.join(f.skillsRoot,'scriptahub-tasks/shared/batch-io.mjs'),bytes=name=>fs.readFile(path.join(f.skillsRoot,name));
+  const first=await processingRuntime(f.options);
+  assert.equal(first.sourceDigests['short-description'],hash(JSON.stringify({'scriptahub-tasks/shared/batch-io.mjs':hash(await fs.readFile(shared)),
+    'short-description/SKILL.md':hash(await bytes('short-description/SKILL.md')),'short-description/skill.json':hash(await bytes('short-description/skill.json'))})));
+  assert.equal(first.sourceDigests['short-description'],await roboTeamDigest(f.skillsRoot,'short-description'));
+  await fs.writeFile(shared,'export const batch=2;\n');
+  const second=await processingRuntime(f.options);
   assert.notEqual(second.sourceDigests['short-description'],first.sourceDigests['short-description']);
   assert.equal(second.sourceDigests.pdf2html,first.sourceDigests.pdf2html);
-  delete source['scriptahub-tasks/shared/batch-io.mjs'];await update();
-  await assert.rejects(processingRuntime(directory),/Missing shared skill source/);
-  installed.sourceDependencies['short-description']=['../outside'];await fs.writeFile(path.join(directory,'installed.json'),JSON.stringify(installed));
-  await assert.rejects(processingRuntime(directory),/Invalid skill source dependencies/);
+  await fs.rm(shared);
+  await assert.rejects(processingRuntime(f.options),/Missing shared skill source/);
+  await fs.writeFile(shared,'export const batch=2;\n');
+  await fs.writeFile(path.join(f.skillsRoot,'short-description/skill.json'),JSON.stringify({sourceDependencies:['../outside']}));
+  await assert.rejects(processingRuntime(f.options),/Invalid skill source dependencies/);
 });
 
 test('image dependency discovery accepts callable skills without optional descriptors',async()=>{

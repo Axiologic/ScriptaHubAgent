@@ -27,4 +27,4 @@ The workflow submits an immutable, execution-bound package and independent valid
 
 ## Processing runtime ownership
 
-ScriptaHubAgent owns the skill sources and prepared runtime. RoboTeam selects the source skills and calls processing tools through its authenticated task callback. The helper snapshots the selected task directory, checks source fingerprints and merges verified results into that directory. ScriptaHub runs each job in an isolated workspace and retains durable job state for retries. Publication credentials remain with the assigned RoboTeam robot.
+ScriptaHubAgent owns the skill sources and prepared runtime. RoboTeam selects the source skills and calls processing tools through its authenticated task callback. The helper snapshots the selected task directory, checks source fingerprints and merges verified results into that directory. ScriptaHub runs each job in an isolated workspace, with skills taken from a hash-verified snapshot of the deployed checkout and the image's installed dependencies bound read-only. It retains durable job state for retries. Publication credentials remain with the assigned RoboTeam robot.

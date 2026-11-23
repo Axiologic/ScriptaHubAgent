@@ -8,6 +8,7 @@ import { DashboardStore } from './dashboard-store.mjs';
 import { TaskExecution } from './task-execution.mjs';
 import { ProcessingStore } from './processing-store.mjs';
 import { processingRuntime } from './processing-runtime.mjs';
+import { pruneSnapshots } from './processing-source.mjs';
 import { parseProcessingManifest, processingPath, uploadProcessingChunk, verifyProcessingFile } from './processing-files.mjs';
 import { sandboxCommand, validateSkillCommand, skillCommandContract } from './processing-sandbox.mjs';
 import { processingSocketPath } from './processing-ipc.mjs';
@@ -16,7 +17,8 @@ const MAX_WORKSPACE=4*1024**3, FLOOR=1024**3, MAX_LOG=16*1024**2, MAX_STORED=MAX
 const hash = bytes => crypto.createHash('sha256').update(bytes).digest('hex');
 const fail = (message,status=400) => { throw Object.assign(new Error(message),{status}); };
 const time = () => new Date().toISOString();
-const commandReceipt = receipt => ({...receipt, skillCommands:skillCommandContract(Object.keys(receipt.sourceDigests))});
+// The runtime view carries service paths; receipts and every MCP response leave it out.
+const commandReceipt = ({view,...receipt}) => ({...receipt, skillCommands:skillCommandContract(Object.keys(receipt.sourceDigests))});
 function processIdentity(pid) {
   try {
     if(process.platform==='linux') {
@@ -97,8 +99,10 @@ function makeWritable(directory,dev) {
 function freeBytes(root) { const st=fs.statfsSync(root,{bigint:true}); return Number(st.bavail*st.bsize); }
 
 export class ProcessingService {
-  constructor(dataDir,{runtimeRoot='/opt/scriptahub/runtime',launch=sandboxCommand}={}) {
+  // codeRoot, workspace and skillsDir locate the mounted checkout (processing-source.mjs); pathMode is for non-Linux tests only.
+  constructor(dataDir,{runtimeRoot='/opt/scriptahub/runtime',codeRoot=import.meta.dirname,workspace,skillsDir,snapshotRoot=path.join(dataDir,'skill-runtime'),pathMode=false,launch=sandboxCommand}={}) {
     this.dataDir=dataDir; this.root=path.join(dataDir,'processing'); this.runtimeRoot=runtimeRoot; this.launch=launch;
+    this.source={runtimeRoot,codeRoot,workspace,skillsDir,snapshotRoot,pathMode}; this.pins=new Map(); this.captureHook=undefined;
     fs.mkdirSync(this.root,{recursive:true,mode:0o700}); fs.chmodSync(this.root,0o700);
     const rootStat=fs.lstatSync(this.root);if(!rootStat.isDirectory()||rootStat.isSymbolicLink())fail('Invalid processing storage',503);
     this.rootIdentity={dev:rootStat.dev,ino:rootStat.ino};
@@ -136,6 +140,8 @@ export class ProcessingService {
       console.error('Processing storage reconciliation failed:',error.message);
       fail('Retained processing storage cannot be reconciled',503);
     }
+    // This supervisor owns the store now and has no children yet, so no earlier snapshot is in use.
+    pruneSnapshots(snapshotRoot);
     this.cleanupTimer=setInterval(()=>{try{this.expireUploads();this.resumeCleanup();this.cache.prune();}catch{console.error('Processing cleanup retry failed');}},60000);this.cleanupTimer.unref();
     this.uploadMonitor=setInterval(()=>this.cancelStoppedUploads(),250);this.uploadMonitor.unref();
   }
@@ -147,8 +153,21 @@ export class ProcessingService {
     catch(error) {if(!['EACCES','EPERM'].includes(error.code))throw error;console.error('Retained job storage needs attention');return Math.max(reserved,progress.total);}
   }
   directory(row) {return path.join(this.root,'job-'+hash(row.execution_id+'\0'+row.job_id));}
+  // Single flight: concurrent callers share one capture. Pins are read live when the capture prunes. Each caller gets
+  // its own error object, so one caller's annotations (admissionRejected) never reach another.
+  runtime() {
+    this.capturePromise??=processingRuntime({...this.source,pinned:this.pins,hook:this.captureHook}).finally(()=>{this.capturePromise=null;});
+    return this.capturePromise.catch(error=>{throw Object.assign(new Error(error.message,{cause:error}),error.status?{status:error.status}:{});});
+  }
+  pin(runtimeId) {this.pins.set(runtimeId,(this.pins.get(runtimeId)||0)+1);}
+  unpin(runtimeId) {const count=(this.pins.get(runtimeId)||0)-1;if(count>0)this.pins.set(runtimeId,count);else this.pins.delete(runtimeId);}
+  launchPlan(input,view) {return this.launch({...input,view},{imageRoot:this.runtimeRoot});}
+  async runtimeStatus() {
+    try {const runtime=await this.runtime();return `ScriptaHub processing runtime ${runtime.platform} ${runtime.runtimeId.slice(0,12)} runs mounted skill sources.`;}
+    catch(error) {return `ScriptaHub processing runtime unavailable: ${error.status?error.message:'unexpected error'}`;}
+  }
   async preflight() {
-    const runtime=await processingRuntime(this.runtimeRoot);
+    const runtime=await this.runtime();
     if(this.receipt?.runtimeId===runtime.runtimeId && Date.now()-Date.parse(this.receipt.checkedAt)<15*60*1000) return commandReceipt(this.receipt);
     if(this.draining)fail('Processing supervisor is draining',503);
     if(!this.preflightPromise) {
@@ -167,22 +186,26 @@ export class ProcessingService {
         const timer=setTimeout(kill,600000);child.once('error',()=>{failed=true;});
         child.once('close',code=>{clearTimeout(timer);this.preflightChild=null;code===0&&!failed?resolve():reject(new Error('Runtime verification failed'));});
       });
+      // The verified snapshot stays pinned until the check ends; the promise resolves to the runtime it verified.
+      this.pin(runtime.runtimeId);
       this.preflightPromise=(async()=>{
         const directory=fs.mkdtempSync(path.join(this.root,'preflight-'));
         try {
-          const plan=this.launch({virtualCwd:'/workspace/scriptahub-preflight',taskId:'preflight',jobDirectory:directory,skill:'pdf2html',args:['doctor'],input:''});
+          const plan=this.launchPlan({virtualCwd:'/workspace/scriptahub-preflight',taskId:'preflight',jobDirectory:directory,skill:'pdf2html',args:['doctor'],input:''},runtime.view);
           const separator=plan.args.lastIndexOf('--');
           if(separator<0)throw new Error('Invalid sandbox launcher');
           plan.args.splice(separator+1,plan.args.length-separator-1,'/usr/local/bin/node','/opt/scriptahub/runtime/verify-skills.mjs','/opt/scriptahub/runtime');
           await runCheck(plan.command,plan.args);
+          return runtime.runtimeId;
         } finally {fs.rmSync(directory,{recursive:true,force:true});}
-      })().finally(()=>{this.preflightPromise=null;});
+      })().finally(()=>{this.unpin(runtime.runtimeId);this.preflightPromise=null;});
     }
-    try {await this.preflightPromise;} catch {fail('ScriptaHub processing runtime verification failed',503);}
+    let verified;try {verified=await this.preflightPromise;} catch {fail('ScriptaHub processing runtime verification failed',503);}
     if(this.draining)fail('Processing supervisor is draining',503);
-    const current=await processingRuntime(this.runtimeRoot);
-    if(current.runtimeId!==runtime.runtimeId)fail('ScriptaHub processing runtime changed',503);
-    this.receipt={ok:true,...runtime,checks:[{status:'passed',name:'installed-runtime'}],checkedAt:time()};
+    const current=await this.runtime();
+    if(current.runtimeId!==runtime.runtimeId||verified!==runtime.runtimeId)fail('ScriptaHub processing runtime changed',503);
+    const {view,...identity}=runtime;
+    this.receipt={ok:true,...identity,checks:[{status:'passed',name:'installed-runtime'},{status:'passed',name:'dependency-fingerprint'}],checkedAt:time()};
     return commandReceipt(this.receipt);
   }
   async prepare(executor,input) {
@@ -200,7 +223,7 @@ export class ProcessingService {
     }
     let row;
     try {
-      const runtime=await processingRuntime(this.runtimeRoot);
+      const runtime=await this.runtime();
       if(runtime.sourceDigests[input.skill]!==input.sourceDigest) fail('Skill source does not match installed runtime',409);
       if(this.draining)fail('Processing supervisor is draining',503);
       if(this.available(this.root)<FLOOR+input.manifestSize)fail('Processing storage unavailable',503);
@@ -276,7 +299,8 @@ export class ProcessingService {
     if(row.state!=='uploading')return present(row);
     if(this.draining)fail('Processing supervisor is draining',503);
     if(this.preflightPromise||this.store.db.prepare("SELECT 1 FROM task_processing_jobs WHERE state IN ('starting','running','stopping')").get())fail('Processing capacity unavailable',503);
-    const request=JSON.parse(row.request), runtime=await processingRuntime(this.runtimeRoot);
+    // Everything from this capture to children.set is synchronous, so no other capture can prune the snapshot before it is pinned.
+    const request=JSON.parse(row.request), runtime=await this.runtime();
     if(this.preflightPromise)fail('Processing capacity unavailable',503);
     if(this.draining)fail('Processing supervisor is draining',503);
     if(runtime.runtimeId!==row.runtime_id||runtime.sourceDigests[request.skill]!==request.sourceDigest)fail('Processing runtime changed',409);
@@ -294,7 +318,7 @@ export class ProcessingService {
       this.store.db.prepare('UPDATE task_processing_jobs SET reserved_bytes=? WHERE execution_id=? AND job_id=?').run(total+request.manifestSize,input.executionId,input.jobId);
     });
     const execution=this.tasks.execution(executor,input.executionId);
-    const plan=this.launch({virtualCwd:request.virtualCwd,taskId:execution.task_id,jobDirectory:task,skill:request.skill,args:request.args,input:request.input});
+    const plan=this.launchPlan({virtualCwd:request.virtualCwd,taskId:execution.task_id,jobDirectory:task,skill:request.skill,args:request.args,input:request.input},runtime.view);
     row=this.jobs.start(executor,input.executionId,input.jobId);
     if(row.state!=='starting')return present(row);
     try {for(const name of ['stdout','stderr']) fs.writeFileSync(path.join(directory,name),'',{mode:0o600});}
@@ -302,7 +326,7 @@ export class ProcessingService {
     let child;
     try {child=spawn(plan.command,plan.args,{stdio:['pipe','pipe','pipe'],detached:true,env:{PATH:'/usr/local/bin:/usr/bin:/bin'}});}
     catch {this.terminal(row,'failed','Worker could not start',null,[]);return present(this.jobs.row(executor,input.executionId,input.jobId));}
-    const key=input.executionId+'\0'+input.jobId, record={child,row,logBytes:0,reason:null,closing:false}; this.children.set(key,record);
+    const key=input.executionId+'\0'+input.jobId, record={child,row,logBytes:0,reason:null,closing:false,runtimeId:runtime.runtimeId}; this.children.set(key,record); this.pin(runtime.runtimeId);
     for(const name of ['stdout','stderr']) child[name].on('data',bytes=>{
       if(record.logBytes+bytes.length>MAX_LOG){this.stop(record,'Log limit exceeded');return;}
       try {fs.appendFileSync(path.join(directory,name),bytes);record.logBytes+=bytes.length;}catch {this.stop(record,'Log storage failed');}
@@ -349,7 +373,7 @@ export class ProcessingService {
     record.killTimer=setTimeout(()=>{try {process.kill(-record.child.pid,'SIGKILL');}catch{}},2000);
   }
   closed(key,record,code,signal) {
-    clearTimeout(record.deadline);clearTimeout(record.killTimer);clearInterval(record.monitor);this.children.delete(key);
+    clearTimeout(record.deadline);clearTimeout(record.killTimer);clearInterval(record.monitor);this.children.delete(key);this.unpin(record.runtimeId);
     const directory=this.directory(record.row);let files=[],reason=record.reason,complete=true;
     // The worker is gone: restore directory permissions it may have removed so the retained tree stays measurable.
     try {makeWritable(directory,this.rootIdentity.dev);} catch {console.error('Retained job permissions could not be normalized');}

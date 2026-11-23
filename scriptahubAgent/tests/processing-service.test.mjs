@@ -5,26 +5,28 @@ import os from 'node:os';
 import path from 'node:path';
 import crypto from 'node:crypto';
 import { ProcessingService } from '../processing-service.mjs';
-import { processingRuntime } from '../processing-runtime.mjs';
+import { runtimeFixture, roboTeamDigest } from './runtime-fixture.mjs';
 const hash=bytes=>crypto.createHash('sha256').update(bytes).digest('hex');
 const owner='agent:test/worker';
-async function fixture(t,script) {
-  const root=await fs.mkdtemp(path.join(os.tmpdir(),'processing-service-')),runtime=path.join(root,'runtime'),data=path.join(root,'data');
-  await fs.mkdir(runtime); await fs.writeFile(path.join(runtime,'source.json'),JSON.stringify({'pdf2html/SKILL.md':'a'.repeat(64)}));
-  await fs.writeFile(path.join(runtime,'installed.json'),JSON.stringify({platform:`${process.platform}-${process.arch}`,skills:['pdf2html']}));
+// The service runs on a fake image runtime and a fake workspace checkout (runtime-fixture.mjs); every reopen uses f.options
+// so a refusal is never just a failed checkout discovery.
+async function fixture(t,script,fixtureOptions) {
+  const source=await runtimeFixture(fixtureOptions),root=source.root,data=source.dataDir,plans=[];
   let launches=0;
-  const service=new ProcessingService(data,{runtimeRoot:runtime,launch:({jobDirectory})=>{launches++;return {command:process.execPath,args:['-e',script,jobDirectory]};}});
+  const service=new ProcessingService(data,{...source.options,launch:(input,options)=>{launches++;plans.push({input,options});return {command:process.execPath,args:['-e',script,input.jobDirectory]};}});
   const db=service.store.db,now=new Date().toISOString();
   db.prepare('INSERT INTO books(id,owner,title,origin,created_at) VALUES(?,?,?,?,?)').run('book','owner','Book','test',now);
   db.prepare('INSERT INTO changes(id,book_id,author,kind,state,base_revision,payload,created_at) VALUES(?,?,?,?,?,?,?,?)').run('change','book','owner','manuscript','accepted',0,'{}',now);
   db.prepare('INSERT INTO tasks(id,change_id,kind,state,created_at,updated_at) VALUES(?,?,?,?,?,?)').run('task','change','manuscript','running',now,now);
   db.prepare('INSERT INTO task_executions(id,task_id,executor_agent_id,run_id,created_at) VALUES(?,?,?,?,?)').run('execution','task',owner,'run',now);
-  t.after(async()=>{await service.drain();try {(await import('node:child_process')).execFileSync('/bin/chmod',['-R','u+rwx',root]);} catch {}await fs.rm(root,{recursive:true,force:true});});
-  const receipt=await processingRuntime(runtime),manifest=Buffer.from('[]');
-  const request={executionId:'execution',jobId:'job',virtualCwd:'/workspace/run',skill:'pdf2html',args:['doctor'],input:'',sourceDigest:receipt.sourceDigests.pdf2html,manifestSha256:hash(manifest),manifestSize:manifest.length};
-  const prepare=async()=>{await service.prepare(owner,request);service.upload(owner,{executionId:'execution',jobId:'job',kind:'manifest',offset:0,data:manifest.toString('base64')});};
-  return {root,service,request,prepare,launches:()=>launches};
+  t.after(async()=>{await service.drain();await source.remove();});
+  // The digest RoboTeam would send, computed independently of the service from the same checkout.
+  const manifest=Buffer.from('[]');
+  const request={executionId:'execution',jobId:'job',virtualCwd:'/workspace/run',skill:'pdf2html',args:['doctor'],input:'',sourceDigest:await roboTeamDigest(source.skillsRoot,'pdf2html'),manifestSha256:hash(manifest),manifestSize:manifest.length};
+  const prepare=async(input=request)=>{await service.prepare(owner,input);service.upload(owner,{executionId:'execution',jobId:input.jobId,kind:'manifest',offset:0,data:manifest.toString('base64')});};
+  return {root,source,options:source.options,service,request,prepare,launches:()=>launches,plans};
 }
+const identity=async service=>{const {view,...runtime}=await service.runtime();return runtime;};
 async function terminal(service) {
   for(let i=0;i<100;i++){const result=service.dispatch('scriptahub_skill_job_status',owner,{executionId:'execution',jobId:'job'});const state=(await result).state;if(!['uploading','starting','running','stopping'].includes(state))return state;await new Promise(resolve=>setTimeout(resolve,20));}
   throw new Error('Worker did not stop');
@@ -32,7 +34,7 @@ async function terminal(service) {
 
 test('preflight advertises the actual installed command contract and invalid commands never create jobs',async t=>{
  const f=await fixture(t,'process.exit(0)');
- f.service.receipt={ok:true,...await processingRuntime(path.join(f.root,'runtime')),checks:[{status:'passed',name:'installed-runtime'}],checkedAt:new Date().toISOString()};
+ f.service.receipt={ok:true,...await identity(f.service),checks:[{status:'passed',name:'installed-runtime'}],checkedAt:new Date().toISOString()};
  const receipt=await f.service.preflight();
  assert.deepEqual(receipt.skillCommands,{pdf2html:['doctor','convert','check','decorations','fonts']});
  await assert.rejects(f.service.prepare(owner,{...f.request,args:['--help']}),error=>error.message==='Invalid skill command'&&error.status===400&&error.admissionRejected===true);
@@ -73,7 +75,9 @@ test('private IPC returns owner status and rejects another executor',async t=>{
   const call=executor=>new Promise((resolve,reject)=>{const socket=connect(socketPath);let output='';socket.once('connect',()=>socket.write(JSON.stringify({tool:'scriptahub_skill_job_status',executor,input:{executionId:'execution',jobId:'job'}})+'\n'));socket.on('data',bytes=>output+=bytes);socket.once('end',()=>resolve(JSON.parse(output)));socket.once('error',reject);});
   const replies=await Promise.all([call(owner),call(owner),call('agent:test/other')]);
   assert.equal(replies[0].state,'uploading');assert.equal(replies[1].state,'uploading');assert.equal(replies[2].status,404);
+  const snapshots=await f.source.snapshots();assert.equal(snapshots.length,1);
   assert.throws(()=>new ProcessingService(path.join(f.root,'data')),{status:503});
+  assert.deepEqual(await f.source.snapshots(),snapshots,'a refused second supervisor never clears the live snapshot store');
 });
 
 test('IPC preserves unexpected endpoints and accepts an owned stale socket',async t=>{
@@ -97,7 +101,7 @@ test('IPC setup failure closes the listener and permits a restart',async t=>{
   try {await assert.rejects(f.service.listen(),error=>error===injected);} finally {fsSync.chmodSync=original;}
   await assert.rejects(fs.lstat(socket),{code:'ENOENT'});assert.equal(f.service.server.listening,false);
   await f.service.drain();
-  const reopened=new ProcessingService(path.join(f.root,'data'),{runtimeRoot:path.join(f.root,'runtime')});
+  const reopened=new ProcessingService(path.join(f.root,'data'),f.options);
   try {await reopened.listen();assert.equal((await fs.lstat(socket)).mode&0o777,0o600);} finally {await reopened.drain();}
 });
 
@@ -137,7 +141,7 @@ test('restart interrupts unfinished start without rerunning it',async t=>{
   const f=await fixture(t,'process.exit(0)');await f.prepare();
   f.service.store.db.prepare("UPDATE task_processing_jobs SET state='starting' WHERE job_id='job'").run();
   await f.service.drain();
-  const reopened=new ProcessingService(path.join(f.root,'data'),{runtimeRoot:path.join(f.root,'runtime')});
+  const reopened=new ProcessingService(path.join(f.root,'data'),f.options);
   try {assert.equal((await reopened.dispatch('scriptahub_skill_job_status',owner,{executionId:'execution',jobId:'job'})).state,'interrupted');
     assert.equal((await reopened.start(owner,{executionId:'execution',jobId:'job'})).state,'interrupted');assert.equal(f.launches(),0);
   } finally {await reopened.drain();}
@@ -198,7 +202,7 @@ test('restart charges grown workspace and logs before allowing another admission
   for(let i=0;i<9;i++) {const file=await fs.open(path.join(directory,'task','large-'+i),'w');try{await file.truncate(512*1024*1024);}finally{await file.close();}}
   f.service.store.db.prepare("UPDATE task_processing_jobs SET state='running',reserved_bytes=2 WHERE job_id='job'").run();
   await f.service.drain();
-  const reopened=new ProcessingService(path.join(f.root,'data'),{runtimeRoot:path.join(f.root,'runtime')});
+  const reopened=new ProcessingService(path.join(f.root,'data'),f.options);
   try {
     const recovered=reopened.jobs.row(owner,'execution','job');
     assert.equal(recovered.state,'interrupted');assert.equal(recovered.reserved_bytes,9*512*1024*1024+Buffer.byteLength('retained log')+2);
@@ -213,18 +217,18 @@ test('unmeasurable retained storage prevents startup and leaves the supervisor r
   const fsSync=(await import('node:fs')).default,original=fsSync.readdirSync;
   try {
     fsSync.readdirSync=function(filename,...args) {if(filename===directory)throw Object.assign(new Error('injected read failure'),{code:'EIO'});return original.call(this,filename,...args);};
-    assert.throws(()=>new ProcessingService(path.join(f.root,'data'),{runtimeRoot:path.join(f.root,'runtime')}),{status:503});
+    assert.throws(()=>new ProcessingService(path.join(f.root,'data'),f.options),{status:503});
   } finally {fsSync.readdirSync=original;}
-  const reopened=new ProcessingService(path.join(f.root,'data'),{runtimeRoot:path.join(f.root,'runtime')});
+  const reopened=new ProcessingService(path.join(f.root,'data'),f.options);
   try {assert.equal(reopened.jobs.row(owner,'execution','job').state,'uploading');}finally{await reopened.drain();}
 });
 
 test('unattributed retained bytes fail closed instead of escaping accounting',async t=>{
   const f=await fixture(t,'process.exit(0)');await f.service.drain();
   const orphan=path.join(f.root,'data','processing','orphan');await fs.writeFile(orphan,'retained');
-  assert.throws(()=>new ProcessingService(path.join(f.root,'data'),{runtimeRoot:path.join(f.root,'runtime')}),{status:503});
+  assert.throws(()=>new ProcessingService(path.join(f.root,'data'),f.options),{status:503});
   await fs.unlink(orphan);
-  const reopened=new ProcessingService(path.join(f.root,'data'),{runtimeRoot:path.join(f.root,'runtime')});await reopened.drain();
+  const reopened=new ProcessingService(path.join(f.root,'data'),f.options);await reopened.drain();
 });
 
 test('terminal release requires ownership and digest and leaves a durable tombstone',async t=>{
@@ -271,7 +275,7 @@ test('restart finishes cleanup after deletion succeeded but accounting commit fa
   } finally {fsSync.fsyncSync=original;}
   await assert.rejects(fs.stat(directory),{code:'ENOENT'});assert.equal(f.service.jobs.row(owner,'execution','job').reserved_bytes,row.reserved_bytes);
   await f.service.drain();
-  const reopened=new ProcessingService(path.join(f.root,'data'),{runtimeRoot:path.join(f.root,'runtime')});
+  const reopened=new ProcessingService(path.join(f.root,'data'),f.options);
   try {assert.equal(reopened.release(owner,args).artifactsReleased,true);assert.equal(reopened.jobs.row(owner,'execution','job').reserved_bytes,0);
     assert.equal((await reopened.prepare(owner,f.request)).artifactsReleased,true);await assert.rejects(fs.stat(directory),{code:'ENOENT'});
   } finally {await reopened.drain();}
@@ -310,7 +314,7 @@ test('unacknowledged failed output survives restart and remains charged',async t
   const f=await fixture(t,"require('fs').writeFileSync(process.argv[1]+'/failure.txt','diagnostic');process.exitCode=7");
   await f.prepare();await f.service.start(owner,{executionId:'execution',jobId:'job'});assert.equal(await terminal(f.service),'failed');
   const prior=f.service.jobs.row(owner,'execution','job');assert.equal(prior.diagnostics_complete,1);assert.ok(prior.reserved_bytes>0);
-  await f.service.drain();const reopened=new ProcessingService(path.join(f.root,'data'),{runtimeRoot:path.join(f.root,'runtime')});
+  await f.service.drain();const reopened=new ProcessingService(path.join(f.root,'data'),f.options);
   try {const row=reopened.jobs.row(owner,'execution','job');assert.equal(row.result_digest,prior.result_digest);assert.ok(row.reserved_bytes>=prior.reserved_bytes);
     assert.equal(reopened.result(owner,{executionId:'execution',jobId:'job'}).files[0].path,'failure.txt');
   } finally {await reopened.drain();}
@@ -330,8 +334,8 @@ test('released storage cannot be resurrected across restart',async t=>{
   const row=f.service.jobs.row(owner,'execution','job'),directory=f.service.directory(row);
   assert.equal(f.service.release(owner,{executionId:'execution',jobId:'job',resultDigest:row.result_digest}).artifactsReleased,true);
   await f.service.drain();await fs.mkdir(directory);
-  assert.throws(()=>new ProcessingService(path.join(f.root,'data'),{runtimeRoot:path.join(f.root,'runtime')}),{status:503});
-  await fs.rmdir(directory);const reopened=new ProcessingService(path.join(f.root,'data'),{runtimeRoot:path.join(f.root,'runtime')});await reopened.drain();
+  assert.throws(()=>new ProcessingService(path.join(f.root,'data'),f.options),{status:503});
+  await fs.rmdir(directory);const reopened=new ProcessingService(path.join(f.root,'data'),f.options);await reopened.drain();
 });
 
 test('Linux cleanup fails closed when the fd anchor cannot be verified',{skip:process.platform!=='linux'},async t=>{
@@ -353,7 +357,7 @@ test('requested cleanup of a failed job with a FIFO resumes after restart',async
   try {fsSync.rmSync=function(filename,...options){if(String(filename).endsWith(path.basename(directory)))throw Object.assign(new Error('injected removal failure'),{code:'EIO'});return original.call(this,filename,...options);};
     assert.equal(f.service.release(owner,args).cleanupPending,true);
   } finally {fsSync.rmSync=original;}
-  await f.service.drain();const reopened=new ProcessingService(path.join(f.root,'data'),{runtimeRoot:path.join(f.root,'runtime')});
+  await f.service.drain();const reopened=new ProcessingService(path.join(f.root,'data'),f.options);
   try {assert.equal(reopened.release(owner,args).artifactsReleased,true);assert.equal(reopened.jobs.row(owner,'execution','job').reserved_bytes,0);}finally{await reopened.drain();}
 });
 
@@ -373,7 +377,7 @@ test('concurrent release replays are idempotent and cannot cross executions',asy
 test('interrupted jobs with missing logs advertise incomplete diagnostics',async t=>{
   const f=await fixture(t,'process.exit(0)');await f.prepare();
   f.service.store.db.prepare("UPDATE task_processing_jobs SET state='starting' WHERE job_id='job'").run();await f.service.drain();
-  const reopened=new ProcessingService(path.join(f.root,'data'),{runtimeRoot:path.join(f.root,'runtime')});
+  const reopened=new ProcessingService(path.join(f.root,'data'),f.options);
   try {const status=await reopened.dispatch('scriptahub_skill_job_status',owner,{executionId:'execution',jobId:'job'});
     assert.equal(status.state,'interrupted');assert.equal(status.diagnosticsComplete,false);assert.match(status.resultDigest,/^[a-f0-9]{64}$/);
     assert.equal(reopened.read(owner,{executionId:'execution',jobId:'job',kind:'stdout',offset:0,length:1}).absent,true);
@@ -416,7 +420,7 @@ for(const [kind,poison] of Object.entries(poisons)) test('a retained job with a 
 
 test('an active job does not make preflight fail after the receipt cache expires',async t=>{
   const f=await fixture(t,'setInterval(()=>{},1000)');await f.prepare();
-  f.service.receipt={ok:true,...await processingRuntime(path.join(f.root,'runtime')),checks:[{status:'passed',name:'installed-runtime'}],checkedAt:new Date(Date.now()-3600000).toISOString()};
+  f.service.receipt={ok:true,...await identity(f.service),checks:[{status:'passed',name:'installed-runtime'}],checkedAt:new Date(Date.now()-3600000).toISOString()};
   const receipt=f.service.receipt;await f.service.start(owner,{executionId:'execution',jobId:'job'});
   const busy=await f.service.preflight();
   assert.equal(busy.cachedWhileBusy,true);assert.equal(busy.doctorCheckedAt,receipt.checkedAt);assert.equal(busy.runtimeId,receipt.runtimeId);
@@ -548,7 +552,7 @@ test('a worker that leaves mode-000 directories does not stop later jobs or star
   await second(f);await f.service.start(owner,{executionId:'execution2',jobId:'job2'});
   const later=await waitFor(f.service,'execution2','job2');assert.equal(later.state,'succeeded',later.reason);
   await f.service.drain();
-  const reopened=new ProcessingService(path.join(f.root,'data'),{runtimeRoot:path.join(f.root,'runtime')});
+  const reopened=new ProcessingService(path.join(f.root,'data'),f.options);
   try {
     const kept=reopened.jobs.row(owner,'execution','job');assert.ok(kept.reserved_bytes>=7);
     const released=reopened.release(owner,{executionId:'execution',jobId:'job',resultDigest:kept.result_digest});
@@ -561,7 +565,7 @@ test('an already retained tree with an unreadable directory is repaired or charg
   const row=f.service.jobs.row(owner,'execution','job'),directory=f.service.directory(row),locked=path.join(directory,'task/locked');
   await fs.mkdir(path.join(locked,'inner'),{recursive:true});await fs.writeFile(path.join(locked,'inner/f'),'payload');await fs.writeFile(path.join(directory,'stdout'),'12345');
   await fs.chmod(path.join(locked,'inner'),0);await fs.chmod(locked,0);await f.service.drain();
-  const reopened=new ProcessingService(path.join(f.root,'data'),{runtimeRoot:path.join(f.root,'runtime')});
+  const reopened=new ProcessingService(path.join(f.root,'data'),f.options);
   try {
     assert.ok(reopened.jobs.row(owner,'execution','job').reserved_bytes>=12);assert.equal((await fs.stat(locked)).mode&0o777,0o700);
     // If repair is impossible the job is charged at least its reservation and the service keeps running.
@@ -595,4 +599,102 @@ test('later jobs reuse verified released outputs and upload only changed inputs,
   assert.equal(await fs.readFile(path.join(directory,'task/book.html'),'utf8'),'unchanged book');
   assert.equal(await fs.readFile(path.join(directory,'task/draft.json'),'utf8'),'updated draft');
   await assert.rejects(f.service.prepare('agent:other',second),{status:404});
+});
+
+test('prepare admits the digest RoboTeam computes from the same checkout and refuses a skewed copy; an edit before start is a 409',async t=>{
+  const f=await fixture(t,'process.exit(0)');
+  const copy=async(name,edit)=>{const target=path.join(f.root,name);await fs.cp(f.source.skillsRoot,target,{recursive:true});if(edit)await fs.appendFile(path.join(target,'pdf2html/src/cli.mjs'),'// local edit\n');return roboTeamDigest(target,'pdf2html');};
+  const skewed=await copy('skewed',true);assert.notEqual(skewed,f.request.sourceDigest);
+  await assert.rejects(f.service.prepare(owner,{...f.request,jobId:'skewed',sourceDigest:skewed}),
+    error=>error.status===409&&error.admissionRejected===true&&error.message==='Skill source does not match installed runtime');
+  assert.equal(await copy('identical',false),f.request.sourceDigest,'an identical copy hashes to the same digest');
+  // Coherence on a real deployment: RoboTeam and the service read the same checkout, so its digest is admitted.
+  await f.prepare();assert.equal(f.service.jobs.row(owner,'execution','job').state,'uploading');
+  await f.source.write('skills/pdf2html/src/cli.mjs','export const cli=2;\n');
+  await assert.rejects(f.service.start(owner,{executionId:'execution',jobId:'job'}),error=>error.status===409&&error.message==='Processing runtime changed');
+  // Any checkout edit, even outside the skill, changes the runtime a prepared job was admitted on.
+  await f.source.write('skills/pdf2html/src/cli.mjs',(await import('./runtime-fixture.mjs')).CHECKOUT_FILES['skills/pdf2html/src/cli.mjs']);
+  assert.equal(f.service.cancel(owner,{executionId:'execution',jobId:'job'}).state,'cancelled');
+  await f.prepare({...f.request,jobId:'second'});await f.source.write('skills/AGENTS.md','edited\n');
+  await assert.rejects(f.service.start(owner,{executionId:'execution',jobId:'second'}),error=>error.status===409&&error.message==='Processing runtime changed');
+  assert.equal(f.launches(),0);
+});
+
+test('preflight verifies the pinned snapshot view and its receipt carries no paths',async t=>{
+  const f=await fixture(t,'process.exit(0)'),fsSync=(await import('node:fs')).default;let seen;
+  f.service.launch=(input,options)=>{
+    const runtimeId=path.basename(input.view.snapshot).slice(3);
+    seen={input,options,exists:fsSync.existsSync(input.view.snapshot),pinned:f.service.pins.has(runtimeId)};
+    return {command:process.execPath,args:['-e','process.exit(0)','--','skill']};
+  };
+  const receipt=await f.service.preflight();
+  assert.equal(seen.exists,true);assert.equal(seen.pinned,true,'the verified snapshot is pinned while the check runs');assert.equal(f.service.pins.size,0);
+  assert.equal(path.dirname(seen.input.view.snapshot),f.options.snapshotRoot);assert.deepEqual(seen.options,{imageRoot:f.options.runtimeRoot});
+  assert.deepEqual(Object.keys(receipt).sort(),['checkedAt','checks','ok','platform','runtimeId','skillCommands','sourceDigests']);
+  assert.deepEqual(receipt.checks,[{status:'passed',name:'installed-runtime'},{status:'passed',name:'dependency-fingerprint'}]);
+  const strings=value=>typeof value==='string'?[value]:value&&typeof value==='object'?Object.entries(value).flatMap(([key,item])=>[key,...strings(item)]):[];
+  assert.deepEqual(strings(receipt).filter(value=>value.startsWith('/')),[]);
+  assert.equal(Object.hasOwn(f.service.receipt,'view'),false);
+  await f.service.listen();
+  const {invokeSupervisor}=await import('../processing-ipc.mjs');
+  const wire=JSON.stringify(await invokeSupervisor(path.join(f.root,'data'),{tool:'scriptahub_skills_preflight',executor:owner,input:{}}));
+  for(const secret of [f.root,f.options.snapshotRoot,f.options.runtimeRoot,f.source.checkout])assert.ok(!wire.includes(secret));
+  assert.equal(JSON.parse(wire).runtimeId,receipt.runtimeId);
+});
+
+test('start launches on the captured view and a running job pins its snapshot across a checkout edit',async t=>{
+  const f=await fixture(t,'setInterval(()=>{},1000)');await f.prepare();
+  await f.service.start(owner,{executionId:'execution',jobId:'job'});
+  const {input,options}=f.plans.at(-1),old=path.basename(input.view.snapshot);
+  assert.deepEqual(options,{imageRoot:f.options.runtimeRoot});assert.equal(input.view.binds.length,4);
+  await f.source.write('skills/AGENTS.md','edited\n');
+  const next=await f.service.runtime();assert.notEqual('rt-'+next.runtimeId,old);
+  assert.deepEqual(await f.source.snapshots(),[old,'rt-'+next.runtimeId].sort(),'the running job keeps its snapshot');
+  f.service.cancel(owner,{executionId:'execution',jobId:'job'});assert.equal(await terminal(f.service),'cancelled');
+  assert.equal(f.service.pins.size,0);
+  await f.service.runtime();assert.deepEqual(await f.source.snapshots(),['rt-'+next.runtimeId],'released snapshots are pruned');
+});
+
+test('parallel admissions share one capture and one snapshot; a replay returns the stored row',async t=>{
+  const f=await fixture(t,'process.exit(0)');let captures=0;
+  f.service.captureHook=async stage=>{if(stage==='captured'){captures++;await new Promise(resolve=>setTimeout(resolve,20));}};
+  // One active job per execution, so the second admission belongs to a second task execution.
+  const db=f.service.store.db,now=new Date().toISOString();
+  db.prepare('INSERT INTO tasks(id,change_id,kind,state,created_at,updated_at) VALUES(?,?,?,?,?,?)').run('task-2','change','manuscript','running',now,now);
+  db.prepare('INSERT INTO task_executions(id,task_id,executor_agent_id,run_id,created_at) VALUES(?,?,?,?,?)').run('execution-2','task-2',owner,'run-2',now);
+  const rows=await Promise.all([f.service.prepare(owner,f.request),f.service.prepare(owner,{...f.request,executionId:'execution-2'})]);
+  assert.equal(captures,1);assert.deepEqual(rows.map(row=>row.state),['uploading','uploading']);
+  assert.equal((await f.source.snapshots()).length,1);
+  const replay=await f.service.prepare(owner,f.request);
+  assert.equal(replay.runtimeId,rows[0].runtimeId);assert.equal(captures,1,'a replay returns the existing row without recapturing');
+  assert.equal((await f.source.snapshots()).filter(name=>name.startsWith('tmp-')).length,0);
+});
+
+test('startup clears leftover snapshots and only logs when it cannot',async t=>{
+  const f=await fixture(t,'process.exit(0)');await f.prepare();await f.service.drain();
+  const store=f.options.snapshotRoot;await fs.mkdir(path.join(store,'tmp-left/inner'),{recursive:true});await fs.chmod(path.join(store,'tmp-left'),0o555);
+  assert.equal((await f.source.snapshots()).length,2);
+  const reopened=new ProcessingService(path.join(f.root,'data'),f.options);
+  try {assert.deepEqual(await f.source.snapshots(),[]);} finally {await reopened.drain();}
+  await fs.rm(store,{recursive:true});await fs.writeFile(store,'not a directory');
+  const errors=[],original=console.error;console.error=message=>errors.push(String(message));
+  let again;try {again=new ProcessingService(path.join(f.root,'data'),f.options);} finally {console.error=original;}
+  try {
+    assert.deepEqual(errors,['Skill runtime snapshot store could not be listed']);
+    await assert.rejects(again.prepare(owner,{...f.request,jobId:'later'}),error=>error.status===503&&error.message==='Skill runtime snapshot storage is unavailable');
+  } finally {await again.drain();}
+});
+
+test('a new image without the receipt or a checkout edited during capture is refused at admission',async t=>{
+  const f=await fixture(t,'process.exit(0)');
+  f.service.captureHook=async stage=>{if(stage==='captured')await f.source.write('skills/pdf2html/SKILL.md','edited during capture\n');};
+  await assert.rejects(f.service.prepare(owner,f.request),error=>error.status===503&&error.message==='Skill source changed during capture; retry'&&error.admissionRejected===true);
+  assert.deepEqual(await f.source.snapshots(),[]);
+  f.service.captureHook=undefined;await fs.rm(path.join(f.options.runtimeRoot,'dependencies.json'));
+  await assert.rejects(f.service.prepare(owner,f.request),error=>error.status===503&&/predates mounted skill sources/.test(error.message));
+  // One shared capture failure reaches each caller as its own error: the admission flag stays on the prepare call.
+  const [admission,check]=await Promise.allSettled([f.service.prepare(owner,f.request),f.service.preflight()]);
+  assert.notEqual(admission.reason,check.reason);assert.equal(admission.reason.admissionRejected,true);assert.equal(check.reason.admissionRejected,undefined);
+  assert.match(check.reason.message,/predates mounted skill sources/);assert.equal(check.reason.status,503);
+  assert.equal(f.service.store.db.prepare('SELECT COUNT(*) AS count FROM task_processing_jobs').get().count,0);
 });
