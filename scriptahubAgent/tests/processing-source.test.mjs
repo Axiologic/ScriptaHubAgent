@@ -181,6 +181,20 @@ test('any checkout edit gives a new runtime; old snapshots are pruned unless pin
   assert.equal((await fs.lstat(path.join(third.view.snapshot,'skills/pdf2html/src/cli.mjs'))).mode&0o777,0o555);
 });
 
+test('a launcher that is also a dependency input is fingerprinted from its captured bytes',async t=>{
+  const name='scriptahubAgent/deployment/skills-runtime.json',original='{"skills":["pdf2html"]}\n',edited='{"skills":["pdf2html"],"edited":true}\n';
+  const inputs='scriptahubAgent/deployment/dependency-inputs.txt\n'+name+'\nskills/pdf2html/external/html/package-lock.json\nskills/pdf2html/external/native/integrity.json\n';
+  const f=await fixture(t,{files:{'scriptahubAgent/deployment/dependency-inputs.txt':inputs}});
+  await f.write(name,edited);
+  // The checkout holds the edited file whenever launchers are read and the image's bytes whenever the fingerprint is read.
+  const hook=async(stage,_,pass)=>{
+    if(stage==='launchers')await f.write(name,original);
+    else if(stage==='directory'&&pass===2)await f.write(name,edited);
+  };
+  await assert.rejects(capture(f,{hook}),status(/rebuild docker\.io\/assistos\/scriptahub-agent/));
+  assert.deepEqual(await f.snapshots(),[]);
+});
+
 test('source edited between hashing and copying is refused and leaves no snapshot',async t=>{
   const f=await fixture(t);
   const hook=async stage=>{if(stage==='captured')await f.write('skills/pdf2html/src/cli.mjs','export const cli=2;\n');};

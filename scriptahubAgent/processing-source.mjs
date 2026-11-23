@@ -190,10 +190,11 @@ async function readLaunchers(root) {
   }
   return files;
 }
-// F over exactly what was captured: skills inputs are the captured bytes, deployment inputs are read through the held
-// scriptahubAgent descriptor. Validation messages name only repository-relative inputs; filesystem errors carry
-// absolute paths and are replaced.
-async function fingerprint(agent,files) {
+// F over exactly what was captured: skills inputs and captured launchers (skills-runtime.json) are the captured bytes;
+// the other deployment inputs, which the snapshot does not contain, are read through the held scriptahubAgent
+// descriptor. Validation messages name only repository-relative inputs; filesystem errors carry absolute paths and are
+// replaced.
+async function fingerprint(agent,files,launchers) {
   const prefix='scriptahubAgent/deployment/';let deployment;
   const read=async file=>{
     if(file.startsWith('skills/')) {
@@ -202,6 +203,8 @@ async function fingerprint(agent,files) {
       return captured.bytes;
     }
     if(!file.startsWith(prefix)||file.slice(prefix.length).includes('/'))throw new Error('Dependency input is outside the captured checkout: '+file);
+    const launcher=LAUNCHERS.find(([directory,name])=>directory==='deployment'&&name===file.slice(prefix.length));
+    if(launcher)return launchers.get(launcher[2]).bytes;
     deployment??=await openDirectory(agent,'deployment');
     return (await readRegularFile(deployment,file.slice(prefix.length),{admit:size=>{if(size>CAPTURE_LIMITS.bytes)fail(LIMIT);}})).bytes;
   };
@@ -320,7 +323,8 @@ export async function captureRuntime({runtimeRoot=RUNTIME_PATH,located,image,sna
   const files=await walkSkills(located.skills,{limits,hook,pass:1});
   if(!files.size)fail('ScriptaHub skill source not found: the checkout has no skill files');
   const launchers=await readLaunchers(located.agent);
-  const checkout=await fingerprint(located.agent,files);
+  await hook('launchers',null,1);
+  const checkout=await fingerprint(located.agent,files,launchers);
   if(checkout!==receipt.dependencyFingerprint)fail(`Skill dependencies differ from the agent image (checkout ${checkout.slice(0,12)}, image ${receipt.dependencyFingerprint.slice(0,12)}); rebuild docker.io/assistos/scriptahub-agent from this checkout.`);
   const sourceDigests=digests(files,receipt.skills);
   let realRoot;try {realRoot=fs.realpathSync(runtimeRoot);} catch {fail(INVALID_RECEIPT);}
@@ -350,9 +354,9 @@ export async function captureRuntime({runtimeRoot=RUNTIME_PATH,located,image,sna
       await writeSnapshot(temporary,layout);
       // The snapshot was written from the captured buffers; a second pass only proves the checkout held still meanwhile.
       let again,launchersAgain;
-      try {again=await walkSkills(located.skills,{limits,hook,pass:2});launchersAgain=await readLaunchers(located.agent);}
+      try {again=await walkSkills(located.skills,{limits,hook,pass:2});launchersAgain=await readLaunchers(located.agent);await hook('launchers',null,2);}
       catch {fail(CHANGED);}
-      if(!sameFiles(files,again)||!sameFiles(launchers,launchersAgain)||await fingerprint(located.agent,again)!==checkout
+      if(!sameFiles(files,again)||!sameFiles(launchers,launchersAgain)||await fingerprint(located.agent,again,launchersAgain)!==checkout
         ||!await located.unchanged())fail(CHANGED);
       fs.renameSync(temporary,snapshot);fs.chmodSync(snapshot,0o555);
     } catch(error) {
