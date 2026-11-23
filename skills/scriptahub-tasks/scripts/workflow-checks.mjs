@@ -9,6 +9,7 @@ import { constants } from 'node:fs';
 import { execFile } from 'node:child_process';
 import { isDeepStrictEqual, promisify } from 'node:util';
 import { fileURLToPath } from 'node:url';
+import {artworkFields, artworkPath, artworkRequirement} from './publication-artwork.mjs';
 const execute = promisify(execFile);
 const hash = bytes => crypto.createHash('sha256').update(bytes).digest('hex');
 export async function insideRun(value, { directory = false } = {}) {
@@ -120,7 +121,17 @@ export async function verifyPackage(input,{hook=async()=>{}}={}) {
   const collection=JSON.parse(await fs.readFile(path.join(root,collectionPath),'utf8'));
   if(![1,2].includes(collection.schemaVersion)||!Array.isArray(collection.books)||collection.bookCount!==collection.books.length||new Set(collection.books.map(b=>b.id)).size!==collection.books.length||!collection.books.some(b=>b.id===input.bookId))throw new Error('Catalogue structure or task identity is invalid');
   validateCatalogueKeywords(collection);
-  if (input.checkReadingRoutes) await editionReaders(root, collectionPath, collection, input.bookId, names, true, true);
+  const checksAudit = input.audit || input.audits || input.finalize;
+  let task;
+  if (checksAudit || input.checkReadingRoutes) {
+    task = (await jsonArtifact(itemArtifact(input.directory, 'claimed.json'))).task;
+    if (task?.executionId !== input.executionId || task?.bookId !== input.bookId) throw Error('Package verification belongs to another task');
+  }
+  const editing = task?.type === 'scriptahub.edit';
+  const readers = input.finalize || input.checkReadingRoutes
+    ? await editionReaders(root, collectionPath, collection, input.bookId, names,
+      !editing, !editing, editing ? undefined : artworkRequirement(task))
+    : null;
   const remote=`https://github.com/${match[1]}/${match[2]}.git`;
   const refs=await runGit(['ls-remote',remote]);
   const head=refs.split('\n').find(line=>line.split('\t')[1]==='refs/heads/'+input.branch)?.split('\t')[0]||null;
@@ -128,16 +139,11 @@ export async function verifyPackage(input,{hook=async()=>{}}={}) {
   // Keep the validated baseline pinned. ScriptaHub checks whether the current
   // remote tip can accept the package when it actually publishes.
   const report={ok:true,executionId:input.executionId,bookId:input.bookId,fileCount:names.size,bytes,baseCommit:inventory.baseCommit,checkedAt:new Date().toISOString()};
-  if (input.audit || input.audits || input.finalize) {
-    const claimed = await jsonArtifact(itemArtifact(input.directory, 'claimed.json'));
-    const task = claimed.task;
-    if (task?.executionId !== input.executionId || task?.bookId !== input.bookId) throw Error('Audit belongs to another task');
+  if (checksAudit) {
     const generated = ['scriptahub.book-proposal', 'scriptahub.fork'].includes(task.type);
-    const editing = task.type === 'scriptahub.edit';
     const scope = generated ? 'html_layout_integrity' : editing ? 'edition_layout_regression' : 'layout_and_structure';
     const entries = input.audits ?? (input.audit ? [{report: input.audit}] : []);
     if (input.audit && input.audits || !Array.isArray(entries) || !entries.length) throw Error('Provide the independent native audit reports');
-    const readers = input.finalize ? await editionReaders(root, collectionPath, collection, input.bookId, names, !editing, !editing) : null;
     const plan = input.finalize && (editing || generated) ? (await jsonArtifact(input.editionPlan)).editions : null;
     if (input.finalize && (editing || generated) && (!Array.isArray(plan) || !plan.length)) throw Error('Missing edition validation plan');
     if (plan && new Set(plan.map(item => item.language)).size !== plan.length) throw Error('The edit plan repeats an affected language');
@@ -223,17 +229,18 @@ async function auditedFile(root, names, entry) {
   return name;
 }
 
-export async function editionReaders(root, collectionPath, collection, bookId, names, requireAll, checkReadingRoutes = false) {
+export async function editionReaders(root, collectionPath, collection, bookId, names, requireAll, checkReadingRoutes = false, artwork) {
   const book = collection.books.find(entry => entry.id === bookId);
   const prefix = path.posix.dirname(collectionPath);
   const resource = value => typeof value === 'string' ? path.posix.join(prefix, value) : null;
-  let metadata = book, resources;
+  let metadata = book, resources, checksums;
   if (collection.schemaVersion === 2) {
     const filename = resource(book.path);
     if (!names.has(filename)) throw Error('Missing current book metadata in the verified package');
     const document = JSON.parse(await fs.readFile(path.join(root, filename), 'utf8'));
     metadata = document.metadata;
     resources = document.resources;
+    checksums = document.resourceChecksums;
   }
   const resolve = value => resource(resources ? resources[value] : value);
   const readers = new Map();
@@ -256,6 +263,24 @@ export async function editionReaders(root, collectionPath, collection, bookId, n
       }
       if (!Array.isArray(metadata.aboutBook?.[language]) || !metadata.aboutBook[language].some(text => typeof text === 'string' && text.trim())) {
         throw Error('Missing About Book presentation for ' + language);
+      }
+    }
+    if (artwork) {
+      for (const [role, field] of Object.entries(artworkFields)) {
+        const reference = metadata[field]?.[language];
+        if (reference === undefined && !artwork.required) continue;
+        const file = resolve(reference);
+        const filename = resources ? resources[reference] : reference;
+        if (!artworkPath(reference) || !artworkPath(filename) || !names.has(file)
+            || (!resources && !filename.startsWith(book.directory + '/'))) {
+          throw Error('Missing or invalid ' + role + ' mapping for ' + language);
+        }
+        const image = await fs.readFile(path.join(root, file));
+        const digest = hash(image);
+        if (!image.length || (resources && checksums?.[filename] !== digest)
+            || (artwork.sourceHash && artwork.sourceHash !== digest)) {
+          throw Error('Invalid ' + role + ' bytes or checksum for ' + language);
+        }
       }
     }
     readers.set(language, full);

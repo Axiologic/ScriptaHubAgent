@@ -4,6 +4,7 @@ import {createHash} from 'node:crypto';
 import {withExecutionLock} from './anchored-files.mjs';
 import {guardRemoteBackups} from './remote-skill.mjs';
 import {atomicFile, atomicJson, insideRun} from './workflow-checks.mjs';
+import {artworkFields, artworkPath, artworkRequirement} from './publication-artwork.mjs';
 
 const sha256 = bytes => createHash('sha256').update(bytes).digest('hex');
 const safePath = value => typeof value === 'string' && value.split('/').every(part => /^[A-Za-z0-9][A-Za-z0-9._-]*$/.test(part));
@@ -21,6 +22,7 @@ export async function prepareReadingRoutes({executionId, directory, collectionPa
     if (claim?.executionId !== executionId || !['scriptahub.book-proposal','scriptahub.fork','scriptahub.manuscript'].includes(claim.type)) {
       throw Error('Reading routes require the matching new-book claim');
     }
+    const artwork = artworkRequirement(claim);
     const pkg = directory + '/package';
     const catalogue = pkg + '/' + collectionPath;
     const collection = await readJson(catalogue);
@@ -54,16 +56,32 @@ export async function prepareReadingRoutes({executionId, directory, collectionPa
           || aboutBook.some(text => typeof text !== 'string' || !text.trim())) throw Error('Provide the accepted description and presentation for ' + language);
       const reader = language + '/full_content.html', summary = language + '/comprehensive-summary.html';
       const routes = {book:landing, fullContent:reader, shortContent:summary};
+      const aliases = [[reader, full, fullBytes], [summary, short, shortBytes]];
+      const pictures = {};
+      if (artwork.required || input.cover !== undefined || input.thumbnail !== undefined) {
+        for (const [role, filename] of Object.entries({cover:input.cover, thumbnail:input.thumbnail ?? input.cover})) {
+          if (!artworkPath(filename)) throw Error('Provide a staged ' + role + ' image for ' + language);
+          const bytes = await read(bookRoot + '/' + filename);
+          if (!bytes.length || (artwork.sourceHash && sha256(bytes) !== artwork.sourceHash)) {
+            throw Error('Invalid ' + role + ' image for ' + language);
+          }
+          pictures[role] = filename;
+          aliases.push([filename, filename, bytes]);
+        }
+      }
       for (const [target, prefix] of modern ? [[metadata, '']] : [[metadata, ''], [book, bookRelative + '/']]) {
         target.editions ??= {};
         target.editions[language] = {...target.editions[language], ...Object.fromEntries(Object.entries(routes).map(([role, route]) => [role, prefix + route]))};
         (target.shortDescription ??= {})[language] = shortDescription;
         (target.aboutBook ??= {})[language] = aboutBook;
+        for (const [role, filename] of Object.entries(pictures)) {
+          (target[artworkFields[role]] ??= {})[language] = prefix + filename;
+        }
       }
       if (modern) {
         document.resources ??= {};
         document.resourceChecksums ??= {};
-        for (const [alias, filename, bytes] of [[reader, full, fullBytes], [summary, short, shortBytes]]) {
+        for (const [alias, filename, bytes] of aliases) {
           document.resources[alias] = bookRelative + '/' + filename;
           document.resourceChecksums[bookRelative + '/' + filename] = sha256(bytes);
         }

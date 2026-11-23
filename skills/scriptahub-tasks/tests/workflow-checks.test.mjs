@@ -28,13 +28,20 @@ for (const schemaVersion of [1, 2]) test('preparation writes the reading routes 
   const short = 'en/comprehensive-summary.html';
   await fs.mkdir(directory+'/run-state',{recursive:true});
   await fs.mkdir(book+'/en',{recursive:true});
-  await fs.writeFile(directory+'/run-state/claimed.json',JSON.stringify({task:{...context,type:'scriptahub.book-proposal'}}));
+  await fs.writeFile(directory+'/run-state/claimed.json',JSON.stringify({
+    task:{...context,type:'scriptahub.book-proposal',values:{coverMode:'generate'}}
+  }));
   await fs.writeFile(pkg+'/collection.json',JSON.stringify({schemaVersion,books:[entry]}));
   await fs.writeFile(metadataPath,JSON.stringify(schemaVersion===1?metadata:{metadata,resources:{}}));
   await fs.writeFile(book+'/'+full,'<main>Full text</main>');
   await fs.writeFile(book+'/'+short,'<meta name="summary-generator" content="comprehensivesummary-skill">');
+  const cover = 'en/cover.svg';
+  const artwork = '<svg xmlns="http://www.w3.org/2000/svg"><title>Example</title></svg>';
+  await fs.writeFile(book+'/'+cover,artwork);
   const input = {directory,executionId:context.executionId,collectionPath:'collection.json',
     editions:{en:{fullContent:full,comprehensiveSummary:short,shortDescription:'Short description',aboutBook:['Presentation']}}};
+  await assert.rejects(prepareReadingRoutes(input), /Provide a staged cover image for en/);
+  input.editions.en.cover = cover;
   const result = await prepareReadingRoutes(input);
   assert.equal(result.editions.en.fullContent,book+'/'+full);
   assert.deepEqual(await prepareReadingRoutes(input),result);
@@ -44,13 +51,48 @@ for (const schemaVersion of [1, 2]) test('preparation writes the reading routes 
   const finalMetadata = schemaVersion===1 ? saved : saved.metadata;
   assert.deepEqual(finalMetadata.editions.en,{book:'en/book.html',fullContent:'en/full_content.html',shortContent:short});
   assert.deepEqual(finalMetadata.aboutBook.en,['Presentation']);
+  assert.equal(finalMetadata.coverUrl.en,cover);
+  assert.equal(finalMetadata.thumbnailUrl.en,cover);
   if (schemaVersion===1) {
     assert.equal(catalogue.books[0].editions.en.fullContent,bookDir+'/'+full);
+    assert.equal(catalogue.books[0].coverUrl.en,bookDir+'/'+cover);
+    assert.equal(catalogue.books[0].thumbnailUrl.en,bookDir+'/'+cover);
     assert.match(await fs.readFile(book+'/en/book.html','utf8'),/href="comprehensive-summary.html"/);
   } else {
     assert.equal(saved.resources['en/full_content.html'],bookDir+'/'+full);
+    assert.equal(saved.resources[cover],bookDir+'/'+cover);
+    assert.equal(saved.resourceChecksums[bookDir+'/'+cover],crypto.createHash('sha256').update(artwork).digest('hex'));
     assert.equal(catalogue.books[0].sha256,crypto.createHash('sha256').update(bytes).digest('hex'));
   }
+  const files = ['collection.json', bookDir + '/' + path.basename(metadataPath),
+    bookDir + '/' + full, bookDir + '/' + short, bookDir + '/' + cover];
+  if (schemaVersion === 1) files.push(bookDir + '/en/book.html');
+  assert.equal((await editionReaders(path.join(process.cwd(),pkg),'collection.json',catalogue,
+    context.bookId,new Set(files),true,true,{required:true})).get('en'),bookDir + '/' + full);
+
+  if (schemaVersion === 1) {
+    delete catalogue.books[0].thumbnailUrl;
+    catalogue.books[0].keywordIds = [];
+    catalogue.books[0].keywords = emptyKeywords;
+    Object.assign(catalogue,combineCollections(catalogue.books));
+  } else {
+    delete saved.metadata.thumbnailUrl;
+    const changed = JSON.stringify(saved);
+    await fs.writeFile(metadataPath,changed);
+    catalogue.books[0].sha256 = crypto.createHash('sha256').update(changed).digest('hex');
+  }
+  catalogue.bookCount = catalogue.books.length;
+  await fs.writeFile(pkg+'/collection.json',JSON.stringify(catalogue));
+  const inventory = directory+'/inventory.json';
+  await fs.writeFile(inventory,JSON.stringify({executionId:context.executionId,baseCommit:null,
+    files:await Promise.all(files.map(async name => {
+      const bytes = await fs.readFile(pkg+'/'+name);
+      return {path:name,size:bytes.length,sha256:crypto.createHash('sha256').update(bytes).digest('hex')};
+    }))}));
+  const verification = {...context,directory,packageRoot:pkg,inventory,
+    catalogue:'https://github.com/example/books/blob/main/collection.json',branch:'main'};
+  await assert.rejects(verifyPackage({...verification,checkReadingRoutes:true}),/thumbnail mapping for en/);
+  await assert.rejects(verifyPackage({...verification,finalize:true}),/thumbnail mapping for en/);
 }));
 
 test('both catalogue schemes bind each reading action to its own resource', async () => inRun(async root => {
