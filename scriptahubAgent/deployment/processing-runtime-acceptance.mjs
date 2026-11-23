@@ -20,7 +20,7 @@ await fs.mkdir(task);
 const runtimeRoot='/opt/scriptahub/runtime',codeRoot=path.resolve(import.meta.dirname,'..'),snapshots=path.join(root,'snapshots');
 let repoRoot,skillsRoot,runtime;
 try {
-  ({repoRoot,skillsRoot}=locateSkills({codeRoot}));
+  const located=await locateSkills({codeRoot});({repoRoot,skillsRoot}=located);await located.close();
   const started=Date.now();runtime=await processingRuntime({runtimeRoot,codeRoot,snapshotRoot:snapshots});
   console.log(`Mounted skill source captured in ${Date.now()-started} ms (runtime ${runtime.runtimeId.slice(0,12)}).`);
 } catch(error) {await fs.rm(root,{recursive:true,force:true}).catch(()=>{});throw error;}

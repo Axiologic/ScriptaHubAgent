@@ -11,6 +11,8 @@ import { runtimeFixture, sha256, makeWritable, pathMode, CHECKOUT_FILES, IMAGE_F
 
 const fixture=async(t,options)=>{const f=await runtimeFixture(options);t.after(f.remove);return f;};
 const capture=(f,extra={})=>processingRuntime({...f.options,...extra});
+// Discovery holds descriptors; these assertions only need the located paths.
+const locate=async options=>{const located=await locateSkills({pathMode,...options});await located.close();return {repoRoot:located.repoRoot,skillsRoot:located.skillsRoot};};
 const status=(pattern,code=503)=>error=>error.status===code&&pattern.test(error.message);
 const NOT_FOUND=/^ScriptaHub skill source not found: no workspace checkout matches \/code \(the agent must run in global mode with the ScriptaHubAgent checkout in the workspace\)$/;
 async function tree(root,relative='') {
@@ -25,15 +27,15 @@ async function tree(root,relative='') {
 
 test('discovery finds the one workspace checkout whose scriptahubAgent is the code root',async t=>{
   const f=await fixture(t);
-  assert.deepEqual(locateSkills({codeRoot:f.options.codeRoot,workspace:f.workspace}),{repoRoot:f.checkout,skillsRoot:f.skillsRoot});
+  assert.deepEqual(await locate({codeRoot:f.options.codeRoot,workspace:f.workspace}),{repoRoot:f.checkout,skillsRoot:f.skillsRoot});
   // An empty skillsDir is treated as unset; the env var is never read.
   process.env.SCRIPTA_SKILLS_DIR='/nonexistent';t.after(()=>{delete process.env.SCRIPTA_SKILLS_DIR;});
-  assert.deepEqual(locateSkills({codeRoot:f.options.codeRoot,workspace:f.workspace,skillsDir:''}),{repoRoot:f.checkout,skillsRoot:f.skillsRoot});
+  assert.deepEqual(await locate({codeRoot:f.options.codeRoot,workspace:f.workspace,skillsDir:''}),{repoRoot:f.checkout,skillsRoot:f.skillsRoot});
   assert.equal((await capture(f,{skillsDir:''})).sourceDigests.pdf2html,(await capture(f)).sourceDigests.pdf2html);
   // Ploinky-managed checkouts are candidates too.
   const managed=path.join(f.workspace,'.ploinky/repos/ScriptaHubAgent');
   await fs.mkdir(path.dirname(managed),{recursive:true});await fs.rename(f.checkout,managed);
-  assert.deepEqual(locateSkills({codeRoot:path.join(managed,'scriptahubAgent'),workspace:f.workspace}),{repoRoot:managed,skillsRoot:path.join(managed,'skills')});
+  assert.deepEqual(await locate({codeRoot:path.join(managed,'scriptahubAgent'),workspace:f.workspace}),{repoRoot:managed,skillsRoot:path.join(managed,'skills')});
 });
 
 test('discovery skips symlinked candidates and refuses a missing, unset or ambiguous checkout',async t=>{
@@ -41,17 +43,17 @@ test('discovery skips symlinked candidates and refuses a missing, unset or ambig
   await fs.symlink(f.checkout,path.join(f.workspace,'Linked'));
   const other=path.join(f.workspace,'Other');await fs.mkdir(path.join(other,'skills'),{recursive:true});
   await fs.symlink(codeRoot,path.join(other,'scriptahubAgent'));
-  assert.equal(locateSkills({codeRoot,workspace:f.workspace}).repoRoot,f.checkout,'a symlinked checkout or scriptahubAgent is skipped');
+  assert.equal((await locate({codeRoot,workspace:f.workspace})).repoRoot,f.checkout,'a symlinked checkout or scriptahubAgent is skipped');
   const empty=path.join(f.root,'empty-workspace');await fs.mkdir(empty);
-  assert.throws(()=>locateSkills({codeRoot,workspace:empty}),status(NOT_FOUND));
+  await assert.rejects(locate({codeRoot,workspace:empty}),status(NOT_FOUND));
   await assert.rejects(capture(f,{workspace:empty}),status(NOT_FOUND));
   const saved=process.env.WORKSPACE_PATH;delete process.env.WORKSPACE_PATH;t.after(()=>{if(saved!==undefined)process.env.WORKSPACE_PATH=saved;});
-  assert.throws(()=>locateSkills({codeRoot}),status(NOT_FOUND));
-  assert.throws(()=>locateSkills({codeRoot,workspace:f.workspace,skillsDir:'/nonexistent'}),status(/^ScriptaHub skill source not found/));
-  assert.deepEqual(locateSkills({codeRoot:'/elsewhere',workspace:'/elsewhere',skillsDir:f.skillsRoot}),{repoRoot:f.checkout,skillsRoot:f.skillsRoot});
+  await assert.rejects(locate({codeRoot}),status(NOT_FOUND));
+  await assert.rejects(locate({codeRoot,workspace:f.workspace,skillsDir:'/nonexistent'}),status(/^ScriptaHub skill source not found/));
+  assert.deepEqual(await locate({codeRoot:'/elsewhere',workspace:'/elsewhere',skillsDir:f.skillsRoot}),{repoRoot:f.checkout,skillsRoot:f.skillsRoot});
   const copy=path.join(f.workspace,'Copy');await fs.mkdir(path.join(copy,'scriptahubAgent'),{recursive:true});await fs.mkdir(path.join(copy,'skills'));
   const identity=file=>file===codeRoot||file.endsWith('/scriptahubAgent')?{dev:1,ino:7}:{dev:1,ino:9};
-  assert.throws(()=>locateSkills({codeRoot,workspace:f.workspace,identity}),status(/^ScriptaHub skill source is ambiguous: 2 checkouts match \/code$/));
+  await assert.rejects(locate({codeRoot,workspace:f.workspace,identity}),status(/^ScriptaHub skill source is ambiguous: 2 checkouts match \/code$/));
 });
 
 test('an empty checkout skills directory is refused as missing source',async t=>{
@@ -198,7 +200,7 @@ test('a directory swapped for a link to a private tree during capture is refused
     };
     // Anchored (Linux): the leaf open refuses the link; an ancestor swapped after it was opened keeps being read through its
     // descriptor (the original bytes), and the consistency pass then refuses. The path reader refuses both at the open.
-    const expected=depth==='ancestor'&&!pathMode?/^Skill source changed during capture; retry$/:/^Skill source could not be captured safely: pdf2html\/src$/;
+    const expected=depth==='ancestor'&&!pathMode?/^Skill source changed during capture; retry$/:/^Skill source could not be captured safely: "pdf2html\/src"$/;
     await assert.rejects(capture(f,{hook}),status(expected),depth);
     assert.ok(swapped);assert.deepEqual(await f.snapshots(),[],depth);
   }
@@ -213,7 +215,7 @@ test('anchored reads keep reading a directory through its descriptor when an anc
   };
   if(pathMode) {
     // The path reader cannot hold a descriptor chain; it refuses as soon as the ancestor no longer matches.
-    await assert.rejects(capture(f,{hook}),status(/^Skill source could not be captured safely: pdf2html\/src$/));
+    await assert.rejects(capture(f,{hook}),status(/^Skill source could not be captured safely: "pdf2html\/src"$/));
     return;
   }
   const runtime=await capture(f,{hook});
@@ -225,10 +227,10 @@ test('anchored reads keep reading a directory through its descriptor when an anc
 test('links, hard links and special files in the checkout or launchers are refused',async t=>{
   const f=await fixture(t);
   await fs.symlink(path.join(f.root,'runtime'),path.join(f.skillsRoot,'pdf2html/linked'));
-  await assert.rejects(capture(f),status(/^Skill source must not contain symlinks: pdf2html\/linked$/));
+  await assert.rejects(capture(f),status(/^Skill source must not contain symlinks: "pdf2html\/linked"$/));
   await fs.rm(path.join(f.skillsRoot,'pdf2html/linked'));
   await fs.link(path.join(f.skillsRoot,'pdf2html/SKILL.md'),path.join(f.root,'second-name'));
-  await assert.rejects(capture(f),status(/^Skill source could not be captured safely: pdf2html\/SKILL\.md$/));
+  await assert.rejects(capture(f),status(/^Skill source could not be captured safely: "pdf2html\/SKILL\.md"$/));
   await fs.rm(path.join(f.root,'second-name'));
   const launcher=path.join(f.options.codeRoot,'deployment/run-skill.mjs');
   await fs.rename(launcher,path.join(f.root,'run-skill.mjs'));await fs.symlink(path.join(f.root,'run-skill.mjs'),launcher);
@@ -258,20 +260,61 @@ test('the image installed paths must exist with their declared type',async t=>{
   await assert.rejects(capture(f),status(/^Invalid image dependency receipt$/),'a linked image entry is refused');
 });
 
-test('a skills root replaced by a link, or anchored reads off Linux, fail closed with a 503',async t=>{
+test('a linked skills directory is not a checkout, and anchored reads off Linux fail closed with a 503',async t=>{
   const f=await fixture(t);
-  const {repoRoot,skillsRoot}=locateSkills({codeRoot:f.options.codeRoot,workspace:f.workspace});
-  await fs.rename(skillsRoot,path.join(f.root,'real-skills'));await fs.symlink(path.join(f.root,'real-skills'),skillsRoot);
-  await assert.rejects(capture(f),status(/^ScriptaHub skill source not found: the matching checkout has no skills directory$/),'discovery refuses a linked skills root');
-  const {captureRuntime,imageReceipt}=await import('../processing-source.mjs');
-  const image=await imageReceipt(f.runtimeRoot);
-  await fs.rm(skillsRoot);await fs.rename(path.join(f.root,'real-skills'),skillsRoot);
-  // A skills root that is a link by the time the walk opens it is never followed.
-  const linked=path.join(f.root,'skills-link');await fs.symlink(skillsRoot,linked);
-  await assert.rejects(captureRuntime({...f.options,skillsRoot:linked,repoRoot,image}),status(/^Skill source could not be opened safely$/));
+  await fs.rename(f.skillsRoot,path.join(f.root,'real-skills'));await fs.symlink(path.join(f.root,'real-skills'),f.skillsRoot);
+  await assert.rejects(capture(f),status(/^ScriptaHub skill source not found: the matching checkout has no skills directory$/));
+  await fs.rm(f.skillsRoot);await fs.rename(path.join(f.root,'real-skills'),f.skillsRoot);
   if(process.platform!=='linux')await assert.rejects(capture(f,{pathMode:false}),status(/^Anchored source reads require Linux with \/proc\/self\/fd$/));
   else await assert.rejects(capture(f,{pathMode:true}),status(/^Path-based source reads are refused on Linux$/));
   assert.deepEqual(await f.snapshots(),[]);
+});
+
+test('a checkout swapped for a link to an outside tree after discovery is refused and nothing is copied',async t=>{
+  const f=await fixture(t),outside=path.join(f.root,'outside'),moved=f.checkout+'.moved';
+  await fs.cp(f.checkout,outside,{recursive:true});await fs.writeFile(path.join(outside,'skills/AGENTS.md'),'OUTSIDE\n');
+  await fs.writeFile(path.join(outside,'skills/pdf2html/src/cli.mjs'),'OUTSIDE\n');
+  let swapped=0;
+  const hook=async stage=>{if(stage==='located'){swapped++;await fs.rename(f.checkout,moved);await fs.symlink(outside,f.checkout);}};
+  // Anchored: every read goes through the held descriptors (the moved original), and the final re-resolution refuses.
+  // The path reader refuses at the first read below the swapped checkout.
+  const expected=pathMode?/^Skill source could not be captured safely: "skills"$/:/^Skill source changed during capture; retry$/;
+  await assert.rejects(capture(f,{hook}),status(expected));
+  assert.equal(swapped,1);assert.deepEqual(await f.snapshots(),[],'nothing is copied');
+  // Positive control: the same checkout, not swapped, captures normally and holds its own bytes.
+  await fs.rm(f.checkout);await fs.rename(moved,f.checkout);
+  const runtime=await capture(f);
+  assert.equal(await fs.readFile(path.join(runtime.view.snapshot,'skills/AGENTS.md'),'utf8'),CHECKOUT_FILES['skills/AGENTS.md']);
+  assert.deepEqual(await f.snapshots(),['rt-'+runtime.runtimeId]);
+});
+
+test('the dependency fingerprint is computed from the captured bytes and the held checkout, never re-read by path',async t=>{
+  const f=await fixture(t),outside=path.join(f.root,'outside'),moved=f.checkout+'.moved';
+  await fs.cp(f.checkout,outside,{recursive:true});
+  await fs.writeFile(path.join(outside,'skills/pdf2html/external/html/package-lock.json'),'{"outside":true}\n');
+  await fs.writeFile(path.join(outside,'scriptahubAgent/deployment/dependency-inputs.txt'),'scriptahubAgent/deployment/dependency-inputs.txt\n');
+  // Swapping after the walk would change a path-based F; the held descriptors keep F equal, and the swap is still refused.
+  const hook=async(stage,name,pass)=>{if(stage==='directory'&&name==='scriptahub-tasks'&&pass===1){await fs.rename(f.checkout,moved);await fs.symlink(outside,f.checkout);}};
+  const error=await capture(f,{hook}).then(()=>null,caught=>caught);
+  assert.equal(error?.status,503);assert.doesNotMatch(error.message,/rebuild|fingerprint/,'F matched the captured checkout');
+  assert.deepEqual(await f.snapshots(),[]);
+});
+
+test('image dependency paths reached through a link anywhere on the way are refused',async t=>{
+  const f=await fixture(t),native=path.join(f.runtimeRoot,'skills/pdf2html/external/native'),outside=path.join(f.root,'outside-native');
+  await fs.cp(native,outside,{recursive:true});await fs.writeFile(path.join(outside,'models/CANARY'),'x');
+  await fs.rename(native,native+'.real');await fs.symlink(outside,native);
+  await assert.rejects(capture(f),status(/^Invalid image dependency receipt$/),'an intermediate link');
+  await fs.rm(native);await fs.rename(native+'.real',native);
+  const skills=path.join(f.runtimeRoot,'skills'),outsideSkills=path.join(f.root,'outside-skills');
+  await fs.cp(skills,outsideSkills,{recursive:true});await fs.rename(skills,skills+'.real');await fs.symlink(outsideSkills,skills);
+  await assert.rejects(capture(f),status(/^Invalid image dependency receipt$/),'a linked runtime skills directory');
+  await fs.rm(skills);await fs.rename(skills+'.real',skills);
+  // A runtime root that is itself a link is resolved once; paths below it must still resolve to themselves.
+  const linkedRoot=path.join(f.root,'runtime-link');await fs.symlink(f.runtimeRoot,linkedRoot);
+  const runtime=await capture(f,{runtimeRoot:linkedRoot});
+  assert.ok(runtime.view.binds.every(bind=>bind.source.startsWith(linkedRoot+'/')));
+  assert.deepEqual(await f.snapshots(),['rt-'+runtime.runtimeId]);
 });
 
 test('the discovery override is an option only: the manifest and the service never read SCRIPTA_SKILLS_DIR',async()=>{

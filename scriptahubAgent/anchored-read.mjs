@@ -37,17 +37,23 @@ export async function listDirectory(dir) {
   const entries=await fs.readdir(dir.anchored?at(dir,'.'):dir.path,{withFileTypes:true});
   await intact(dir);return entries;
 }
-export async function openDirectory(dir,name) {
+// mount:true lets discovery step into a directory that is its own mount (a checkout bound into the workspace); the
+// tree below it must then stay on that device.
+export async function openDirectory(dir,name,{mount=false}={}) {
   const handle=await fs.open(at(dir,validName(name)),DIRECTORY);
   const node={handle,stat:null,path:path.join(dir.path,name),parent:dir,anchored:dir.anchored,dev:dir.dev};
   try {
     node.stat=await handle.stat();
-    if(!node.stat.isDirectory()||node.stat.dev!==dir.dev)throw unsafe(node.path);
+    if(!node.stat.isDirectory()||(!mount&&node.stat.dev!==dir.dev))throw unsafe(node.path);
+    node.dev=node.stat.dev;
     await intact(node);return node;
   } catch(error) {await handle.close();throw error;}
 }
 export const closeDirectory=dir=>dir.handle.close();
 // Returns the file's bytes and mode. admit(size) runs before any byte is buffered and may throw to enforce a limit.
+// Known limit: nlink===1 is checked on the opened descriptor, so a writer can still link a file before the open and
+// unlink it before the fstat. Inference, not a guarantee: with fs.protected_hardlinks=1 a writer can only hard-link
+// files it can already read and write, and the service data directory is not reachable to other agents.
 export async function readRegularFile(dir,name,{admit=()=>{}}={}) {
   const handle=await fs.open(at(dir,validName(name)),FILE);
   try {

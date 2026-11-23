@@ -3,7 +3,7 @@ import fs from 'node:fs';
 import fsp from 'node:fs/promises';
 import path from 'node:path';
 import { isInstalledPath, INSTALL_OVERRIDES } from './deployment/skill-source.mjs';
-import { dependencyFingerprint, checkoutReader } from './deployment/dependency-fingerprint.mjs';
+import { dependencyFingerprint } from './deployment/dependency-fingerprint.mjs';
 import { openTree, listDirectory, openDirectory, closeDirectory, readRegularFile } from './anchored-read.mjs';
 
 // Skills run from a service-owned snapshot of the mounted checkout. The image only supplies the installed dependency
@@ -26,36 +26,87 @@ const relativeSkillPath=value=>typeof value==='string'&&/^skills\/[a-z0-9-]+\//.
   &&value.split('/').every(part=>part&&part!=='.'&&part!=='..');
 const exactKeys=(value,keys)=>!!value&&typeof value==='object'&&!Array.isArray(value)&&Object.keys(value).sort().join()===[...keys].sort().join();
 
-// A non-empty skillsDir (tests only) is used directly. Otherwise the checkout is the unique workspace directory whose
-// scriptahubAgent folder is the same directory as the code root (global mode binds the workspace at its own path).
-export function locateSkills({codeRoot,workspace=process.env.WORKSPACE_PATH,skillsDir,identity=file=>fs.statSync(file)}={}) {
-  if(typeof skillsDir==='string'&&skillsDir) {
-    let skillsRoot;
-    try {skillsRoot=fs.realpathSync(skillsDir);if(!fs.lstatSync(skillsRoot).isDirectory())throw new Error('not a directory');}
-    catch {fail('ScriptaHub skill source not found: the configured skills directory is unavailable');}
-    return {repoRoot:path.dirname(skillsRoot),skillsRoot};
-  }
-  let code;
-  try {const stat=identity(codeRoot);code={dev:stat.dev,ino:stat.ino};} catch {fail(NOT_FOUND);}
-  if(typeof workspace!=='string'||!path.isAbsolute(workspace))fail(NOT_FOUND);
-  const matches=[];
-  for(const parent of [workspace,path.join(workspace,'.ploinky','repos')]) {
-    let entries;try {entries=fs.readdirSync(parent,{withFileTypes:true});} catch {continue;}
-    for(const entry of entries) {
-      if(!entry.isDirectory())continue;
-      const candidate=path.join(parent,entry.name),agent=path.join(candidate,'scriptahubAgent');
-      try {
-        if(!fs.lstatSync(candidate).isDirectory()||!fs.lstatSync(agent).isDirectory())continue;
-        const stat=identity(agent);if(stat.dev===code.dev&&stat.ino===code.ino)matches.push(candidate);
-      } catch {continue;}
+const openChild=async(dir,name,options)=>{try {return await openDirectory(dir,name,options);} catch {return null;}};
+const closeAll=async nodes=>{for(const node of [...nodes].reverse())await closeDirectory(node).catch(()=>{});};
+const sameNode=(a,b)=>!!a&&!!b&&a.stat.dev===b.stat.dev&&a.stat.ino===b.stat.ino;
+// Reopens <parent>/<name>/{scriptahubAgent,skills} through the held parent and compares them with the held descriptors,
+// so a checkout swapped after discovery is detected; the capture itself only ever reads through the held descriptors.
+async function unchanged(parent,name,skillsName,held) {
+  const opened=[];
+  try {
+    const checkout=await openDirectory(parent,name,{mount:true});opened.push(checkout);
+    const agent=await openDirectory(checkout,'scriptahubAgent');opened.push(agent);
+    const skills=await openDirectory(skillsName===null?checkout:parent,skillsName??'skills');opened.push(skills);
+    return sameNode(checkout,held.checkout)&&sameNode(agent,held.agent)&&sameNode(skills,held.skills);
+  } catch {return false;} finally {await closeAll(opened);}
+}
+
+// The checkout is opened through descriptors held for the whole capture: the workspace root, then each candidate with
+// O_DIRECTORY|O_NOFOLLOW relative to its parent (anchored-read.mjs). A candidate matches when its scriptahubAgent,
+// opened relative to the held candidate, is the same directory as the code root; skills is opened relative to the same
+// candidate. identity(path), when given (tests), replaces the descriptor's {dev,ino} for the code root and for
+// <candidate>/scriptahubAgent. A non-empty skillsDir (tests only) is opened through its parent instead. close() releases
+// every descriptor.
+export async function locateSkills({codeRoot,workspace=process.env.WORKSPACE_PATH,skillsDir,identity,pathMode=false}={}) {
+  const held=[];
+  try {
+    if(typeof skillsDir==='string'&&skillsDir) {
+      const unavailable='ScriptaHub skill source not found: the configured skills directory is unavailable';
+      let real;try {real=fs.realpathSync(skillsDir);} catch {fail(unavailable);}
+      const repo=await openRoot(path.dirname(real),pathMode,'Skill source');held.push(repo);
+      const skills=await openChild(repo,path.basename(real)),agent=await openChild(repo,'scriptahubAgent');
+      for(const node of [skills,agent])if(node)held.push(node);
+      if(!skills||!agent)fail(unavailable);
+      const nodes=[...held];held.length=0;
+      return {repoRoot:path.dirname(real),skillsRoot:real,checkout:repo,agent,skills,
+        unchanged:async()=>{
+          const opened=[];
+          try {
+            const again=await openTree(path.dirname(real),{pathMode});opened.push(again);
+            const skillsAgain=await openDirectory(again,path.basename(real));opened.push(skillsAgain);
+            const agentAgain=await openDirectory(again,'scriptahubAgent');opened.push(agentAgain);
+            return sameNode(again,repo)&&sameNode(skillsAgain,skills)&&sameNode(agentAgain,agent);
+          } catch {return false;} finally {await closeAll(opened);}
+        },
+        close:()=>closeAll(nodes)};
     }
-  }
-  if(!matches.length)fail(NOT_FOUND);
-  if(matches.length>1)fail(`ScriptaHub skill source is ambiguous: ${matches.length} checkouts match /code`);
-  const skillsRoot=path.join(matches[0],'skills');
-  try {if(!fs.lstatSync(skillsRoot).isDirectory())throw new Error('not a directory');}
-  catch {fail('ScriptaHub skill source not found: the matching checkout has no skills directory');}
-  return {repoRoot:matches[0],skillsRoot};
+    let code;
+    try {const stat=identity?identity(codeRoot):fs.statSync(codeRoot);code={dev:stat.dev,ino:stat.ino};} catch {fail(NOT_FOUND);}
+    if(typeof workspace!=='string'||!path.isAbsolute(workspace))fail(NOT_FOUND);
+    let root;
+    try {root=await openTree(workspace,{pathMode});} catch(error) {if(!error.code)fail(error.message);fail(NOT_FOUND);}
+    held.push(root);
+    const parents=[{node:root,path:workspace}];
+    const ploinky=await openChild(root,'.ploinky',{mount:true});
+    if(ploinky) {
+      held.push(ploinky);const repos=await openChild(ploinky,'repos',{mount:true});
+      if(repos){held.push(repos);parents.push({node:repos,path:path.join(workspace,'.ploinky','repos')});}
+    }
+    const matches=[];
+    for(const parent of parents) {
+      let entries;try {entries=await listDirectory(parent.node);} catch {continue;}
+      for(const entry of entries) {
+        if(!entry.isDirectory())continue;
+        const checkout=await openChild(parent.node,entry.name,{mount:true});if(!checkout)continue;
+        const agent=await openChild(checkout,'scriptahubAgent');
+        if(agent) {
+          let stat=null;try {stat=identity?identity(path.join(parent.path,entry.name,'scriptahubAgent')):agent.stat;} catch {}
+          if(stat&&stat.dev===code.dev&&stat.ino===code.ino){held.push(checkout,agent);matches.push({parent,name:entry.name,checkout,agent});continue;}
+          await closeDirectory(agent);
+        }
+        await closeDirectory(checkout);
+      }
+    }
+    if(!matches.length)fail(NOT_FOUND);
+    if(matches.length>1)fail(`ScriptaHub skill source is ambiguous: ${matches.length} checkouts match /code`);
+    const [{parent,name,checkout,agent}]=matches;
+    const skills=await openChild(checkout,'skills');
+    if(!skills)fail('ScriptaHub skill source not found: the matching checkout has no skills directory');
+    held.push(skills);
+    const nodes=[...held],repoRoot=path.join(parent.path,name);held.length=0;
+    return {repoRoot,skillsRoot:path.join(repoRoot,'skills'),checkout,agent,skills,
+      unchanged:()=>unchanged(parent.node,name,null,{checkout,agent,skills}),close:()=>closeAll(nodes)};
+  } catch(error) {await closeAll(held);throw error;}
 }
 
 export async function imageReceipt(runtimeRoot=RUNTIME_PATH) {
@@ -96,16 +147,15 @@ async function openRoot(directory,pathMode,label) {
   try {return await openTree(directory,{pathMode});} catch(error) {fail(error.code?label+' could not be opened safely':error.message);}
 }
 // One pass over the source: every entry is opened anchored, without following links, and read once.
-async function walkSkills(skillsRoot,{limits,hook,pathMode,pass}) {
+async function walkSkills(root,{limits,hook,pass}) {
   const files=new Map();let total=0;
-  const root=await openRoot(skillsRoot,pathMode,'Skill source');
   const visit=async(dir,relative)=>{
     for(const entry of await listDirectory(dir)) {
       const name=relative?relative+'/'+entry.name:entry.name;
       if(isInstalledPath(name))continue;
       try {
-        if(/[\\\0]/.test(entry.name))fail('Invalid skill source path: '+name);
-        if(entry.isSymbolicLink())fail('Skill source must not contain symlinks: '+name);
+        if(/[\\\0]/.test(entry.name))fail('Invalid skill source path: '+JSON.stringify(name));
+        if(entry.isSymbolicLink())fail('Skill source must not contain symlinks: '+JSON.stringify(name));
         if(entry.isDirectory()) {
           await hook('directory',name,pass);
           const child=await openDirectory(dir,entry.name);
@@ -114,39 +164,60 @@ async function walkSkills(skillsRoot,{limits,hook,pathMode,pass}) {
           if(files.size>=limits.files)fail(LIMIT);
           const {bytes,mode}=await readRegularFile(dir,entry.name,{admit:size=>{total+=size;if(total>limits.bytes)fail(LIMIT);}});
           files.set(name,{bytes,sha256:sha256(bytes),exec:(mode&0o100)!==0});
-        } else fail('Unsupported skill source entry: '+name);
+        } else fail('Unsupported skill source entry: '+JSON.stringify(name));
       } catch(error) {
         if(error.status)throw error;
         if(error.code==='ECHANGED')fail(CHANGED);
-        fail('Skill source could not be captured safely: '+name);
+        fail('Skill source could not be captured safely: '+JSON.stringify(name));
       }
     }
   };
   try {await visit(root,'');}
-  catch(error) {if(error.status)throw error;fail('Skill source could not be captured safely: skills');}
-  finally {await closeDirectory(root);}
+  catch(error) {if(error.status)throw error;fail('Skill source could not be captured safely: "skills"');}
   return files;
 }
-async function readLaunchers(codeRoot,{pathMode}) {
-  const files=new Map(),root=await openRoot(codeRoot,pathMode,'Skill launcher source');
-  try {
-    for(const [directory,name,target] of LAUNCHERS) {
-      const opened=[];
-      try {
-        let dir=root;for(const part of directory.split('/')){dir=await openDirectory(dir,part);opened.push(dir);}
-        const {bytes,mode}=await readRegularFile(dir,name,{admit:size=>{if(size>CAPTURE_LIMITS.bytes)fail(LIMIT);}});
-        files.set(target,{bytes,sha256:sha256(bytes),exec:(mode&0o100)!==0});
-      } catch(error) {if(error.status)throw error;fail('Skill launcher could not be captured safely: '+target);}
-      finally {for(const dir of opened.reverse())await closeDirectory(dir);}
+// Launchers come from the held checkout's scriptahubAgent, which discovery proved is the code root's directory.
+async function readLaunchers(root) {
+  const files=new Map();
+  for(const [directory,name,target] of LAUNCHERS) {
+    const opened=[];
+    try {
+      let dir=root;for(const part of directory.split('/')){dir=await openDirectory(dir,part);opened.push(dir);}
+      const {bytes,mode}=await readRegularFile(dir,name,{admit:size=>{if(size>CAPTURE_LIMITS.bytes)fail(LIMIT);}});
+      files.set(target,{bytes,sha256:sha256(bytes),exec:(mode&0o100)!==0});
+    } catch(error) {if(error.status)throw error;fail('Skill launcher could not be captured safely: '+target);}
+    finally {for(const dir of opened.reverse())await closeDirectory(dir);}
+  }
+  return files;
+}
+// F over exactly what was captured: skills inputs are the captured bytes, deployment inputs are read through the held
+// scriptahubAgent descriptor. Validation messages name only repository-relative inputs; filesystem errors carry
+// absolute paths and are replaced.
+async function fingerprint(agent,files) {
+  const prefix='scriptahubAgent/deployment/';let deployment;
+  const read=async file=>{
+    if(file.startsWith('skills/')) {
+      const captured=files.get(file.slice('skills/'.length));
+      if(!captured)throw Object.assign(new Error('Dependency input was not captured'),{code:'ENOENT'});
+      return captured.bytes;
     }
-  } finally {await closeDirectory(root);}
-  return files;
+    if(!file.startsWith(prefix)||file.slice(prefix.length).includes('/'))throw new Error('Dependency input is outside the captured checkout: '+file);
+    deployment??=await openDirectory(agent,'deployment');
+    return (await readRegularFile(deployment,file.slice(prefix.length),{admit:size=>{if(size>CAPTURE_LIMITS.bytes)fail(LIMIT);}})).bytes;
+  };
+  try {return (await dependencyFingerprint(read)).fingerprint;}
+  catch(error) {if(error.status)throw error;fail('Skill dependency fingerprint failed: '+(error.code?'a dependency input is missing or unreadable':error.message));}
+  finally {if(deployment)await closeDirectory(deployment);}
 }
-// Validation messages name only repository-relative inputs; filesystem errors carry absolute paths and are replaced.
-const fingerprint=async repoRoot=>{
-  try {return (await dependencyFingerprint(checkoutReader(repoRoot))).fingerprint;}
-  catch(error) {fail('Skill dependency fingerprint failed: '+(error.code?'a dependency input is missing or unreadable':error.message));}
-};
+// An image path is bound only when it resolves to itself under the resolved runtime root: no link anywhere on the way.
+function imagePath(runtimeRoot,realRoot,relative,type) {
+  const file=path.join(runtimeRoot,relative);
+  try {
+    if(fs.realpathSync(file)!==path.join(realRoot,relative))throw new Error('resolves elsewhere');
+    const stat=fs.lstatSync(file);if(type==='dir'?!stat.isDirectory():!stat.isFile())throw new Error('wrong type');
+  } catch {fail(INVALID_RECEIPT);}
+  return file;
+}
 const sameFiles=(a,b)=>a.size===b.size&&[...a].every(([name,file])=>b.get(name)?.sha256===file.sha256&&b.get(name).exec===file.exec);
 
 // Per-skill digests use the algorithm of the RoboTeam helper: sorted <skill>/ entries plus a declared shared prefix.
@@ -242,23 +313,22 @@ export function pruneSnapshots(snapshotRoot,keep=()=>false) {
 
 // Captures the checkout, validates the image receipt against it and ensures rt-<runtimeId> holds exactly the captured bytes.
 // pinned.has(runtimeId) marks snapshots in use by a running child; they are never removed and never rewritten.
-export async function captureRuntime({runtimeRoot=RUNTIME_PATH,codeRoot,skillsRoot,repoRoot,image,snapshotRoot,pinned=new Set(),
-  hook=async()=>{},limits=CAPTURE_LIMITS,pathMode=false}) {
+export async function captureRuntime({runtimeRoot=RUNTIME_PATH,located,image,snapshotRoot,pinned=new Set(),
+  hook=async()=>{},limits=CAPTURE_LIMITS}) {
   const {receipt,bytes}=image;
-  const checkout=await fingerprint(repoRoot);
-  if(checkout!==receipt.dependencyFingerprint)fail(`Skill dependencies differ from the agent image (checkout ${checkout.slice(0,12)}, image ${receipt.dependencyFingerprint.slice(0,12)}); rebuild docker.io/assistos/scriptahub-agent from this checkout.`);
-  const files=await walkSkills(skillsRoot,{limits,hook,pathMode,pass:1});
+  await hook('located',located.repoRoot,0);
+  const files=await walkSkills(located.skills,{limits,hook,pass:1});
   if(!files.size)fail('ScriptaHub skill source not found: the checkout has no skill files');
-  const launchers=await readLaunchers(codeRoot,{pathMode});
+  const launchers=await readLaunchers(located.agent);
+  const checkout=await fingerprint(located.agent,files);
+  if(checkout!==receipt.dependencyFingerprint)fail(`Skill dependencies differ from the agent image (checkout ${checkout.slice(0,12)}, image ${receipt.dependencyFingerprint.slice(0,12)}); rebuild docker.io/assistos/scriptahub-agent from this checkout.`);
   const sourceDigests=digests(files,receipt.skills);
-  for(const entry of receipt.installed) {
-    let stat;try {stat=fs.lstatSync(path.join(runtimeRoot,entry.path));} catch {fail(INVALID_RECEIPT);}
-    if(entry.type==='dir'?!stat.isDirectory():!stat.isFile())fail(INVALID_RECEIPT);
-  }
+  let realRoot;try {realRoot=fs.realpathSync(runtimeRoot);} catch {fail(INVALID_RECEIPT);}
+  for(const entry of receipt.installed)imagePath(runtimeRoot,realRoot,entry.path,entry.type);
   for(const entry of receipt.overrides) {
-    const source=files.get(entry.path.slice('skills/'.length)),file=path.join(runtimeRoot,entry.path);
+    const source=files.get(entry.path.slice('skills/'.length)),file=imagePath(runtimeRoot,realRoot,entry.path,'file');
     if(!source||source.sha256!==entry.sourceSha256)fail(INVALID_RECEIPT);
-    let actual;try {if(!fs.lstatSync(file).isFile())throw new Error('not a file');actual=sha256(fs.readFileSync(file));} catch {fail(INVALID_RECEIPT);}
+    let actual;try {actual=sha256(fs.readFileSync(file));} catch {fail(INVALID_RECEIPT);}
     if(actual!==entry.installedSha256)fail('Image dependency override does not match its receipt: '+entry.path);
   }
   // Every captured file, with its exec bit, is part of the identity, so one runtimeId names exactly one snapshot content.
@@ -267,6 +337,7 @@ export async function captureRuntime({runtimeRoot=RUNTIME_PATH,codeRoot,skillsRo
     source:sha256(JSON.stringify(sorted([...files].map(([name,file])=>[name,file.sha256,file.exec]))))}));
   const layout=layoutOf(files,launchers,receipt),dev=store(snapshotRoot),snapshot=path.join(snapshotRoot,'rt-'+runtimeId);
   await hook('captured',null,1);
+  if(!await located.unchanged())fail(CHANGED);
   let present=true;try {fs.lstatSync(snapshot);} catch(error) {if(error.code!=='ENOENT')fail('Skill runtime snapshot storage is unavailable');present=false;}
   if(present&&!await verifySnapshot(snapshot,layout)) {
     if(pinned.has(runtimeId))fail('Skill runtime snapshot is corrupted');
@@ -279,9 +350,10 @@ export async function captureRuntime({runtimeRoot=RUNTIME_PATH,codeRoot,skillsRo
       await writeSnapshot(temporary,layout);
       // The snapshot was written from the captured buffers; a second pass only proves the checkout held still meanwhile.
       let again,launchersAgain;
-      try {again=await walkSkills(skillsRoot,{limits,hook,pathMode,pass:2});launchersAgain=await readLaunchers(codeRoot,{pathMode});}
+      try {again=await walkSkills(located.skills,{limits,hook,pass:2});launchersAgain=await readLaunchers(located.agent);}
       catch {fail(CHANGED);}
-      if(!sameFiles(files,again)||!sameFiles(launchers,launchersAgain)||await fingerprint(repoRoot)!==checkout)fail(CHANGED);
+      if(!sameFiles(files,again)||!sameFiles(launchers,launchersAgain)||await fingerprint(located.agent,again)!==checkout
+        ||!await located.unchanged())fail(CHANGED);
       fs.renameSync(temporary,snapshot);fs.chmodSync(snapshot,0o555);
     } catch(error) {
       try {remove(temporary,dev);} catch(cleanup) {if(cleanup.code!=='ENOENT')console.error('Skill runtime snapshot could not be removed');}
