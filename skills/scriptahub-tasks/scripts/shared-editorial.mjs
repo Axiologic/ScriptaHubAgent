@@ -16,28 +16,36 @@ const optional = error => {
   return null;
 };
 
-export async function sharedEditorial({executionId, directory, action, batch, batchSha256, analysis, role, replaceSha256, reason}) {
+export async function sharedEditorial({executionId, directory, language, action, batch, batchSha256, analysis, role, replaceSha256, reason}) {
   if (!/^tasks\/[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$/.test(directory ?? '') || !['status', 'verify', 'contract', 'submit', 'project'].includes(action)) {
     throw Error('Provide a task directory and a shared editorial action');
   }
   return withExecutionLock(process.cwd(), executionId, async root => {
     await guardRemoteBackups(root, executionId);
     const {context} = await json(directory + '/run-state/handoff.json');
-    if (context.executionId !== executionId || !context.editorialSource?.path) throw Error('Missing matching pinned editorial source');
-    const source = path.relative(process.cwd(), path.resolve(context.editorialSource.path));
-    const sourceSha256 = context.editorialSource.sha256;
+    const multilingual = Boolean(context.manuscriptEditions);
+    if (multilingual && (typeof language !== 'string' || !Object.hasOwn(context.manuscriptEditions, language))) {
+      throw Error('Select a pinned manuscript edition for shared editorial work');
+    }
+    const edition = multilingual ? context.manuscriptEditions[language] : context.editorialSource;
+    const editorial = multilingual ? context.manuscriptEditorial?.[language] : context;
+    const languageDirectory = multilingual ? '/' + language : '';
+    if (context.executionId !== executionId || !edition?.path) throw Error('Missing matching pinned editorial source');
+    const source = path.relative(process.cwd(), path.resolve(edition.path));
+    const sourceSha256 = edition.sha256;
     if (!source.startsWith(directory + '/') || hash(await read(source)) !== sourceSha256) throw Error('Pinned editorial source changed');
 
-    const jobs = roles.map(name => directory + '/editorial-jobs/shared/' + name);
+    const jobs = roles.map(name => directory + '/editorial-jobs' + languageDirectory + '/shared/' + name);
     const metadata = await Promise.all(jobs.map(job => json(job + '/job.json')));
     const names = metadata[0].batchNames;
     if (!Array.isArray(names) || !names.length || !names.every(name => batchName.test(name)) || new Set(names).size !== names.length
         || metadata.some(job => path.resolve(job.source) !== path.resolve(source) || job.sourceSha256 !== sourceSha256
-          || job.language !== metadata[0].language || !isDeepStrictEqual(job.batchNames, names))) {
+          || job.language !== metadata[0].language || (multilingual && job.language !== language)
+          || !isDeepStrictEqual(job.batchNames, names))) {
       throw Error('Editorial jobs must share the pinned source and batch layout');
     }
 
-    const file = directory + '/editorial/shared-analysis.json';
+    const file = directory + '/editorial' + languageDirectory + '/shared-analysis.json';
     const bytes = await read(file).catch(optional);
     const saved = bytes ? JSON.parse(bytes) : {version: 1, executionId, sourceSha256, batches: {}};
     if (saved.version !== 1 || saved.executionId !== executionId || saved.sourceSha256 !== sourceSha256
@@ -46,7 +54,7 @@ export async function sharedEditorial({executionId, directory, action, batch, ba
       throw Error('Shared analysis belongs to another source or execution');
     }
     const evidence = bytes ? {path: file, sha256: hash(bytes)} : null;
-    const pinnedEvidence = context.sharedEditorialAnalysis;
+    const pinnedEvidence = editorial?.sharedEditorialAnalysis;
     const needsHandoff = Boolean(pinnedEvidence && !isDeepStrictEqual(evidence, pinnedEvidence));
     if (needsHandoff && (pinnedEvidence.path !== file || pinnedEvidence.sha256 !== saved.correction?.previousEvidenceSha256)) {
       throw Error('Shared analysis differs from the evidence in the handoff');
@@ -90,7 +98,7 @@ export async function sharedEditorial({executionId, directory, action, batch, ba
           if (!current?.matches) pendingBatches.push(candidate.batch);
         }
         const sha256 = hash(JSON.stringify(candidates));
-        projections[name] = {sha256, pendingBatches, needsValidation: context.editorialResults?.[name]?.projectionSha256 !== sha256};
+        projections[name] = {sha256, pendingBatches, needsValidation: editorial?.editorialResults?.[name]?.projectionSha256 !== sha256};
       }
       if (action === 'verify') {
         if (!pinnedEvidence || needsHandoff) throw Error('Save the current shared analysis evidence before routing');
@@ -112,7 +120,7 @@ export async function sharedEditorial({executionId, directory, action, batch, ba
     if (action === 'project') {
       const index = roles.indexOf(role);
       if (index === -1 || !current.existing) throw Error('Project an accepted batch for marketing-summary or short-description');
-      if (!isDeepStrictEqual(evidence, context.sharedEditorialAnalysis) || Object.keys(saved.batches).length !== names.length) {
+      if (!isDeepStrictEqual(evidence, pinnedEvidence) || Object.keys(saved.batches).length !== names.length) {
         throw Error('The complete shared analysis must match the evidence in the handoff');
       }
       const candidate = projectAnalysis(current.existing.analysis, role);

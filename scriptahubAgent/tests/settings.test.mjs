@@ -12,17 +12,17 @@ test('Configure persists validated sources outside the repository and rejects br
   const configPath = path.join(root, 'defaults.json'), dataDir = path.join(root, 'data');
   const original = { schemaVersion: 1, syncIntervalSeconds: 60, repositories: ['https://books.example.org/default/collection.json'] };
   await fs.writeFile(configPath, JSON.stringify(original));
-  assert.deepEqual(await loadSourceConfig({ configPath, dataDir }), {...original,publication:null});
+  assert.deepEqual(await loadSourceConfig({ configPath, dataDir }), original);
   const config = { schemaVersion: 1, syncIntervalSeconds: 5, repositories: ['https://github.com/example/books/blob/master/collection.json'] };
   const resolve = settings => resolveSources(settings, { fetchImpl: async () => new Response('{"schemaVersion":1,"bookCount":0,"books":[]}') });
   const saved = await saveSourceConfig(config, { dataDir, resolve });
   assert.equal(saved.bookCount, 0);
-  assert.deepEqual(await loadSourceConfig({ configPath, dataDir }), { ...config, publication: null });
+  assert.deepEqual(await loadSourceConfig({ configPath, dataDir }), config);
   assert.equal((await fs.stat(settingsFile(dataDir))).mode & 0o777, 0o600);
   assert.deepEqual(JSON.parse(await fs.readFile(configPath)), original);
   await assert.rejects(saveSourceConfig({ ...config, repositories: ['https://github.com/example/books/blob/master/collection.json','https://raw.githubusercontent.com/example/books/master/collection.json'] }, { dataDir, resolve }), /Duplicate source/);
   await assert.rejects(saveSourceConfig(config, { dataDir, resolve: async () => { throw new Error('HTTP 404'); } }), /404/);
-  assert.deepEqual(await loadSourceConfig({ configPath, dataDir }), { ...config, publication: null });
+  assert.deepEqual(await loadSourceConfig({ configPath, dataDir }), config);
   await saveSourceConfig({ ...config, repositories: [] }, { dataDir });
   assert.deepEqual((await loadSourceConfig({ configPath, dataDir })).repositories, []);
 });
@@ -57,21 +57,12 @@ test('editorial configuration does not invalidate the public catalogue snapshot'
   assert.equal(await snapshotFingerprint({...config,summaryReadingMinutes:10}),await snapshotFingerprint({...config,summaryReadingMinutes:15}));
 });
 
-test('publication identity and credential stay together locally and public refresh does not depend on secret storage', async t => {
-  const {PublicationAccessStore} = await import('../publication-access.mjs');
-  const root = await fs.mkdtemp(path.join(os.tmpdir(),'scripta-settings-local-access-'));
-  t.after(()=>fs.rm(root,{recursive:true,force:true}));
-  const configPath=path.join(root,'defaults.json'), dataDir=path.join(root,'data');
+test('catalogue settings contain no Git credentials', async t => {
+  const dataDir = await fs.mkdtemp(path.join(os.tmpdir(),'scripta-settings-robot-publication-'));
+  t.after(()=>fs.rm(dataDir,{recursive:true,force:true}));
   const config={schemaVersion:1,syncIntervalSeconds:60,repositories:[]};
-  await fs.writeFile(configPath,JSON.stringify(config));
-  const access=new PublicationAccessStore(dataDir);
-  access.update(state=>{state.connection={token:'test-token-not-public',publication:{authorName:'Original',authorEmail:'original@example.test'}};});access.close();
-  const publication={authorName:'Updated',authorEmail:'updated@example.test'};
-  const saved=await saveSourceConfig({...config,publication},{dataDir});
-  assert.deepEqual(saved.settings.publication,publication);
-  assert.deepEqual((await loadSourceConfig({configPath,dataDir,includePublication:true})).publication,publication);
-  assert.equal(Object.hasOwn(JSON.parse(await fs.readFile(settingsFile(dataDir))),'publication'),false);
-  await fs.rm(path.join(dataDir,'private/publication/key'));
-  assert.equal((await loadSourceConfig({configPath,dataDir})).syncIntervalSeconds,60);
-  await assert.rejects(loadSourceConfig({configPath,dataDir,includePublication:true}),/key is missing/);
+  const saved=await saveSourceConfig({...config,publication:{authorName:'Unused'}},{dataDir});
+  assert.deepEqual(saved.settings,config);
+  assert.deepEqual(await loadSourceConfig({dataDir}),config);
+  await assert.rejects(fs.access(path.join(dataDir,'private/publication')),{code:'ENOENT'});
 });

@@ -305,6 +305,79 @@ test('editorial, review and final validation preserve the pinned source and acce
   }
 }));
 
+test('each published manuscript edition requires its own pinned PDF and reader audit', {skip: process.platform !== 'linux'}, async () => inRun(async root => {
+  const previousPath = process.env.PATH;
+  const directory = 'tasks/task-one';
+  const packageRoot = directory + '/package';
+  const save = (file, value) => fs.writeFile(file, JSON.stringify(value));
+  const digest = value => crypto.createHash('sha256').update(value).digest('hex');
+  const editions = {};
+  const manuscriptEditions = {};
+  const audits = [];
+  const files = [];
+  const stage = async (file, content) => {
+    await fs.writeFile(packageRoot + '/' + file, content);
+    files.push({path:file, size:Buffer.byteLength(content), sha256:digest(content)});
+  };
+  try {
+    await fs.mkdir('bin');
+    await fs.writeFile('bin/git', `#!${process.execPath}\nprocess.stdout.write('${'a'.repeat(40)}\\trefs/heads/main\\n');\n`, {mode: 0o700});
+    process.env.PATH = path.join(root, 'bin') + path.delimiter + previousPath;
+    for (const language of ['en', 'ro']) {
+      const sourceDir = directory + '/sources/' + language;
+      const validationDir = directory + '/validation/' + language;
+      const reader = language + '.html';
+      const html = '<main>' + language + '</main>';
+      const pdf = 'PDF fixture ' + language;
+      const source = sourceDir + '/source.html';
+      const referencePdf = sourceDir + '/source.pdf';
+      await fs.mkdir(sourceDir, {recursive: true});
+      await fs.mkdir(validationDir, {recursive: true});
+      await fs.mkdir(packageRoot, {recursive: true});
+      await fs.writeFile(source, html);
+      await fs.writeFile(referencePdf, pdf);
+      const book = language + '-book.html';
+      const shortContent = language + '-summary.html';
+      await stage(reader, html);
+      await stage(book, '<main>Book</main>');
+      await stage(shortContent, '<meta name="summary-generator" content="comprehensivesummary-skill">');
+      editions[language] = {fullContent:reader, book, shortContent};
+      manuscriptEditions[language] = {language, path: source, sha256: digest(html), referencePdf, referencePdfSha256: digest(pdf)};
+      const candidate = path.join(root, packageRoot, reader);
+      const report = validationDir + '/report.json';
+      const result = {status:'passed', scope:'layout_and_structure', autoCorrect:false, findings:[], documents:[{file:candidate}]};
+      await save(report, result);
+      await save(validationDir + '/job.json', {result, inputs:[
+        {file:candidate, sha256:digest(html)}, {file:path.join(root, referencePdf), sha256:digest(pdf)}
+      ]});
+      audits.push({language, report});
+    }
+    const {language, path: source, sha256} = manuscriptEditions.en;
+    await writeHandoff({step:'prepare-manuscript', directory, context:{
+      ...context, editorialSource:{language, path:source, sha256}, manuscriptEditions
+    }});
+    await save(directory + '/run-state/claimed.json', {task:{...context, type:'scriptahub.manuscript'}});
+    await assert.rejects(writeHandoff({step:'review-correct', directory, context:{
+      ...context, manuscriptEditions:{...manuscriptEditions, ro:{...manuscriptEditions.ro, referencePdfSha256:'0'.repeat(64)}}
+    }}), /Manuscript editions are pinned/);
+    const aboutBook = {en:['English edition'], ro:['Ediție în română']};
+    const collection = JSON.stringify(combineCollections([{id:context.bookId, editions, aboutBook, keywordIds:[], keywords:emptyKeywords}]));
+    await stage('collection.json', collection);
+    const inventory = directory + '/inventory.json';
+    await save(inventory, {executionId:context.executionId, baseCommit:null, files});
+    const input = {...context, directory, packageRoot, inventory, finalize:true,
+      catalogue:'https://github.com/example/books/blob/main/collection.json', branch:'main'};
+    await assert.rejects(verifyPackage({...input, audits:[audits[0]]}), /cover every required edition/);
+    await assert.rejects(verifyPackage({...input, audits:[audits[0], {...audits[1], report:audits[0].report}]}),
+      /does not cover the published source edition: ro/);
+    assert.ok((await verifyPackage({...input, audits})).approval);
+    await fs.appendFile(manuscriptEditions.ro.referencePdf, 'changed');
+    await assert.rejects(verifyPackage({...input, audits}), /Pinned manuscript source changed for ro/);
+  } finally {
+    process.env.PATH = previousPath;
+  }
+}));
+
 test('a pinned editorial source survives a partial handoff and cannot be replaced', async () => inRun(async () => {
   const editorialSource={path:'tasks/task-one/sources/book.html',sha256:'a'.repeat(64),language:'en'};
   await writeHandoff({step:'process-content',directory:'tasks/task-one',context:{...context,editorialSource}});

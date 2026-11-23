@@ -50,6 +50,31 @@ function itemArtifact(directory = '.',name) {
   if (directory !== '.' && !/^tasks\/[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$/.test(directory)) throw new Error('Invalid task directory');
   return (directory === '.' ? '' : directory + '/') + 'run-state/' + name;
 }
+function manuscriptEditions(context, directory) {
+  const editions = context.manuscriptEditions;
+  if (editions === undefined) return [];
+  const entries = Object.entries(editions ?? {});
+  const primary = editions?.[context.editorialSource?.language];
+  const sourcesDirectory = directory + '/sources/';
+  const digest = value => typeof value === 'string' && /^[a-f0-9]{64}$/.test(value);
+  const sourcePath = value => typeof value === 'string' && value.startsWith(sourcesDirectory)
+    && !/[\\\0]/.test(value) && value.split('/').every(part => part && part !== '.' && part !== '..');
+  if (entries.length < 2 || !primary ||
+      ['path', 'sha256'].some(key => primary[key] !== context.editorialSource[key]) ||
+      entries.some(([language, edition]) => {
+        try {
+          return new Intl.Locale(language).baseName !== language || edition?.language !== language
+            || !sourcePath(edition.path) || !sourcePath(edition.referencePdf)
+            || !digest(edition.sha256) || !digest(edition.referencePdfSha256);
+        } catch { return true; }
+      }) ||
+      new Set(entries.map(([, edition]) => edition.path)).size !== entries.length ||
+      new Set(entries.map(([, edition]) => edition.referencePdf)).size !== entries.length) {
+    throw Error('Invalid pinned manuscript editions');
+  }
+  return entries;
+}
+
 export async function writeHandoff(input) {
   const steps = ['claim-edit','apply-edit','prepare-edit-package','validate-edit','submit-edit','resume-book','prepare-manuscript','comprehensive-summary','relevant-keywords','shared-editorial-analysis','marketing-summary','short-description','process-content','translate-resources','review-correct','validate-final','publish-result'];
   if (!steps.includes(input.step) || !input.context || typeof input.context !== 'object' || Array.isArray(input.context)) throw new Error('Provide the step and a context object');
@@ -65,13 +90,21 @@ export async function writeHandoff(input) {
     if (proposed && ['path','sha256','language'].some(key => proposed[key] !== pinned[key])) throw new Error('Editorial source is pinned; do not replace or regenerate the book');
     input = {...input, context:{...input.context, editorialSource:pinned}};
   }
+  if (old?.context.manuscriptEditions && input.context.manuscriptEditions !== undefined
+      && !isDeepStrictEqual(old.context.manuscriptEditions, input.context.manuscriptEditions)) {
+    throw Error('Manuscript editions are pinned; do not replace their sources');
+  }
   if (old) {
     const context = {...old.context, ...input.context};
     if (old.context.editorialResults || input.context.editorialResults) {
       context.editorialResults = {...old.context.editorialResults, ...input.context.editorialResults};
     }
+    if (old.context.manuscriptEditorial || input.context.manuscriptEditorial) {
+      context.manuscriptEditorial = {...old.context.manuscriptEditorial, ...input.context.manuscriptEditorial};
+    }
     input = {...input, context};
   }
+  manuscriptEditions(input.context, input.directory ?? '.');
   const text = JSON.stringify(input.context);
   if (Buffer.byteLength(text)>24000) throw new Error('Keep handoff context under 24 KB; reference large inventories and reports by path');
   const rejectSecrets = value => {
@@ -144,15 +177,28 @@ export async function verifyPackage(input,{hook=async()=>{}}={}) {
     const scope = generated ? 'html_layout_integrity' : editing ? 'edition_layout_regression' : 'layout_and_structure';
     const entries = input.audits ?? (input.audit ? [{report: input.audit}] : []);
     if (input.audit && input.audits || !Array.isArray(entries) || !entries.length) throw Error('Provide the independent native audit reports');
+    let directEditions = new Map();
+    if (readers && task.type === 'scriptahub.manuscript') {
+      const {context} = await jsonArtifact(itemArtifact(input.directory, 'handoff.json'));
+      if (context.executionId !== task.executionId || context.bookId !== task.bookId) {
+        throw Error('Manuscript handoff belongs to another task');
+      }
+      directEditions = new Map(manuscriptEditions(context, input.directory ?? '.'));
+      const directReaders = [...directEditions.keys()].map(language => readers.get(language));
+      if (directReaders.some(name => !name) || new Set(directReaders).size !== directReaders.length) {
+        throw Error('Publication must contain a distinct reader for every pinned manuscript edition');
+      }
+    }
     const plan = input.finalize && (editing || generated) ? (await jsonArtifact(input.editionPlan)).editions : null;
     if (input.finalize && (editing || generated) && (!Array.isArray(plan) || !plan.length)) throw Error('Missing edition validation plan');
     if (plan && new Set(plan.map(item => item.language)).size !== plan.length) throw Error('The edit plan repeats an affected language');
-    const expected = readers && generated ? [...readers.keys()] : plan?.map(item => item.language);
+    const expected = readers && generated ? [...readers.keys()]
+      : directEditions.size ? [...directEditions.keys()] : plan?.map(item => item.language);
     if (expected && plan && (plan.length !== expected.length || plan.some(item => !expected.includes(item.language)))) throw Error('Edition plan must cover every required edition');
     if (plan && editing && (task.requests ?? []).some(request => request.language && !expected.includes(request.language))) {
       throw Error('Edition plan omits a language from the approved requests');
     }
-    if (expected && (entries.length !== expected.length || new Set(entries.map(item => item.language)).size !== entries.length
+    if (expected?.length && (entries.length !== expected.length || new Set(entries.map(item => item.language)).size !== entries.length
       || entries.some(item => !expected.includes(item.language)))) throw Error('Independent audits must cover every required edition');
     const candidates = new Set(), reports = [];
     let warningFindings = 0, existingFindings = 0, withWarnings = false;
@@ -193,9 +239,15 @@ export async function verifyPackage(input,{hook=async()=>{}}={}) {
           audited.push(await auditedFile(root, names, recorded));
         }
         if (readers) {
-          if (!readers.get(input.sourceLanguage) || !audited.includes(readers.get(input.sourceLanguage))) throw Error('Manuscript audit does not cover the published source edition');
-          const source = await insideRun(input.referencePdf);
+          const edition = directEditions.get(entry.language);
+          const language = edition?.language ?? input.sourceLanguage;
+          if (!readers.get(language) || !audited.includes(readers.get(language))) throw Error('Manuscript audit does not cover the published source edition: ' + language);
+          const source = await insideRun(edition?.referencePdf ?? input.referencePdf);
           const sourceSha256 = hash(await fs.readFile(source));
+          if (edition && (sourceSha256 !== edition.referencePdfSha256
+            || hash(await fs.readFile(await insideRun(edition.path))) !== edition.sha256)) {
+            throw Error('Pinned manuscript source changed for ' + language);
+          }
           if (!nativeJob.inputs?.some(file => file.file === source && file.sha256 === sourceSha256)) throw Error('Manuscript audit does not match the verified PDF reference');
         }
       }

@@ -17,20 +17,19 @@ test('every MCP tool registers with the actual Ploinky runtime schema compiler',
   for (const name of ['scriptahub_task_package_prepare','scriptahub_task_package_upload','scriptahub_task_publish']) {
     assert.deepEqual(config.tools.find(tool=>tool.name===name).tags,['internal'],`${name} must accept service calls only`);
   }
-  assert.deepEqual(config.tools.find(tool=>tool.name==='scriptahub_publication_auth').tags,['admin']);
+  assert.equal(schemas.has('scriptahub_publication_auth'),false);
   assert.equal(schemas.get('scriptahub_config_get').safeParse({}).success,true);
   const settings = {repositories:[],syncIntervalSeconds:60};
   const save = schemas.get('scriptahub_config_set');
   assert.equal(save.safeParse(settings).success,true);
-  assert.equal(save.safeParse({...settings,publication:{authorName:'Publisher',authorEmail:'publisher@example.test'}}).success,true);
+  assert.equal(save.safeParse({...settings,publication:{authorName:'Publisher',authorEmail:'publisher@example.test'}}).success,false);
   assert.equal(save.safeParse({...settings,publication:null}).success,false);
   assert.equal(save.safeParse({...settings,publication:{secretKey:'UNTRUSTED',authorName:'Publisher',authorEmail:'publisher@example.test'}}).success,false);
   assert.equal(save.safeParse({...settings,summaryReadingMinutes:20}).success,false);
-  const auth = schemas.get('scriptahub_publication_auth');
-  assert.equal(auth.safeParse({action:'connect',authorName:'Name',authorEmail:'name@example.test'}).success,true);
-  assert.equal(auth.safeParse({action:'connect',credentialRef:'OLD_REFERENCE'}).success,false);
-  assert.equal(config.tools.some(tool => tool.delegations?.some(delegation => /dpuAgent|gitAgent/.test(delegation.targetAgentId))),false);
-  assert.equal(auth.safeParse({action:'token',token:'test-only-token'}).success,true);
+  const publication = schemas.get('scriptahub_task_publish');
+  assert.equal(publication.safeParse({executionId:'execution-one',action:'read',tree:'a'.repeat(40),file:'book.html',offset:0}).success,true);
+  assert.equal(publication.safeParse({executionId:'execution-one',action:'authorize',tree:'a'.repeat(40),commitObject:'blob'}).success,true);
+  assert.equal(publication.safeParse({executionId:'execution-one',token:'unexpected'}).success,false);
   const prepare = schemas.get('scriptahub_task_package_prepare');
   const entry = {path:'book.html',sha256:'a'.repeat(64),size:1};
   const input = {executionId:'execution-one',catalogue:'https://github.com/example/books/blob/main/collection.json',branch:'main',files:[entry,{...entry,path:'source.pdf'}],validation:{publicationPermitted:true}};

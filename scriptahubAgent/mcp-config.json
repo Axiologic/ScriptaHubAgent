@@ -3,7 +3,7 @@
     {
       "name": "scriptahub_config_get",
       "title": "Get ScriptaHub settings",
-      "description": "Administrator configuration for content catalogue URLs, refresh interval and publication access.",
+      "description": "Administrator configuration for content catalogue URLs and refresh interval.",
       "command": "node",
       "args": [
         "tools/settings-tool.mjs"
@@ -25,7 +25,7 @@
     {
       "name": "scriptahub_config_set",
       "title": "Save ScriptaHub settings",
-      "description": "Administrator configuration for content catalogue URLs, refresh interval and publication access.",
+      "description": "Administrator configuration for content catalogue URLs and refresh interval.",
       "command": "node",
       "args": [
         "tools/settings-tool.mjs"
@@ -47,24 +47,6 @@
             "type": "integer",
             "minimum": 1,
             "maximum": 2147483
-          },
-          "publication": {
-            "type": "object",
-            "properties": {
-              "authorName": {
-                "type": "string",
-                "maxLength": 120
-              },
-              "authorEmail": {
-                "type": "string",
-                "maxLength": 254
-              }
-            },
-            "required": [
-              "authorName",
-              "authorEmail"
-            ],
-            "additionalProperties": false
           }
         },
         "additionalProperties": false,
@@ -113,9 +95,21 @@
             "minimum": 0,
             "maximum": 1000000
           },
-          "rewardValidityDays": { "type": "integer", "minimum": 0, "maximum": 3650 },
-          "firstNoticeDays": { "type": "integer", "minimum": 0, "maximum": 3650 },
-          "lastNoticeDays": { "type": "integer", "minimum": 0, "maximum": 3650 }
+          "rewardValidityDays": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 3650
+          },
+          "firstNoticeDays": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 3650
+          },
+          "lastNoticeDays": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 3650
+          }
         },
         "required": [
           "bookReward",
@@ -431,8 +425,8 @@
     },
     {
       "name": "scriptahub_task_publish",
-      "title": "Publish the registered package through ScriptaHub",
-      "description": "Publish the registered package through ScriptaHub. Restricted to configured executor service identities. No credentials or local server paths are returned.",
+      "title": "Prepare or verify robot publication",
+      "description": "Prepare the approved Git tree, read its content, authorize the robot commit, or verify publication on the destination branch.",
       "command": "node",
       "args": [
         "tools/task-tool.mjs"
@@ -445,6 +439,31 @@
           "executionId": {
             "type": "string",
             "maxLength": 128
+          },
+          "action": {
+            "type": "string",
+            "enum": [
+              "prepare",
+              "read",
+              "authorize",
+              "confirm"
+            ]
+          },
+          "tree": {
+            "type": "string",
+            "pattern": "^[a-f0-9]{40}$"
+          },
+          "commitObject": {
+            "type": "string",
+            "maxLength": 16384
+          },
+          "file": {
+            "type": "string",
+            "maxLength": 1024
+          },
+          "offset": {
+            "type": "integer",
+            "minimum": 0
           }
         },
         "required": [
@@ -458,55 +477,6 @@
       "tags": [
         "internal"
       ]
-    },
-    {
-      "name": "scriptahub_publication_auth",
-      "title": "ScriptaHub Git authentication",
-      "description": "Administrator-only GitHub device authorization or token storage owned by ScriptaHub. Credentials are never returned.",
-      "command": "node",
-      "args": [
-        "tools/settings-tool.mjs"
-      ],
-      "cwd": "/code",
-      "timeoutMs": 180000,
-      "inputSchema": {
-        "type": "object",
-        "properties": {
-          "action": {
-            "type": "string",
-            "enum": [
-              "status",
-              "begin",
-              "poll",
-              "token",
-              "connect",
-              "disconnect"
-            ]
-          },
-          "authorName": {
-            "type": "string",
-            "maxLength": 120
-          },
-          "authorEmail": {
-            "type": "string",
-            "maxLength": 254
-          },
-          "token": {
-            "type": "string",
-            "maxLength": 4096
-          }
-        },
-        "required": [
-          "action"
-        ],
-        "additionalProperties": false
-      },
-      "tags": [
-        "admin"
-      ],
-      "env": {
-        "TOOL_NAME": "scriptahub_publication_auth"
-      }
     },
     {
       "name": "scriptahub_task_batch_snapshot",

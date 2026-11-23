@@ -23,7 +23,7 @@ try {
   const executor = requireExecutor(auth, tool);
   const dataDir = process.env.SCRIPTA_DATA_DIR || path.resolve(import.meta.dirname, '../data');
   const configuredTools = new Set(['scriptahub_task_claim','scriptahub_task_package_prepare','scriptahub_task_publish']);
-  const config = configuredTools.has(tool) ? validateSourceConfig(await loadSourceConfig({ dataDir, includePublication:true })) : null;
+  const config = configuredTools.has(tool) ? validateSourceConfig(await loadSourceConfig({ dataDir })) : null;
   store = new DashboardStore(dataDir,{manageApprovals:true});
   const service = new TaskExecution(store, dataDir);
   const methods = { scriptahub_task_batch_snapshot:'snapshot', scriptahub_task_batch_settle:'settle', scriptahub_task_batch_close:'closeBatch', scriptahub_task_claim: 'claim', scriptahub_task_status: 'status', scriptahub_task_document_read: 'document', scriptahub_task_finish: 'finish' };
@@ -35,7 +35,6 @@ try {
     try {receipt=await invokeSupervisor(dataDir,{tool:'scriptahub_skills_preflight',executor,input:{}});}
     catch {throw Object.assign(new Error('ScriptaHub processing preflight is unavailable'),{status:503});}
     if(receipt.ok!==true)throw Object.assign(new Error('ScriptaHub processing preflight is unavailable'),{status:503});
-    await publisher.preflight(config);
     result = service.claimConfigured(executor, args, config);
   } else if (tool === 'scriptahub_task_package_prepare') result = publisher.prepare(executor,args,config);
   else if (tool === 'scriptahub_task_package_upload') result = publisher.upload(executor,args);

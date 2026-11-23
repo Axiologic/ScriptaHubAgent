@@ -280,11 +280,6 @@
           "name": "SCRIPTA_EXECUTOR_AGENT_IDS",
           "required": false,
           "default": "agent:AchillesIDE/roboTeamAgent"
-        },
-        {
-          "name": "SCRIPTA_GITHUB_CLIENT_ID",
-          "required": false,
-          "default": "Ov23liRKJjJHqo3zOOI6"
         }
       ]
     }

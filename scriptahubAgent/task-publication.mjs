@@ -1,47 +1,58 @@
 import {translationOutcomeMessage} from './translation-outcome.mjs';
 import fs from 'node:fs/promises';
+import { constants } from 'node:fs';
 import path from 'node:path';
 import crypto from 'node:crypto';
 import { isDeepStrictEqual } from 'node:util';
 import { PublicationTransfer, packagePath, publicationError as fail } from './publication-transfer.mjs';
 import { publicationTarget, checkPublicationPackage, verifyCatalogueBranch } from './publication-policy.mjs';
 import { publicationGit, writePackageFile } from './publication-git.mjs';
-import { readPublicationToken } from './publication-access.mjs';
-import { publicationConfig } from './publication-config.mjs';
 import { requireNoActiveProcessing } from './processing-store.mjs';
 import { combineCollections } from './sync.mjs';
 
 const leaseMs = 600000;
 const retryMs = 3000;
 const refName = branch => 'refs/heads/' + branch;
+const objectId = (type, content) => crypto.createHash('sha1').update(Buffer.from(type + ' ' + content.length + '\0')).update(content).digest('hex');
+
+function verifyCommitObject(encoded, tree, parent) {
+  if (typeof encoded !== 'string' || encoded.length > 16384 || !/^[a-zA-Z0-9+/]+={0,2}$/.test(encoded)) fail('Invalid publication commit object');
+  const bytes = Buffer.from(encoded, 'base64');
+  const message = bytes.toString('utf8');
+  const boundary = message.indexOf('\n\n');
+  const headers = message.slice(0, boundary).split('\n');
+  const parents = headers.filter(header => header.startsWith('parent '));
+  if (boundary < 0 || headers[0] !== 'tree ' + tree || !isDeepStrictEqual(parents,parent ? ['parent ' + parent] : [])) {
+    fail('The commit does not match the validated publication tree and parent');
+  }
+  return objectId('commit', bytes);
+}
 class BranchMoved extends Error {}
 class PublicationConflict extends Error {}
 
 export class TaskPublication extends PublicationTransfer {
-  constructor(service, { tokenProvider, gitFactory = publicationGit } = {}) {
+  constructor(service, { gitFactory = publicationGit } = {}) {
     super(service);
-    this.tokenProvider = tokenProvider || (config => readPublicationToken(config,{dataDir:service.dataDir}));
     this.gitFactory = gitFactory;
   }
-  async preflight(config) {
-    publicationConfig(config.publication);
-    await this.tokenProvider(config.publication);
-    return { configured: true };
-  }
-  async publish(executor, { executionId }, config) {
+  async publish(executor, { executionId, action = 'prepare', tree: requestedTree, commitObject, file, offset }, config) {
     const execution = this.service.execution(executor, executionId);
     const row = this.row(executionId);
+    if (action === 'read') return this.readFile(executor, executionId, row, requestedTree, file, offset, config);
     if (row?.receipt) return this.complete(executor, executionId, JSON.parse(row.receipt));
     if (execution.finished_at) return this.service.status(executor, { executionId });
     if (!(execution.state === 'stop_requested' && (row?.commit_id || row?.retry_at != null))) this.running(executor, executionId);
     if (!row) fail('No validated package has been registered', 409);
+    if (!['prepare','authorize','confirm'].includes(action)) fail('Invalid publication action');
+    if (action === 'authorize' && (!row.tree_id || row.tree_id !== requestedTree)) return this.service.status(executor, {executionId});
+    const candidateCommit = action === 'authorize' ? verifyCommitObject(commitObject,row.tree_id,row.commit_base) : null;
     const manifest = JSON.parse(row.manifest);
     const target = publicationTarget(manifest.catalogue, manifest.branch);
     const authorized = config.repositories.includes(manifest.catalogue);
     if (!authorized && row.retry_at === null && !row.commit_id) fail('Publication destination is no longer authorized', 403);
     // Verify a first submission before queuing it. An incomplete upload can still be resumed.
     const readPackage = () => new Map(manifest.files.map(entry => [entry.path, this.bytes(executionId,entry)]));
-    const packageBytes = row.retry_at === null && !row.commit_id ? readPackage() : null;
+    const packageBytes = row.retry_at === null && !row.tree_id && !row.commit_id ? readPackage() : null;
     const owner = crypto.randomUUID();
     const key = JSON.stringify([target.remote.toLowerCase(), target.branch]);
     const claim = this.store.transaction(() => {
@@ -74,7 +85,7 @@ export class TaskPublication extends PublicationTransfer {
       if (this.store.db.prepare(`UPDATE task_publications SET ${fields} WHERE execution_id=? AND lease_owner=?`)
         .run(...values,executionId,owner).changes !== 1) fail('Publication ownership changed',409);
     };
-    const clearCommit = () => update('commit_id=NULL,commit_base=NULL,push_state=NULL');
+    const clearCommit = () => update('commit_id=NULL,commit_base=NULL,push_state=NULL,tree_id=NULL,commit_object=NULL');
     const defer = () => {
       update('retry_at=?',Date.now() + retryMs);
       return this.service.status(executor,{executionId});
@@ -92,28 +103,21 @@ export class TaskPublication extends PublicationTransfer {
         clearCommit();
         return finish('Publication destination is no longer authorized');
       }
-      const author = publicationConfig(config.publication);
-      const token = await this.tokenProvider(author).catch(error => {
-        // A token/identity change during lookup can be retried with fresh settings.
-        if (error.status === 409) throw new BranchMoved(error.message);
-        throw error;
-      });
       requireNoActiveProcessing(this.store, executionId);
-      // Leave a bounded amount of work per call. The persisted request is resumed
-      // automatically, including after a process restart.
-      if (!saved.commit_id) {
+      if (!saved.tree_id && !saved.commit_id) {
+        if (action !== 'prepare') return this.service.status(executor,{executionId});
         update('lease_until=?',Date.now() + leaseMs);
         await fs.rm(directory, { recursive: true, force: true });
       }
-      const runGit = await this.gitFactory(directory,token,author);
+      const runGit = await this.gitFactory(directory);
       const git = async (...args) => {
         update('lease_until=?',Date.now() + leaseMs);
         return runGit(...args);
       };
       const ref = refName(target.branch);
-      if (!saved.commit_id) {
-        const { commit, head } = await this.prepareCommit(git,directory,manifest,target,packageBytes || readPackage(),() => this.running(executor,executionId));
-        update("commit_id=?,commit_base=?,push_state='prepared'",commit,head);
+      if (!saved.tree_id && !saved.commit_id) {
+        const {tree, head} = await this.prepareTree(git,directory,manifest,target,packageBytes || readPackage(),() => this.running(executor,executionId));
+        update("tree_id=?,commit_base=?,push_state='prepared'",tree,head);
         saved = this.row(executionId);
       }
 
@@ -130,7 +134,11 @@ export class TaskPublication extends PublicationTransfer {
         });
         await git('fetch','--filter=blob:none',...(shallow ? ['--unshallow'] : []),'origin',ref);
         const fetched = await git('rev-parse','FETCH_HEAD');
-        if (await ancestor(git,commit,fetched)) return { head: fetched, published: true };
+        const present = await git('cat-file','-t',commit).catch(error => {
+          if (error.gitExitCode === 128) return '';
+          throw error;
+        });
+        if (present === 'commit' && await ancestor(git,commit,fetched)) return { head: fetched, published: true };
         // Once a competing commit has advanced from our parent, an old normal
         // push cannot take effect. A missing branch or rewrite is inconclusive.
         const superseded = fetched !== parent && (parent === null || await ancestor(git,parent,fetched));
@@ -160,42 +168,28 @@ export class TaskPublication extends PublicationTransfer {
         if (!confirmed.published && (confirmed.head !== parent || stopped() || !authorized)) return defer();
       }
       if (!confirmed?.published) {
+        if (action === 'confirm') return defer();
+        if (!saved.tree_id || (action === 'authorize' && requestedTree !== saved.tree_id)) return defer();
         if (confirmed) {
           verifyCatalogueBranch(manifest.catalogue,target.branch,confirmed.refs);
           if (!confirmed.head && confirmed.refs) return defer();
         }
-        if (await git('rev-parse','HEAD') !== commit || await git('status','--porcelain')) fail('The retained publication checkout changed',409);
-        const canPush = this.store.transaction(() => {
+        if (action === 'prepare') {
+          const files = await Promise.all(manifest.files.map(async ({path: name}) => {
+            const entry = await fs.stat(path.join(directory,name));
+            return {path:name,size:entry.size};
+          }));
+          return {...this.service.status(executor,{executionId}),
+            push: {repository:target.remote, branch:target.branch, tree:saved.tree_id, parent, files,
+              ...(commit && {commit, commitObject:saved.commit_object})}};
+        }
+        if (commit && candidateCommit !== commit) return defer();
+        this.store.transaction(() => {
           requireNoActiveProcessing(this.store, executionId);
-          if (stopped()) return false;
           this.running(executor,executionId);
-          // Persist the uncertainty before sending anything to the remote.
-          update("push_state='attempting',lease_until=?",Date.now() + leaseMs);
-          return true;
+          update("commit_id=?,commit_object=?,push_state='attempting',lease_until=?",candidateCommit,commitObject,Date.now() + leaseMs);
         });
-        if (!canPush) {
-          if (saved.push_state !== 'prepared') return defer();
-          clearCommit();
-          return finish();
-        }
-        const pushError = await git('push','--porcelain','origin',`${commit}:${ref}`).then(() => null, error => error);
-        if (!pushError) update("push_state='accepted'");
-        else if (saved.push_state === 'prepared' && pushError.pushRejected) {
-          clearCommit();
-          if (stopped()) return finish();
-          if (pushError.pushContended) return defer();
-          const refs = await git('ls-remote','origin');
-          if (remoteHead(refs,target.branch) !== parent) return defer();
-          return finish(pushError.message);
-        }
-        confirmed = await confirm();
-        if (!confirmed.published) {
-          if (this.row(executionId).push_state !== 'accepted' && confirmed.superseded) {
-            clearCommit();
-            if (stopped()) return finish();
-          }
-          return defer();
-        }
+        return {...this.service.status(executor,{executionId}),authorizedCommit:candidateCommit};
       }
       const receipt = { executionId, bookId: manifest.bookId, repository: target.remote, branch: target.branch,
         commit, packageDigest: saved.digest, publishedAt: new Date().toISOString() };
@@ -206,7 +200,7 @@ export class TaskPublication extends PublicationTransfer {
       if (saved.receipt || this.service.execution(executor,executionId).finished_at) throw error;
       const uncertain = saved.commit_id && saved.push_state !== 'prepared';
       if (uncertain || error instanceof BranchMoved || error.status >= 500) return defer();
-      if (saved.commit_id) clearCommit();
+      if (saved.tree_id || saved.commit_id) clearCommit();
       if (stopped() || error instanceof PublicationConflict || (row.retry_at !== null && error.status >= 400)) return finish(error.message);
       update('retry_at=NULL');
       throw error;
@@ -215,7 +209,26 @@ export class TaskPublication extends PublicationTransfer {
     }
   }
 
-  async prepareCommit(git,directory,manifest,target,packageBytes,requireRunning) {
+  async readFile(executor, executionId, row, tree, name, offset, config) {
+    this.running(executor, executionId);
+    if (!row || !tree || row.tree_id !== tree || row.receipt) fail('Publication tree is unavailable',409);
+    const manifest = JSON.parse(row.manifest);
+    if (!config.repositories.includes(manifest.catalogue) || !manifest.files.some(file => file.path === name)) {
+      fail('Publication file is unavailable',403);
+    }
+    if (!Number.isSafeInteger(offset) || offset < 0) fail('Invalid publication file offset');
+    const file = await fs.open(path.join(this.service.dataDir,'publications',executionId,name), constants.O_RDONLY | constants.O_NOFOLLOW);
+    try {
+      const {size} = await file.stat();
+      if (offset >= size) fail('Invalid publication file offset');
+      const buffer = Buffer.alloc(Math.min(32768, size - offset));
+      const {bytesRead} = await file.read(buffer, 0, buffer.length, offset);
+      if (this.row(executionId)?.tree_id !== tree || bytesRead !== buffer.length) fail('Publication tree changed',409);
+      return {tree, size, offset, data:buffer.toString('base64')};
+    } finally { await file.close(); }
+  }
+
+  async prepareTree(git,directory,manifest,target,packageBytes,requireRunning) {
     const ref = refName(target.branch);
     await git('init', '--initial-branch=' + target.branch);
     await git('check-ref-format',ref);
@@ -319,13 +332,11 @@ export class TaskPublication extends PublicationTransfer {
     const changed = (await git('diff','--cached','--name-only','-z')).split('\0').filter(Boolean);
     if (changed.some(name => !bytes.has(name))) fail('Publication diff contains unauthorized files');
     if (!changed.length) throw new PublicationConflict('The publication does not contain any changes');
-    await git('commit','-m',`Publish book ${manifest.bookId}`);
-    const commit = await git('rev-parse','HEAD');
+    const tree = await git('write-tree');
     for (const [name,content] of bytes) {
-      const blob = crypto.createHash('sha1').update(Buffer.from(`blob ${content.length}\0`)).update(content).digest('hex');
-      if (await git('rev-parse',commit + ':' + name) !== blob) fail('Git attributes changed a validated file: ' + name,409);
+      if (await git('rev-parse',tree + ':' + name) !== objectId('blob', content)) fail('Git attributes changed a validated file: ' + name,409);
     }
-    return { commit, head };
+    return { tree, head };
   }
 
   complete(executor, executionId, receipt) {
@@ -351,7 +362,7 @@ export class TaskPublication extends PublicationTransfer {
       return true;
     });
     await Promise.all(eligible.map(async row => {
-      try { await this.publish(row.executor_agent_id,{executionId:row.execution_id},config); }
+      try { await this.publish(row.executor_agent_id,{executionId:row.execution_id,action:'confirm'},config); }
       catch (error) { report(`ScriptaHub publication ${row.execution_id}: ${error.message}`); }
     }));
   }

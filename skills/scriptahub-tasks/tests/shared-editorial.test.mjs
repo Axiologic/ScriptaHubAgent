@@ -10,7 +10,9 @@ import {hash} from '../shared/batch-io.mjs';
 const skills = new URL('../../', import.meta.url);
 const runTool = 'scriptahub-tasks/scripts/run.mjs';
 
-test('both native jobs admit projections from a single resumable analysis file', {skip: process.platform !== 'linux'}, async t => {
+for (const multilingual of [false, true]) test(multilingual
+  ? 'native projections use separate shared editorial evidence for each manuscript language'
+  : 'both native jobs admit projections from a single resumable analysis file', {skip: process.platform !== 'linux'}, async t => {
   const root = await fs.mkdtemp(path.join(os.tmpdir(), 'scripta-editorial-'));
   t.after(() => fs.rm(root, {recursive: true, force: true}));
   const directory = 'tasks/book-one';
@@ -31,18 +33,39 @@ test('both native jobs admit projections from a single resumable analysis file',
     return JSON.parse(result.stdout);
   };
   const context = {executionId: 'execution-one', runId: 'run-one', taskId: 'book-one', bookId: 'book-one', editorialSource: {path: source, sha256: hash(html), language: 'en'}};
-  const handoff = (step, extra) => invoke(runTool, ['handoff'], {directory, step, context: {...context, ...extra}});
+  const editorial = {};
+  if (multilingual) {
+    const romanian = '<html lang="ro"><body><main data-reader-content><h2>Plecarea</h2><p>O corabie părăsește portul înainte de furtună și urmărește luminile de pe coastă pentru a regăsi drumul spre far.</p></main></body></html>';
+    const romanianPath = directory + '/sources/carte.html';
+    await fs.writeFile(path.join(root, romanianPath), romanian);
+    context.manuscriptEditions = {
+      en: {...context.editorialSource, referencePdf:directory+'/sources/book.pdf', referencePdfSha256:hash('English PDF')},
+      ro: {path:romanianPath, sha256:hash(romanian), language:'ro', referencePdf:directory+'/sources/carte.pdf', referencePdfSha256:hash('Romanian PDF')}
+    };
+  }
+  const handoff = (step, extra) => {
+    if (!multilingual) return invoke(runTool, ['handoff'], {directory, step, context: {...context, ...extra}});
+    if (extra?.sharedEditorialAnalysis) editorial.sharedEditorialAnalysis = extra.sharedEditorialAnalysis;
+    if (extra?.editorialResults) editorial.editorialResults = {...editorial.editorialResults, ...extra.editorialResults};
+    return invoke(runTool, ['handoff'], {directory, step, context: {...context, manuscriptEditorial:{en:editorial}}});
+  };
   handoff('prepare-manuscript');
 
   const jobs = {
     'marketing-summary': ['marketing-summary/scripts/marketingsummary.mjs', ['--shared-editorial']],
     'short-description': ['short-description/scripts/shortdescription.mjs', ['--shared-editorial']]
   };
-  const job = role => directory + '/editorial-jobs/shared/' + role;
-  for (const [role, [script, options]] of Object.entries(jobs)) {
-    invoke(script, ['prepare', source, '--job-dir', job(role), '--output', directory + '/editorial/' + role + '.html', ...options]);
+  const job = (role, language = 'en') => directory + '/editorial-jobs' + (multilingual ? '/' + language : '') + '/shared/' + role;
+  for (const language of multilingual ? ['en','ro'] : ['en']) {
+    const editionSource = multilingual ? context.manuscriptEditions[language].path : source;
+    for (const [role, [script, options]] of Object.entries(jobs)) {
+      const output = directory + '/editorial/' + (multilingual ? language + '/' : '') + role + '.html';
+      invoke(script, ['prepare', editionSource, '--job-dir', job(role, language), '--output', output, ...options]);
+    }
   }
-  const shared = (action, extra, error) => invoke(runTool, ['shared-editorial'], {directory, executionId: context.executionId, action, ...extra}, error);
+  const shared = (action, extra, error) => invoke(runTool, ['shared-editorial'], {
+    directory, executionId: context.executionId, action, ...(multilingual && {language:'en'}), ...extra
+  }, error);
   const initial = shared('status');
   assert.equal(initial.missing.length, 2);
   for (const [index, batch] of initial.missing.entries()) {
@@ -68,6 +91,14 @@ test('both native jobs admit projections from a single resumable analysis file',
   }
   const {status, evidence} = shared('status');
   assert.equal(status, 'complete');
+  if (multilingual) {
+    assert.match(evidence.path, /editorial\/en\/shared-analysis\.json$/);
+    assert.equal(shared('status', {language:'ro'}).evidence, null);
+    const [romanianBatch] = shared('status', {language:'ro'}).missing;
+    const romanian = shared('contract', {language:'ro', batch:romanianBatch});
+    assert.equal(romanian.accepted, false);
+    assert.match(romanian.batchPath, /editorial-jobs\/ro\/shared\//);
+  }
   assert.equal(hash(await fs.readFile(path.join(root, evidence.path))), evidence.sha256);
   shared('project', {batch: initial.missing[0], role: 'marketing-summary'}, /evidence in the handoff/);
   handoff('shared-editorial-analysis', {sharedEditorialAnalysis: evidence});

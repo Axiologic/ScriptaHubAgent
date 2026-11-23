@@ -90,14 +90,14 @@ node --check site/assets/workflow-bridge.js
 
 Comprehensive summaries have a fixed target reading time of **10 minutes**. This is not configurable in settings, task instructions or the workflow. ScriptaHub supplies `processingSettings.summaryReadingMinutes` when claiming a manuscript, separately from task-authored values.
 
-Manuscript publication belongs to `scriptahubAgent`, not to the RoboTeam robot. Configure **ScriptaHub Settings → Manuscript publication** by connecting GitHub or saving a token through the existing Git authentication flow; new tasks require readable publication access. The workflow submits the exact independently validated package, and ScriptaHub alone commits, pushes to a configured GitHub catalogue and marks the task completed. See [service-owned publication](DASHBOARD.md#service-owned-manuscript-publication) for authorization, transfer limits, cancellation and interrupted-publication recovery. Restart the agent through Ploinky after changing its manifest/MCP tools; reload the updated workflow and robot skill before a new run. No credentials are bundled in the repository.
+RoboTeam commits and pushes the independently validated book using the assigned robot’s Git identity and GitHub credentials. ScriptaHub checks the configured destination and confirms the remote commit before completing the task. See [robot publication](DASHBOARD.md#robot-publication) for authorization, transfers, cancellation and recovery. Reload the agent’s MCP configuration and the robot’s updated skill before a new run.
 
-When adding MCP tools, restart the Router with `ploinky restart router` as well: its persisted tool-policy defaults are registered at Router boot. Restarting only `scriptahubAgent` does not register new tool names. Existing administrator policy entries remain authoritative. Publication authentication is administrator-only; package transfer and publication tools are internal service calls.
+When adding MCP tools, restart the Router with `ploinky restart router` as well: its persisted tool-policy defaults are registered at Router boot. Restarting only `scriptahubAgent` does not register new tool names. Existing administrator policy entries remain authoritative. Package transfer and publication tools are internal service calls.
 
 
 ### Publication access
 
-Configure Git author identity and GitHub sign-in or a personal access token in **ScriptaHub Settings → Publication**. ScriptaHub owns authentication, encrypted private storage and Git publication; it does not require DPUAgent or GitAgent. `SCRIPTA_GITHUB_CLIENT_ID` optionally selects the deployment's GitHub OAuth app, with device flow enabled. Public catalogue URLs and refresh settings stay separate from credentials. Back up `.data/scriptahubAgent/private/publication/` including its key. Existing DPU-backed access is not imported: reconnect once in ScriptaHub Settings after deploying this refactor. See [DASHBOARD.md](DASHBOARD.md) for publication authorization and recovery rules.
+In RoboTeam, configure Git credentials on the robot assigned to the publication step. Set its Git author name and email, and give its GitHub credential write permission on the configured public content repositories. ScriptaHub Settings contain catalogue URLs and the refresh interval.
 
 
 ### Manuscript workflow

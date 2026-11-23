@@ -277,7 +277,7 @@ export async function main({ onShutdown = async () => {} } = {}) {
   const stopCycles = startCycleWorker(server.getDashboardStore,()=>loadPointsPolicy(dataDir));
   const publisher = new TaskPublication(new TaskExecution(server.getDashboardStore(),dataDir));
   const stopCancellations = startStopWorker(publisher.service);
-  const publicationConfig = () => loadSourceConfig({configPath,dataDir,includePublication:true});
+  const publicationConfig = () => loadSourceConfig({configPath,dataDir});
   let publishing;
   const resumePublication = () => {
     if (!publishing) publishing = publisher.resume(publicationConfig)

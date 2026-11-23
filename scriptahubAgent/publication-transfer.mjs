@@ -20,7 +20,7 @@ export function createPublicationTables(store) {
     byte_offset INTEGER NOT NULL, data BLOB NOT NULL, PRIMARY KEY(execution_id,file_path,byte_offset));`);
   store.transaction(() => {
     const columns = new Set(store.db.prepare('PRAGMA table_info(task_publications)').all().map(column => column.name));
-    for (const [name, type] of Object.entries({ target_key: 'TEXT', retry_at: 'INTEGER', commit_base: 'TEXT', push_state: 'TEXT' })) {
+    for (const [name, type] of Object.entries({ target_key: 'TEXT', retry_at: 'INTEGER', commit_base: 'TEXT', push_state: 'TEXT', tree_id: 'TEXT', commit_object: 'TEXT' })) {
       if (!columns.has(name)) store.db.exec(`ALTER TABLE task_publications ADD COLUMN ${name} ${type}`);
     }
     store.db.exec('CREATE INDEX IF NOT EXISTS task_publication_target ON task_publications(target_key,lease_until)');
@@ -37,7 +37,6 @@ export class PublicationTransfer {
   prepare(executor, input, config) {
     const { executionId, catalogue, branch, baseCommit = null, files, validation } = input;
     const execution = this.running(executor, executionId);
-    if (!config.publication) publicationError('ScriptaHub publication access is not configured', 503);
     if (!config.repositories.includes(catalogue)) publicationError('Catalogue is outside ScriptaHub configuration', 403);
     if (typeof branch !== 'string' || !/^[A-Za-z0-9][A-Za-z0-9._/-]{0,199}$/.test(branch)
       || branch.includes('..') || branch.includes('//') || branch.endsWith('/') || branch.endsWith('.') || branch.split('/').some(p => p.endsWith('.lock'))

@@ -1885,7 +1885,7 @@ body[data-book-workflow] .animation-contribution>.workflow-hero{padding-bottom:8
 [data-workflow-page="create"] .form-file-picker {
   justify-content: center;
   align-items: flex-start;
-  padding: 0;
+  padding: 10px;
   border: 0;
   background: transparent;
 }

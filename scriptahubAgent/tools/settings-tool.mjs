@@ -1,6 +1,5 @@
 import path from 'node:path';
 import { pathToFileURL } from 'node:url';
-import { publicationAuthentication, publicPublication } from '../publication-auth.mjs';
 import { loadPointsPolicy, savePointsPolicy } from '../points-policy.mjs';
 import { loadSourceConfig, saveSourceConfig, assertSettingsAdmin, settingsFile } from '../settings.mjs';
 
@@ -21,22 +20,15 @@ try {
   let result;
   if (process.env.TOOL_NAME === 'scriptahub_config_get') {
     const settings = await loadSourceConfig();
-    const status = await publicationAuthentication(auth,{action:'status'});
-    result = { settings: {...settings,publication:status.publication,points:await loadPointsPolicy(path.dirname(settingsFile()))} };
+    result = { settings: {...settings,points:await loadPointsPolicy(path.dirname(settingsFile()))} };
   }
   else if (process.env.TOOL_NAME === 'scriptahub_config_set') {
-    const status = await publicationAuthentication(auth,{action:'status'});
-    if (args.publication && !status.connected) throw new Error('Connect GitHub or save a token in Publication before saving the Git identity.');
-    result = await saveSourceConfig({schemaVersion:1,repositories:args.repositories,syncIntervalSeconds:args.syncIntervalSeconds,
-      publication:args.publication || status.publication});
-    result.settings.publication = publicPublication(result.settings);
+    result = await saveSourceConfig({schemaVersion:1,repositories:args.repositories,syncIntervalSeconds:args.syncIntervalSeconds});
   }
   else if (process.env.TOOL_NAME === 'scriptahub_points_config_set') result = {points:await savePointsPolicy(path.dirname(settingsFile()),args)};
-  else if (process.env.TOOL_NAME === 'scriptahub_publication_auth') result = await publicationAuthentication(auth,args);
   else throw new Error('Unknown settings tool');
   process.stdout.write(JSON.stringify(result));
 } catch (error) {
-  const message = process.env.TOOL_NAME === 'scriptahub_publication_auth'
-    ? (/^(GitHub |Git |Enter |Connect |Start |Provide |Admin |Authenticated |ScriptaHub publication)/.test(error.message) ? error.message : 'Publication connection failed. Check Git access in ScriptaHub Settings.') : error.message;
+  const message = error.message;
   process.stdout.write(JSON.stringify({error:message})); process.exitCode = 1;
 }

@@ -11,7 +11,7 @@ import {promisify} from 'node:util';
 import {DashboardStore} from '../dashboard-store.mjs';
 import {TaskExecution} from '../task-execution.mjs';
 import {TaskPublication} from '../task-publication.mjs';
-import {PublicationAccessStore} from '../publication-access.mjs';
+import {publishFromRobot} from '../../skills/scriptahub-tasks/scripts/robot-publication.mjs';
 import {publicationGit} from '../publication-git.mjs';
 import {sha256} from '../publication-transfer.mjs';
 import {createSiteServer} from '../server.mjs';
@@ -85,16 +85,13 @@ for (const language of ['en', 'ro']) test(`HTTP proposal → Git receipt → leg
     [fullPath, Buffer.from(full)], [shortPath, Buffer.from(short)],
   ]);
   const catalogue = 'https://github.com/example/journey/blob/main/collection.json';
-  const config = {repositories:[catalogue], publication:{authorName:'Test', authorEmail:'test@example.test'}};
-  const access = new PublicationAccessStore(dataDir);
-  access.update(state => {state.connection={token:'test-only-token', publication:config.publication, user:{login:'test'}};});
-  access.close();
+  const config = {repositories:[catalogue]};
   let pushes = 0;
   const publisher = new TaskPublication(service, {gitFactory:async (...args) => {
     const run = await publicationGit(...args);
     return async (...command) => {
       if (command[0] === 'remote' && command[1] === 'add') command[3] = remote;
-      if (command[0] === 'push') pushes++;
+      assert.notEqual(command[0], 'push');
       return run(...command);
     };
   }});
@@ -104,7 +101,15 @@ for (const language of ['en', 'ro']) test(`HTTP proposal → Git receipt → leg
       audit:{autoCorrect:false, status:'passed_with_warnings', errorFindings:0, scope:'html_layout_integrity', nativeScope:'edition_layout_regression', existingFindings:0}}}, config);
   for (const [file, bytes] of files) publisher.upload(executor, {executionId:task.executionId, file, offset:0, data:bytes.toString('base64')});
   assert.throws(() => service.finish(executor, {executionId:task.executionId, state:'completed', result:'Unverified success'}), /Only ScriptaHub/);
-  const published = await publisher.publish(executor, {executionId:task.executionId}, config);
+  const published = await publishFromRobot((_tool,input) => publisher.publish(executor,input,config),task.executionId,{
+    executeGit:(binary,args,options)=>{
+      if (args[4] === 'push') pushes++;
+      return exec(binary,args.map(arg=>arg === 'https://github.com/example/journey.git' ? remote : arg),{
+        ...options,env:{...options.env,GIT_ALLOW_PROTOCOL:'file',GIT_CONFIG_GLOBAL:'/dev/null',GIT_CONFIG_NOSYSTEM:'1',
+          GIT_AUTHOR_NAME:'Robot',GIT_AUTHOR_EMAIL:'robot@example.test',GIT_COMMITTER_NAME:'Robot',GIT_COMMITTER_EMAIL:'robot@example.test'}
+      });
+    }
+  });
   assert.equal(published.state, 'completed');
   assert.equal(await git(remote, 'rev-parse', 'refs/heads/main'), published.publication.commit);
   assert.deepEqual(await publisher.publish(executor, {executionId:task.executionId}, config), published);

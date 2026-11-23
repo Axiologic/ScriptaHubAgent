@@ -11,9 +11,8 @@ import { TaskExecution } from '../task-execution.mjs';
 import { TaskPublication } from '../task-publication.mjs';
 import { ProcessingStore } from '../processing-store.mjs';
 import { publicationGit } from '../publication-git.mjs';
-import { PublicationAccessStore } from '../publication-access.mjs';
+import { publishFromRobot } from '../../skills/scriptahub-tasks/scripts/robot-publication.mjs';
 import { publicationTarget, checkPublicationPackage, verifyCatalogueBranch } from '../publication-policy.mjs';
-import { publicationConfig } from '../publication-config.mjs';
 import { sha256 } from '../publication-transfer.mjs';
 import { sealRecord } from '../record-integrity.mjs';
 import { combineCollections } from '../catalogue-keywords.mjs';
@@ -38,22 +37,37 @@ async function fixture(t, { schemaVersion = 1, kind = 'manuscript', manageApprov
       ...(coverImage?[{role:'cover',name:crypto.randomUUID()+'.png',originalName:'cover.png',sha256:sha256(coverImage)}]:[])],createdAt:new Date().toISOString(),state:'received',task:null}));
   const task = service.claim(agent,{runId:'run-publication',taskType:kind}).task;
   const catalogue = 'https://github.com/example/books/blob/main/collection.json';
-  const config = {repositories:[catalogue],publication:{authorName:'Publisher',authorEmail:'publisher@example.test'}};
+  const config = {repositories:[catalogue]};
   let pushes = 0, losePushResponse = false, beforeGit, afterGit;
-  const access = new PublicationAccessStore(data);
-  access.update(state => {state.connection={token:'test-only-secret',publication:config.publication,user:{login:'publisher'}};}); access.close();
   const publisher = new TaskPublication(service,{gitFactory:async (...args) => {
     const run = await publicationGit(...args);
     return async (...command) => {
       if (command[0] === 'remote' && command[1] === 'add') command[3] = remote;
-      if (command[0] === 'push') pushes++;
+      assert.notEqual(command[0], 'push');
+      assert.notEqual(command[0], 'commit');
       await beforeGit?.(command);
       const result = await run(...command);
       await afterGit?.(command);
-      if (command[0] === 'push' && losePushResponse) { losePushResponse = false; throw new Error('Transport closed after accepted push'); }
       return result;
     };
   }});
+  const publishService = publisher.publish.bind(publisher);
+  publisher.publish = (executor, payload, settings) => payload.action
+    ? publishService(executor,payload,settings)
+    : publishFromRobot((_tool, input) => publishService(executor,input,settings),payload.executionId,{
+      executeGit:async (binary,args,options) => {
+        const command = args.slice(4);
+        if (command[0] === 'push') pushes++;
+        await beforeGit?.(command);
+        const result = await exec(binary,args.map(arg => arg.toLowerCase() === 'https://github.com/example/books.git' ? remote : arg),{
+          ...options,env:{...options.env,GIT_ALLOW_PROTOCOL:'file',GIT_CONFIG_GLOBAL:'/dev/null',GIT_CONFIG_NOSYSTEM:'1',
+            GIT_AUTHOR_NAME:'Publishing robot',GIT_AUTHOR_EMAIL:'robot@example.test',GIT_COMMITTER_NAME:'Publishing robot',GIT_COMMITTER_EMAIL:'robot@example.test'}
+        });
+        await afterGit?.(command);
+        if (command[0] === 'push' && losePushResponse) { losePushResponse = false; throw new Error('Transport closed after accepted push'); }
+        return result;
+      }
+    });
   const directory = 'books/test/' + task.bookId;
   const files = new Map([
     ['collection.json',Buffer.from(JSON.stringify({schemaVersion:1,bookCount:1,books:[{id:task.bookId,directory,editions:{en:{pdf:directory+'/en/book.pdf',fullContent:directory+'/en/full.html'}}}]}))],
@@ -94,6 +108,7 @@ test('a generated book publishes HTML without an uploaded manuscript, PDF or DOC
   const result = await f.publisher.publish(agent,{executionId:f.task.executionId},f.config);
   assert.equal(result.state,'completed');
   assert.equal(f.pushes(),1);
+  assert.equal(await f.git(f.remote,'show','-s','--format=%an <%ae>',result.publication.commit),'Publishing robot <robot@example.test>');
 });
 
 test('only the owning executor can register a successful validated package for an authorized catalogue', async t => {
@@ -162,7 +177,8 @@ async function concurrentBook(f, id = 'bk-another') {
 async function resume(f, executionId = f.task.executionId) {
   f.store.db.prepare('UPDATE task_publications SET retry_at=0 WHERE execution_id=?').run(executionId);
   await f.publisher.resume(async () => f.config, message => assert.fail(message));
-  return f.service.status(agent,{executionId});
+  const status = f.service.status(agent,{executionId});
+  return status.state === 'running' ? f.publisher.publish(agent,{executionId},f.config) : status;
 }
 
 test('a newer remote catalogue keeps other books when publishing the validated book', async t => {
@@ -196,7 +212,7 @@ test('a non-fast-forward rejection is resumed from the current branch without re
 test('a stop before push finishes the deferred publication as cancelled', async t => {
   const f = await fixture(t); f.upload();
   f.after(async ([command]) => {
-    if (command === 'commit') {
+    if (command === 'write-tree') {
       f.after(null);
       await concurrentBook(f);
     }
@@ -222,7 +238,7 @@ test('an unreadable remote defers reconciliation and an ancestor receipt complet
   });
   const pending = await f.publisher.publish(agent,{executionId:f.task.executionId},f.config);
   assert.equal(pending.publicationPending,true);
-  assert.equal(f.publisher.row(f.task.executionId).push_state,'accepted');
+  assert.equal(f.publisher.row(f.task.executionId).push_state,'attempting');
   assert.throws(() => f.service.finish(agent,{executionId:f.task.executionId,state:'failed',error:'Guessing failure'}),/reconciled/);
   unreachable = false;
   const result = await resume(f);
@@ -249,12 +265,12 @@ test('publications to the same repo and branch take the same lease across differ
   let start, release;
   const started = new Promise(resolve => { start = resolve; });
   const blocked = new Promise(resolve => { release = resolve; });
-  f.before(async ([command]) => { if (command === 'push' && f.pushes() === 1) { start(); await blocked; } });
+  f.before(async ([command]) => { if (command === 'write-tree' && f.pushes() === 0) { start(); await blocked; } });
   const first = f.publisher.publish(agent,{executionId:f.task.executionId},f.config);
   await started;
   try {
     assert.equal((await f.publisher.publish(agent,{executionId:task.executionId},f.config)).publicationPending,true);
-    assert.equal(f.pushes(),1);
+    assert.equal(f.pushes(),0);
   } finally { release(); await first; }
   assert.equal((await resume(f,task.executionId)).state,'completed');
   assert.equal(f.pushes(),2);
@@ -334,7 +350,6 @@ test('scope checks refuse other books, unrelated files and a missing original ma
   assert.throws(() => checkPublicationPackage(manifest,target,new Map([...f.files,['admin/settings.json',Buffer.from('{}')]]),f.previous),/outside the claimed book/);
   assert.throws(() => checkPublicationPackage({...manifest,sourceHashes:['0'.repeat(64)]},target,f.files,f.previous),/source manuscript/);
   assert.throws(() => publicationTarget('https://user:secret@github.com/example/books/blob/main/collection.json','main'),/Unsupported/);
-  assert.throws(() => publicationConfig({secretKey:'SECRET',authorName:'Name\nInjected',authorEmail:'x@example.test'}),/Provide/);
 });
 
 
@@ -482,20 +497,15 @@ test('processing gates publication and finish, and registered packages permanent
   assert.throws(()=>jobs.prepare(agent,{...request,jobId:'job-2'},'runtime',0),{status:409});
 });
 
-test('publication lease checks processing after a deferred credential lookup',async t=>{
+test('ScriptaHub rejects a robot commit for a different tree',async t=>{
   const f=await fixture(t); f.upload();
-  let resume, began;
-  const ready=new Promise(resolve=>{began=resolve;});
-  const credentials=new Promise(resolve=>{resume=resolve;});
-  const publisher=new TaskPublication(f.service,{tokenProvider:async()=>{began();return credentials;}});
-  const publishing=publisher.publish(agent,{executionId:f.task.executionId},f.config);
-  await ready;
-  const now=new Date().toISOString();
-  f.store.db.prepare(`INSERT INTO task_processing_jobs(execution_id,job_id,executor_agent_id,request,digest,state,runtime_id,created_at,updated_at) VALUES(?,?,?,?,?,'running',?,?,?)`)
-    .run(f.task.executionId,'legacy-job',agent,'{}','digest','runtime',now,now);
-  resume('test-token');
-  await assert.rejects(publishing,{status:409});
-  assert.equal(f.publisher.row(f.task.executionId).lease_until,0);
+  const executionId=f.task.executionId;
+  const prepared=await f.publisher.publish(agent,{executionId,action:'prepare'},f.config);
+  assert.ok(prepared.push.tree);
+  const changed=Buffer.from('tree '+'a'.repeat(40)+'\nparent '+prepared.push.parent+'\n\nChanged');
+  await assert.rejects(f.publisher.publish(agent,{executionId,action:'authorize',tree:prepared.push.tree,commitObject:changed.toString('base64')},f.config),/validated publication tree/);
+  assert.equal(f.publisher.row(executionId).commit_id,null);
+  assert.equal(f.pushes(),0);
 });
 
 test('managed books publish on the workflow validation decision without a human gate and reward only once after push',async t=>{

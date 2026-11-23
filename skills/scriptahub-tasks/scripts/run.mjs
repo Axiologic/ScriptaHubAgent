@@ -4,6 +4,7 @@ import fs from 'node:fs/promises';
 import {runBatchOperation} from './task-batch.mjs';
 import {sharedEditorial} from './shared-editorial.mjs';
 import {prepareReadingRoutes} from './prepare-reading-routes.mjs';
+import {publishFromRobot} from './robot-publication.mjs';
 import {runRemoteSkill,runRemoteSequence,releaseIncompleteRemote,discardTranslationJob,guardRemoteBackups} from './remote-skill.mjs';
 import {preflight,writeHandoff,verifyPackage,requirePreflight} from './workflow-checks.mjs';
 import { constants } from 'node:fs';
@@ -163,14 +164,17 @@ export async function publishPackage(call, input, {hook=async()=>{}}={}) {
             }
         } finally { await handle.close(); }
     }
-    return call('scriptahub_task_publish',{executionId:input.executionId});
+    return publishFromRobot(call,input.executionId);
     });
 }
 
 export async function retryPublication(call,input,{root=process.cwd(),stderr=process.stderr}={}) {
     try { await guardRemoteBackups(await fs.realpath(root),input.executionId); }
-    catch (error) { stderr.write('Local processing conflict remains: '+error.message+'\n'); }
-    return call('scriptahub_task_publish',{executionId:input.executionId});
+    catch (error) {
+      stderr.write('Local processing conflict remains: '+error.message+'\n');
+      return call('scriptahub_task_publish',{executionId:input.executionId,action:'confirm'});
+    }
+    return withExecutionLock(root,input.executionId,()=>publishFromRobot(call,input.executionId));
 }
 
 async function main() {
