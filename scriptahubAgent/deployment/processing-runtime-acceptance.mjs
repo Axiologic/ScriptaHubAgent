@@ -59,6 +59,12 @@ PY`;
   if(!(await fs.readdir(path.join(task,'pdf-output'))).some(name=>name.endsWith('.html')))throw new Error('PDF conversion produced no HTML');
   const html='<!doctype html><html><body><main data-reader-content><h1>Acceptance</h1><p>A small test edition.</p></main></body></html>';
   await fs.writeFile(path.join(task,'baseline.html'),html);await fs.writeFile(path.join(task,'candidate.html'),html);
+  await fs.writeFile(path.join(task,'print-reader.html'),html
+    .replace('<body>','<head><meta charset="utf-8"><style>@media print { main { display: none; } }</style></head><body>')
+    .replace('A small test edition.','A small test edition about Costești-Cetățuie.'));
+  await run('book-pdf',['export',work+'/print-reader.html','--output',work+'/en/book.pdf','--language','en']);
+  const bookPdf=await fs.readFile(path.join(task,'en/book.pdf'));
+  if(bookPdf.subarray(0,5).toString()!=='%PDF-')throw new Error('Book export did not produce a PDF');
   await run('html2doc',['convert',work+'/baseline.html','--output',work+'/source.docx']);
   await run('doc2pdf',['convert',work+'/source.docx','--output',work+'/converted.pdf']);
   await fs.access(path.join(task,'converted.pdf'));

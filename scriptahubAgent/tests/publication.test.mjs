@@ -94,20 +94,28 @@ async function fixture(t, { schemaVersion = 1, kind = 'manuscript', manageApprov
   return {root,remote,seed,git,service,store,publisher,task,config,files,input,upload,submitted,previous, before: hook => { beforeGit = hook; }, after: hook => { afterGit = hook; }, pushes:() => pushes, loseNextPushResponse:() => { losePushResponse = true; }};
 }
 
-test('a generated book publishes HTML without an uploaded manuscript, PDF or DOCX', async t => {
+test('a prompt-based book publishes its declared PDF download alongside HTML', async t => {
   const f = await fixture(t, { kind: 'book-proposal' });
   const target = publicationTarget(f.input.catalogue, f.input.branch);
   const manifest = { taskType:f.task.type, bookId:f.task.bookId, sourceHashes:[] };
   assert.equal([...f.files.keys()].some(name=>/\.(pdf|docx)$/i.test(name)),false);
   const withPdf=new Map(f.files);withPdf.set('books/extra.pdf',Buffer.from('%PDF-1.7'));
-  assert.throws(()=>checkPublicationPackage(manifest,target,withPdf,f.previous),/do not publish DOCX\/PDF/);
+  assert.throws(()=>checkPublicationPackage(manifest,target,withPdf,f.previous),/only their declared download PDFs/);
   const invalid=new Map(f.files);invalid.delete([...invalid.keys()].find(name=>name.endsWith('/full.html')));
   assert.throws(()=>checkPublicationPackage(manifest,target,invalid,f.previous),/resource|full HTML/);
   assert.throws(() => checkPublicationPackage({...manifest,sourceHashes:['0'.repeat(64)]},target,f.files,f.previous),/uploaded source/);
+  const collection=JSON.parse(f.files.get('collection.json'));
+  const edition=collection.books[0].editions.en;
+  edition.pdf=collection.books[0].directory+'/en/book.pdf';
+  f.files.set(edition.pdf,Buffer.from('%PDF-1.7\n'));
+  f.files.set('collection.json',Buffer.from(JSON.stringify(collection)));
+  f.input.files=[...f.files].map(([path,bytes])=>({path,size:bytes.length,sha256:sha256(bytes)}));
+  f.input.validation.requirePdf=true;
   f.upload();
   const result = await f.publisher.publish(agent,{executionId:f.task.executionId},f.config);
   assert.equal(result.state,'completed');
   assert.equal(f.pushes(),1);
+  assert.equal(await f.git(f.remote,'show','main:'+edition.pdf),'%PDF-1.7');
   assert.equal(await f.git(f.remote,'show','-s','--format=%an <%ae>',result.publication.commit),'Publishing robot <robot@example.test>');
 });
 

@@ -62,7 +62,7 @@ export function checkPublicationPackage(manifest, target, bytes, oldCollection, 
   const editing = manifest.taskType === 'scriptahub.edit';
   const fork = manifest.taskType === 'scriptahub.fork';
   const generated = fork || manifest.taskType === 'scriptahub.book-proposal';
-  if(generated && [...bytes.keys()].some(name=>/\.(?:pdf|docx?)$/i.test(name))) fail('Generated HTML books do not publish DOCX/PDF intermediates or exports');
+  if(generated && [...bytes.keys()].some(name=>/\.docx?$/i.test(name))) fail('Generated books cannot publish DOCX intermediates');
   const checkArtwork = (metadata, resolve) => {
     translationOutcome(manifest.validation?.translationOutcome,{languages:Object.keys(metadata.editions || {})});
     if (manifest.coverRequired) for (const language of Object.keys(metadata.editions || {})) {
@@ -83,6 +83,24 @@ export function checkPublicationPackage(manifest, target, bytes, oldCollection, 
     const html = bytes.get(resourcePath(edition.fullContent));
     return (!edition.pdf || pdf?.subarray(0,5).toString()==='%PDF-') && Boolean(html?.toString('utf8').trim());
   });
+  const checkGeneratedPdfs = (editions, resolve) => {
+    if (!generated) return;
+    const downloads = new Set();
+    for (const [language, edition] of Object.entries(editions || {})) {
+      if (!edition.pdf) {
+        if (manifest.validation?.requirePdf) fail('Missing download PDF for ' + language);
+        continue;
+      }
+      const name = resolve(edition.pdf);
+      if (!name?.endsWith('/' + language + '/book.pdf') || bytes.get(name)?.subarray(0,5).toString() !== '%PDF-') {
+        fail('Invalid download PDF for ' + language);
+      }
+      downloads.add(name);
+    }
+    if ([...bytes.keys()].some(name => /\.pdf$/i.test(name) && !downloads.has(name))) {
+      fail('Generated books can publish only their declared download PDFs');
+    }
+  };
   const previousBook = oldCollection?.books?.find(book => book.id === manifest.bookId);
   if (editing && !previousBook) fail('The edited book must already exist at this destination',409);
   if (oldCollection) {
@@ -122,6 +140,7 @@ export function checkPublicationPackage(manifest, target, bytes, oldCollection, 
       if (!name.startsWith(full)) fail('Missing or unrelated book artwork');
       return name;
     });
+    checkGeneratedPdfs(book.editions, value => target.root + packagePath(value));
     if (generated && !hasGeneratedEdition(book.editions, value => target.root + packagePath(value))) {
       fail('A generated book requires full HTML; any declared PDF must be a valid PDF');
     }
@@ -138,6 +157,7 @@ export function checkPublicationPackage(manifest, target, bytes, oldCollection, 
     if (document.id !== manifest.bookId || sha256(bytes.get(metadataPath)) !== book.sha256) fail('Book metadata integrity mismatch');
     if (document.contentDirectory && target.root + document.contentDirectory + '/book.json' !== metadataPath) fail('Book metadata path mismatch');
     checkArtwork(document.metadata, value => document.resources[value] && target.root + packagePath(document.resources[value]));
+    checkGeneratedPdfs(document.metadata.editions, value => document.resources[value] && target.root + packagePath(document.resources[value]));
     const resources = new Set(Object.values(document.resources).map(value => target.root + packagePath(value)));
     for (const name of resources) if (!bytes.has(name)) fail(`Missing book resource: ${name}`);
     if (generated && !hasGeneratedEdition(document.metadata.editions, value => target.root + packagePath(document.resources[value]))) {

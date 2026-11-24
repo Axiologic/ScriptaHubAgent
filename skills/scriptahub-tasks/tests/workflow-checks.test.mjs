@@ -42,6 +42,9 @@ for (const schemaVersion of [1, 2]) test('preparation writes the reading routes 
     editions:{en:{fullContent:full,comprehensiveSummary:short,shortDescription:'Short description',aboutBook:['Presentation']}}};
   await assert.rejects(prepareReadingRoutes(input), /Provide a staged cover image for en/);
   input.editions.en.cover = cover;
+  const pdf = 'en/book.pdf';
+  await fs.writeFile(book+'/'+pdf,'%PDF-1.7\n');
+  input.editions.en.pdf = pdf;
   const result = await prepareReadingRoutes(input);
   assert.equal(result.editions.en.fullContent,book+'/'+full);
   assert.deepEqual(await prepareReadingRoutes(input),result);
@@ -49,26 +52,31 @@ for (const schemaVersion of [1, 2]) test('preparation writes the reading routes 
   const bytes = await fs.readFile(metadataPath);
   const saved = JSON.parse(bytes);
   const finalMetadata = schemaVersion===1 ? saved : saved.metadata;
-  assert.deepEqual(finalMetadata.editions.en,{book:'en/book.html',fullContent:'en/full_content.html',shortContent:short});
+  assert.deepEqual(finalMetadata.editions.en,{book:'en/book.html',fullContent:'en/full_content.html',shortContent:short,pdf});
   assert.deepEqual(finalMetadata.aboutBook.en,['Presentation']);
   assert.equal(finalMetadata.coverUrl.en,cover);
   assert.equal(finalMetadata.thumbnailUrl.en,cover);
   if (schemaVersion===1) {
     assert.equal(catalogue.books[0].editions.en.fullContent,bookDir+'/'+full);
+    assert.equal(catalogue.books[0].editions.en.pdf,bookDir+'/'+pdf);
+    assert.match(await fs.readFile(book+'/en/book.html','utf8'),/href="book.pdf" download/);
     assert.equal(catalogue.books[0].coverUrl.en,bookDir+'/'+cover);
     assert.equal(catalogue.books[0].thumbnailUrl.en,bookDir+'/'+cover);
     assert.match(await fs.readFile(book+'/en/book.html','utf8'),/href="comprehensive-summary.html"/);
   } else {
     assert.equal(saved.resources['en/full_content.html'],bookDir+'/'+full);
     assert.equal(saved.resources[cover],bookDir+'/'+cover);
+    assert.equal(saved.resources[pdf],bookDir+'/'+pdf);
     assert.equal(saved.resourceChecksums[bookDir+'/'+cover],crypto.createHash('sha256').update(artwork).digest('hex'));
     assert.equal(catalogue.books[0].sha256,crypto.createHash('sha256').update(bytes).digest('hex'));
   }
   const files = ['collection.json', bookDir + '/' + path.basename(metadataPath),
-    bookDir + '/' + full, bookDir + '/' + short, bookDir + '/' + cover];
+    bookDir + '/' + full, bookDir + '/' + short, bookDir + '/' + cover, bookDir + '/' + pdf];
   if (schemaVersion === 1) files.push(bookDir + '/en/book.html');
   assert.equal((await editionReaders(path.join(process.cwd(),pkg),'collection.json',catalogue,
-    context.bookId,new Set(files),true,true,{required:true})).get('en'),bookDir + '/' + full);
+    context.bookId,new Set(files),true,true,{required:true},true)).get('en'),bookDir + '/' + full);
+  await assert.rejects(editionReaders(path.join(process.cwd(),pkg),'collection.json',catalogue,
+    context.bookId,new Set(files.filter(name=>!name.endsWith('.pdf'))),true,true,undefined,true),/Missing download PDF for en/);
 
   if (schemaVersion === 1) {
     delete catalogue.books[0].thumbnailUrl;

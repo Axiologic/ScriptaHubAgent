@@ -49,7 +49,7 @@ Use `task.values` for the brief and editorial requirements and `task.files` for 
 | manuscript | Preserve original uploads. Normalize uploaded DOC/DOCX through doc2pdf, or retain an uploaded PDF unchanged; use the verified manuscript PDF reference for pdf2html conversion. |
 | edit | Apply the snapshotted approved requests/general revision instructions to immutable baseline HTML. Preserve book identity, attribution and edition history. |
 
-Generated proposals/forks and translations publish HTML. Use supplied manuscript PDFs as source references. Keep private briefs, downloaded fork sources, adapters and diagnostics outside the public package.
+Book proposals publish semantic HTML and a PDF exported from the staged full reader for each included language. Use supplied manuscript PDFs as source references. Keep private briefs, downloaded fork sources, adapters and diagnostics outside the public package.
 
 Each job and publication package contains only the current book, its declared/referenced assets and, for a fork, its pinned source. Read catalogue metadata for destination selection and baseline preservation. Fetch only this book's resources. Use a sparse package and preserve other catalogue entries. Native arguments address a specific book directory. The helper enforces the same boundary on input snapshots and returned files.
 

@@ -1,6 +1,7 @@
 {
   "schemaVersion": 1,
   "skills": [
+    "book-pdf",
     "comprehensive-summary",
     "doc2pdf",
     "html2doc",

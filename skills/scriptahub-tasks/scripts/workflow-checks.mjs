@@ -76,7 +76,7 @@ function manuscriptEditions(context, directory) {
 }
 
 export async function writeHandoff(input) {
-  const steps = ['claim-edit','apply-edit','prepare-edit-package','validate-edit','submit-edit','resume-book','prepare-manuscript','comprehensive-summary','relevant-keywords','shared-editorial-analysis','marketing-summary','short-description','process-content','translate-resources','review-correct','validate-final','publish-result'];
+  const steps = ['claim-edit','apply-edit','prepare-edit-package','validate-edit','submit-edit','resume-book','prepare-manuscript','comprehensive-summary','relevant-keywords','shared-editorial-analysis','marketing-summary','short-description','process-content','translate-resources','review-correct','export-book-pdf','validate-final','publish-result'];
   if (!steps.includes(input.step) || !input.context || typeof input.context !== 'object' || Array.isArray(input.context)) throw new Error('Provide the step and a context object');
   for (const key of ['executionId','runId','taskId','bookId']) if (!/^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$/.test(input.context[key] || '')) throw new Error('Invalid handoff identity: '+key);
   const handoffPath = itemArtifact(input.directory,'handoff.json');
@@ -163,7 +163,7 @@ export async function verifyPackage(input,{hook=async()=>{}}={}) {
   const editing = task?.type === 'scriptahub.edit';
   const readers = input.finalize || input.checkReadingRoutes
     ? await editionReaders(root, collectionPath, collection, input.bookId, names,
-      !editing, !editing, editing ? undefined : artworkRequirement(task))
+      !editing, !editing, editing ? undefined : artworkRequirement(task), input.requirePdf === true)
     : null;
   const remote=`https://github.com/${match[1]}/${match[2]}.git`;
   const refs=await runGit(['ls-remote',remote]);
@@ -264,6 +264,7 @@ export async function verifyPackage(input,{hook=async()=>{}}={}) {
         executionId: input.executionId, runId: task.runId, bookId: input.bookId, publicationPermitted: true,
         audit: report.audit, reports, inventorySha256: approved.sha256,
         destination: {catalogue: input.catalogue, branch: input.branch, baseCommit: inventory.baseCommit},
+        ...(input.requirePdf === true && {requirePdf:true}),
         ...(input.translationOutcome && {translationOutcome: input.translationOutcome})
       });
       report.approval = {inventory: approved.path, validation: validation.path};
@@ -281,7 +282,7 @@ async function auditedFile(root, names, entry) {
   return name;
 }
 
-export async function editionReaders(root, collectionPath, collection, bookId, names, requireAll, checkReadingRoutes = false, artwork) {
+export async function editionReaders(root, collectionPath, collection, bookId, names, requireAll, checkReadingRoutes = false, artwork, requirePdf = false) {
   const book = collection.books.find(entry => entry.id === bookId);
   const prefix = path.posix.dirname(collectionPath);
   const resource = value => typeof value === 'string' ? path.posix.join(prefix, value) : null;
@@ -301,6 +302,15 @@ export async function editionReaders(root, collectionPath, collection, bookId, n
   for (const [language, edition] of editions) {
     if (!requireAll && !edition?.fullContent) continue;
     const full = resolve(edition?.fullContent);
+    if (requirePdf) {
+      const filename = resources ? resources[edition.pdf] : edition.pdf;
+      const pdf = resolve(edition.pdf);
+      if (!filename?.endsWith('/' + language + '/book.pdf') || !names.has(pdf)) throw Error('Missing download PDF for ' + language);
+      const bytes = await fs.readFile(path.join(root,pdf));
+      if (bytes.subarray(0,5).toString() !== '%PDF-' || (resources && checksums?.[filename] !== hash(bytes))) {
+        throw Error('Invalid download PDF for ' + language);
+      }
+    }
     if (checkReadingRoutes) {
       const short = resolve(edition?.shortContent);
       const landing = resource(edition?.book);

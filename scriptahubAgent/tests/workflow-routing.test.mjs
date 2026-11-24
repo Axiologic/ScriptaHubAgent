@@ -18,7 +18,7 @@ test('only requested translation may branch and every publication path passes va
   assert.equal(paths.length,2,'only the translation/no-translation alternatives exist');
   assert.equal(paths.filter(path=>path.includes('translate-resources')).length,1,'translation must be bypassable');
   const stages=['comprehensive-summary','relevant-keywords','shared-editorial-analysis','marketing-summary','short-description'];
-  const required=['resume-book','prepare-manuscript',...stages,'process-content','review-correct','validate-final','publish-result','book-result'];
+  const required=['resume-book','prepare-manuscript',...stages,'process-content','review-correct','export-book-pdf','validate-final','publish-result','book-result'];
   for(const path of paths)assert.deepEqual(path.filter(id=>id!=='translate-resources'),required);
   const translated=paths.find(path=>path.includes('translate-resources'));
   assert.ok(translated.indexOf('process-content')<translated.indexOf('translate-resources'));

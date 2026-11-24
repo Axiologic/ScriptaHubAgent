@@ -3,8 +3,9 @@ import path from 'node:path';
 import {constants} from 'node:fs';
 import {parseArgs} from 'node:util';
 import {withParent} from './anchored-files.mjs';
+import {responsiveImageReferences} from './book-input-scope.mjs';
 
-const parallelSkills = new Set(['comprehensive-summary','relevant-keywords','marketing-summary','short-description','translate-html']);
+const parallelSkills = new Set(['comprehensive-summary','relevant-keywords','marketing-summary','short-description','translate-html','book-pdf']);
 const within = (name, directory) => name === directory || name.startsWith(directory + '/');
 export function operationAllows(scope, name) {
   return !scope || scope.files.includes(name) || scope.trees.some(directory => within(name, directory));
@@ -38,7 +39,10 @@ export async function jobInputScope(root, {skill,args,taskDirectory,virtualCwd,s
   const addFile = value => { const name=relative(value); files.add(name); return name; };
   const prepare = ['prepare','analyze'].includes(args[0]);
   const jobCommand = prepare || ['status','build','batch-contract','submit-batch'].includes(args[0]);
-  if (jobCommand) {
+  if (skill === 'book-pdf') {
+    addFile(input);
+    addFile(option('--output'));
+  } else if (jobCommand) {
     const jobPath = prepare ? option('--job-dir') : input;
     if (!jobPath) throw Error('Remote editorial preparation requires --job-dir to isolate parallel jobs');
     const job = relative(jobPath);
@@ -79,9 +83,11 @@ export async function jobInputScope(root, {skill,args,taskDirectory,virtualCwd,s
       finally {await handle.close();}
     });}
     catch(error){if(error.code==='ENOENT')return;throw error;}
-    const refs=[...text.matchAll(/\b(?:src|poster|href)\s*=\s*["']([^"']+)["']|url\(\s*["']?([^\s"')]+)["']?\s*\)|@import\s+["']([^"']+)["']/gi)];
-    for(const match of refs) {
-      const ref=(match[1]||match[2]||match[3]).replaceAll('&amp;','&');
+    const refs=[...text.matchAll(/\b(?:src|poster|href)\s*=\s*["']([^"']+)["']|url\(\s*["']?([^\s"')]+)["']?\s*\)|@import\s+["']([^"']+)["']/gi)]
+      .map(match=>match[1]||match[2]||match[3]);
+    if(skill==='book-pdf')refs.push(...responsiveImageReferences(text));
+    for(const value of refs) {
+      const ref=value.replaceAll('&amp;','&');
       if(/^(?:[a-z][a-z0-9+.-]*:|\/\/|#)/i.test(ref))continue;
       const dependency=path.posix.normalize(path.posix.join(path.posix.dirname(name),decodeURIComponent(ref.split(/[?#]/)[0])));
       if(!/\.(?:css|woff2?|ttf|otf|eot|png|jpe?g|gif|webp|avif|svg|ico|bmp|mp3|mp4|ogg|wav|webm)$/i.test(dependency))continue;

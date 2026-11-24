@@ -112,7 +112,7 @@ The processing helper excludes package/ unless a command addresses the specific 
 
 ## HTML-first generation
 
-Description/instruction proposals and HTML forks produce complete HTML books without HTML→DOCX→PDF conversion. Their publication metadata may omit PDF, and missing PDF is not a validation error. The native standalone/imported-reader comparison is used with a preserved authored HTML reference and strict zero-new/zero-existing finding acceptance; candidate hashes must match the final package. The final generated-book audit records scope html_layout_integrity, nativeScope edition_layout_regression and existingFindings=0. A supplied PDF manuscript remains the source of PDF fidelity checks. Existing generated intermediary files from earlier attempts stay private and do not become new-job inputs or publication requirements.
+Description/instruction proposals and HTML forks produce complete HTML books without HTML→DOCX→PDF conversion. For description-based proposals, the PDF step prints each published language directly from its staged HTML and registers the download in the catalogue. The native standalone/imported-reader comparison is used with a preserved authored HTML reference and strict zero-new/zero-existing finding acceptance; candidate hashes must match the final package. The final generated-book audit records scope html_layout_integrity, nativeScope edition_layout_regression and existingFindings=0. A supplied PDF manuscript remains the source of PDF fidelity checks. Existing generated intermediary files from earlier attempts stay private and do not become new-job inputs or publication requirements.
 
 
 ### Book cover preferences

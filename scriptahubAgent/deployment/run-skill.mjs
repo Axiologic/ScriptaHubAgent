@@ -4,6 +4,7 @@ import {spawn} from 'node:child_process';
 import {fileURLToPath,pathToFileURL} from 'node:url';
 
 export const launchers = Object.freeze({
+  'book-pdf':['node','scripts/book-pdf.mjs'],
   'comprehensive-summary':['scripts/comprehensivesummary'],
   doc2pdf:['scripts/doc2pdf'],html2doc:['scripts/html2doc'],
   'humanise-html':['scripts/humanisehtml'],'marketing-summary':['scripts/marketingsummary'],

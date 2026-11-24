@@ -56,6 +56,12 @@ test('preparation scopes include only explicit job/output, and validation needs 
   await assert.rejects(f.scope({skill:'short-description',args:['prepare','tasks/a/sources/book.html']}),/--job-dir/);
   await assert.rejects(f.scope({skill:'translate-html',args:['prepare','tasks/a/sources/book.html','--job-dir','tasks/a/translation-jobs/ro','--output','tasks/a/translations/ro/full.html']}),/one job/);
 });
+test('PDF export includes responsive images using srcset and keeps other assets outside its scope',async t=>{
+  const f=await fixture(t);
+  await f.write('sources/book.html','<main><picture><source srcset="wide.webp 2x, detail.svg 3x"><img srcset="data:image/png;base64,AAAA 1x, even.png 2x" src="figure.svg"></picture></main>');
+  const scope=await f.scope({skill:'book-pdf',args:['export','tasks/a/sources/book.html','--output','tasks/a/ro/book.pdf','--language','ro']});
+  assert.deepEqual(scope.files,['ro/book.pdf','sources/book.html','sources/detail.svg','sources/even.png','sources/figure.svg','sources/wide.webp']);
+});
 for(const skill of ['comprehensive-summary','marketing-summary','short-description','relevant-keywords','translate-html']) {
   test(`${skill} batch contracts and admission keep the same isolated job boundary`,async t=>{
     const f=await fixture(t),job=skill==='translate-html'?'translation-jobs/ro/full':'editorial-jobs/'+skill;

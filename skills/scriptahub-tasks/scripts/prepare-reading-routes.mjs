@@ -57,6 +57,14 @@ export async function prepareReadingRoutes({executionId, directory, collectionPa
       const reader = language + '/full_content.html', summary = language + '/comprehensive-summary.html';
       const routes = {book:landing, fullContent:reader, shortContent:summary};
       const aliases = [[reader, full, fullBytes], [summary, short, shortBytes]];
+      if (input.pdf !== undefined) {
+        const filename = language + '/book.pdf';
+        if (input.pdf !== filename) throw Error('Stage the download PDF at ' + filename);
+        const pdf = await read(bookRoot + '/' + filename);
+        if (pdf.subarray(0,5).toString() !== '%PDF-') throw Error('Invalid download PDF for ' + language);
+        routes.pdf = filename;
+        aliases.push([filename, filename, pdf]);
+      }
       const pictures = {};
       if (artwork.required || input.cover !== undefined || input.thumbnail !== undefined) {
         for (const [role, filename] of Object.entries({cover:input.cover, thumbnail:input.thumbnail ?? input.cover})) {
@@ -87,7 +95,7 @@ export async function prepareReadingRoutes({executionId, directory, collectionPa
         }
       } else {
         const title = metadata.title?.[language] || book.title?.[language] || book.id;
-        landings.push([bookRoot + '/' + landing, landingHtml(language, title, shortDescription, aboutBook)]);
+        landings.push([bookRoot + '/' + landing, landingHtml(language, title, shortDescription, aboutBook, Boolean(routes.pdf))]);
       }
       chosen[language] = {fullContent:bookRoot + '/' + full, shortContent:bookRoot + '/' + short};
     }
@@ -99,6 +107,7 @@ export async function prepareReadingRoutes({executionId, directory, collectionPa
   });
 }
 
-function landingHtml(language, title, description, aboutBook) {
-  return `<!doctype html><html lang="${escape(language)}"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>${escape(title)}</title></head><body><main><h1>${escape(title)}</h1><p>${escape(description)}</p><nav><a href="full_content.html">Read Online</a> · <a href="comprehensive-summary.html">Read in 10 Min</a></nav>${aboutBook.map(text => '<p>' + escape(text) + '</p>').join('')}</main></body></html>\n`;
+function landingHtml(language, title, description, aboutBook, hasPdf) {
+  const download = hasPdf ? ' · <a href="book.pdf" download>Download PDF</a>' : '';
+  return `<!doctype html><html lang="${escape(language)}"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>${escape(title)}</title></head><body><main><h1>${escape(title)}</h1><p>${escape(description)}</p><nav><a href="full_content.html">Read Online</a> · <a href="comprehensive-summary.html">Read in 10 Min</a>${download}</nav>${aboutBook.map(text => '<p>' + escape(text) + '</p>').join('')}</main></body></html>\n`;
 }
