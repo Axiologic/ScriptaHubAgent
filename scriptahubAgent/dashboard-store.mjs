@@ -30,7 +30,7 @@ export class DashboardStore {
         created_at TEXT NOT NULL, decided_at TEXT, decided_by TEXT, decision_note TEXT);
       CREATE TABLE IF NOT EXISTS tasks (id TEXT PRIMARY KEY, change_id TEXT NOT NULL REFERENCES changes(id), kind TEXT NOT NULL, base_revision INTEGER,
         state TEXT NOT NULL CHECK(state IN ('queued','running','stop_requested','cancelled','completed','failed')),
-        created_at TEXT NOT NULL, updated_at TEXT NOT NULL, result TEXT, error TEXT);
+        created_at TEXT NOT NULL, updated_at TEXT NOT NULL, result TEXT, error TEXT, moderation_rejected INTEGER NOT NULL DEFAULT 0);
       CREATE TABLE IF NOT EXISTS events (id INTEGER PRIMARY KEY, book_id TEXT, change_id TEXT, task_id TEXT,
         actor TEXT NOT NULL, action TEXT NOT NULL, created_at TEXT NOT NULL, subject_user TEXT);
       CREATE INDEX IF NOT EXISTS changes_book ON changes(book_id,created_at);
@@ -281,7 +281,7 @@ export class DashboardStore {
     const canManageTasks = Array.isArray(user.roles) && user.roles.includes('admin');
     const books = this.db.prepare(`SELECT b.* FROM books b WHERE owner=? OR EXISTS
       (SELECT 1 FROM collaborators c WHERE c.book_id=b.id AND c.user_id=?) ORDER BY created_at DESC`).all(user.id, user.id);
-    const changes = this.db.prepare(`SELECT c.*,b.title,b.owner,t.state AS processing_state,t.updated_at AS processing_updated_at,
+    const changes = this.db.prepare(`SELECT c.*,b.title,b.owner,t.state AS processing_state,t.updated_at AS processing_updated_at, t.error AS processing_error,
       COALESCE(NULLIF(trim(p.name),''),p.email) AS author_name FROM changes c LEFT JOIN books b ON b.id=c.book_id
       LEFT JOIN people p ON p.id=c.author LEFT JOIN tasks t ON t.id=(SELECT latest.id FROM tasks latest JOIN task_changes tc ON tc.task_id=latest.id WHERE tc.change_id=c.id ORDER BY latest.rowid DESC LIMIT 1) WHERE c.kind<>'edition-request' AND (c.author=? OR b.owner=? OR EXISTS
       (SELECT 1 FROM collaborators a WHERE a.book_id=b.id AND a.user_id=?)
@@ -297,10 +297,10 @@ export class DashboardStore {
       activeTask:this.db.prepare(`SELECT t.id,t.state FROM tasks t JOIN changes c ON c.id=t.change_id WHERE c.book_id=?
         AND t.state IN ('queued','running','stop_requested') ORDER BY t.rowid DESC LIMIT 1`).get(book.id) || null}));
     return { user: { id: user.id, name: user.displayName || user.email }, books, editions,
-      changes: changes.map(({processing_state, processing_updated_at, ...change}) => {
+      changes: changes.map(({processing_state, processing_updated_at, processing_error, ...change}) => {
         const cycle = this.cycles.present(this.cycles.read(change.id));
         const processing = processing_state && !(cycle?.phase === 'review' && ['manuscript','book-proposal'].includes(change.kind))
-          ? {state:processing_state,updatedAt:processing_updated_at} : null;
+          ? {state:processing_state,updatedAt:processing_updated_at, ...(processing_error && {error:processing_error})} : null;
         return {...change,processing,payload:JSON.parse(change.payload),cycle};
       }), tasks, canManageTasks, canManageUsers: canManageTasks,
       editionCycles: this.db.prepare("SELECT * FROM approval_cycles WHERE owner=? AND kind='edition' AND phase NOT IN ('completed','rejected')").all(user.id).map(row=>this.cycles.present(row)),

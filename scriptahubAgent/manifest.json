@@ -15,7 +15,8 @@
     {
       "agent": "emailAgent",
       "profile": "default"
-    }
+    },
+    "soul-gateway no-wait"
   ],
   "readiness": {
     "protocol": "tcp",
@@ -280,6 +281,10 @@
           "name": "SCRIPTA_EXECUTOR_AGENT_IDS",
           "required": false,
           "default": "agent:AchillesIDE/roboTeamAgent"
+        },
+        {
+          "name": "SCRIPTA_MODERATION_MODEL",
+          "required": false
         }
       ]
     }

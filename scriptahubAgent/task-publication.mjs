@@ -1,3 +1,4 @@
+import { portableVisualKey } from './content-moderation.mjs';
 import {translationOutcomeMessage} from './translation-outcome.mjs';
 import fs from 'node:fs/promises';
 import { constants } from 'node:fs';
@@ -104,6 +105,29 @@ export class TaskPublication extends PublicationTransfer {
         return finish('Publication destination is no longer authorized');
       }
       requireNoActiveProcessing(this.store, executionId);
+      if (action !== 'confirm' && (!saved.commit_id || saved.push_state === 'prepared')) {
+        await this.service.moderateSubmission(executor,{executionId},owner);
+        if (!this.service.moderationPassed(executionId,'submission')) return this.service.status(executor,{executionId});
+        if (!this.service.moderationPassed(executionId,'package',saved.digest)) {
+          update('lease_until=?',Date.now() + leaseMs);
+          const candidate = packageBytes || readPackage();
+          const acceptedSources = new Set(this.service.present(execution).files
+            .map(file => portableVisualKey(file.originalName,file.sha256)).filter(Boolean));
+          const files = manifest.files.map(({path,sha256}) => {
+            const bytes = candidate.get(path);
+            if (path === target.collection) {
+              const book = JSON.parse(bytes).books?.find(book => book.id === manifest.bookId);
+              if (!book) fail('The publication catalogue does not contain the current book');
+              return {path,bytes:Buffer.from(JSON.stringify(book))};
+            }
+            return {path,sha256,bytes,alreadyReviewed:acceptedSources.has(portableVisualKey(path,sha256))};
+          });
+          const finding = await this.service.moderate({taskId:execution.task_id,stage:'package'},files);
+          if (stopped()) { clearCommit(); return finish(); }
+          if (finding) { clearCommit(); return this.service.finishModeration(executor,executionId,finding,owner); }
+          this.service.saveModeration(executionId,'package',saved.digest);
+        }
+      }
       if (!saved.tree_id && !saved.commit_id) {
         if (action !== 'prepare') return this.service.status(executor,{executionId});
         update('lease_until=?',Date.now() + leaseMs);
@@ -199,6 +223,10 @@ export class TaskPublication extends PublicationTransfer {
       const saved = this.row(executionId);
       if (saved.receipt || this.service.execution(executor,executionId).finished_at) throw error;
       const uncertain = saved.commit_id && saved.push_state !== 'prepared';
+      if (!uncertain && error.code === 'MODERATION_UNAVAILABLE') {
+        clearCommit();
+        return finish(error.message);
+      }
       if (uncertain || error instanceof BranchMoved || error.status >= 500) return defer();
       if (saved.tree_id || saved.commit_id) clearCommit();
       if (stopped() || error instanceof PublicationConflict || (row.retry_at !== null && error.status >= 400)) return finish(error.message);

@@ -208,6 +208,37 @@
       }
     },
     {
+      "name": "scriptahub_task_moderate",
+      "title": "Moderate the claimed book request",
+      "description": "Run the configured content moderator on the stored request and its attachments.",
+      "command": "node",
+      "args": [
+        "tools/task-tool.mjs"
+      ],
+      "cwd": "/code",
+      "timeoutMs": 600000,
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "executionId": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128
+          }
+        },
+        "required": [
+          "executionId"
+        ],
+        "additionalProperties": false
+      },
+      "tags": [
+        "internal"
+      ],
+      "env": {
+        "TOOL_NAME": "scriptahub_task_moderate"
+      }
+    },
+    {
       "name": "scriptahub_task_document_read",
       "title": "Read a verified source document chunk",
       "description": "Read a verified source document chunk. Restricted to configured executor service identities; no browser account or private storage access is required.",

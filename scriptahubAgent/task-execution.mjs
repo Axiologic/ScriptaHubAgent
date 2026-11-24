@@ -1,3 +1,4 @@
+import { blockedMessage, policyVersion, reviewContent } from './content-moderation.mjs';
 import { approvedAnnotations } from './annotations.mjs';
 import crypto from 'node:crypto';
 import fs from 'node:fs/promises';
@@ -15,7 +16,7 @@ const taskKinds = new Map([
   ['manuscript', ['manuscript']], ['book-proposal', ['book-proposal']],
   ['add-book', ['manuscript', 'book-proposal', 'fork']], ['edit', ['edit']],
 ]);
-export const executionTools = new Set(['scriptahub_task_batch_snapshot', 'scriptahub_task_batch_settle', 'scriptahub_task_batch_close', 'scriptahub_task_claim', 'scriptahub_task_status', 'scriptahub_task_document_read', 'scriptahub_task_finish', 'scriptahub_task_package_prepare', 'scriptahub_task_package_upload', 'scriptahub_task_publish', 'scriptahub_skills_preflight', 'scriptahub_skill_job_prepare', 'scriptahub_skill_job_upload', 'scriptahub_skill_job_start', 'scriptahub_skill_job_status', 'scriptahub_skill_job_result', 'scriptahub_skill_job_read', 'scriptahub_skill_job_cancel', 'scriptahub_skill_job_release']);
+export const executionTools = new Set(['scriptahub_task_batch_snapshot', 'scriptahub_task_batch_settle', 'scriptahub_task_batch_close', 'scriptahub_task_claim', 'scriptahub_task_status', 'scriptahub_task_document_read', 'scriptahub_task_finish', 'scriptahub_task_moderate', 'scriptahub_task_package_prepare', 'scriptahub_task_package_upload', 'scriptahub_task_publish', 'scriptahub_skills_preflight', 'scriptahub_skill_job_prepare', 'scriptahub_skill_job_upload', 'scriptahub_skill_job_start', 'scriptahub_skill_job_status', 'scriptahub_skill_job_result', 'scriptahub_skill_job_read', 'scriptahub_skill_job_cancel', 'scriptahub_skill_job_release']);
 
 // The envelope is supplied by AgentServer only after secure-wire verification.
 // Do not call this with browser headers or client-provided identity fields.
@@ -31,9 +32,10 @@ export function requireExecutor(auth, tool, env = process.env) {
 }
 
 export class TaskExecution {
-  constructor(store, dataDir) {
+  constructor(store, dataDir, {moderate = reviewContent} = {}) {
     this.store = store;
     this.dataDir = dataDir;
+    this.moderate = moderate;
     store.db.exec(`CREATE TABLE IF NOT EXISTS task_executions (
       id TEXT PRIMARY KEY, task_id TEXT NOT NULL UNIQUE REFERENCES tasks(id),
       executor_agent_id TEXT NOT NULL, run_id TEXT NOT NULL, created_at TEXT NOT NULL,
@@ -47,6 +49,10 @@ export class TaskExecution {
         execution_id TEXT NOT NULL, reason TEXT NOT NULL, created_at TEXT NOT NULL,
         PRIMARY KEY(batch_id,task_id), FOREIGN KEY(batch_id,task_id) REFERENCES task_batch_items(batch_id,task_id));
       CREATE UNIQUE INDEX IF NOT EXISTS task_batch_exclusive ON task_batch_items(task_id) WHERE released=0;`);
+    store.db.exec(`CREATE TABLE IF NOT EXISTS task_moderation (
+      execution_id TEXT NOT NULL REFERENCES task_executions(id), stage TEXT NOT NULL,
+      policy_version INTEGER NOT NULL, package_digest TEXT NOT NULL DEFAULT '',
+      PRIMARY KEY(execution_id,stage));`);
     createPublicationTables(store);
     createProcessingTables(store);
   }
@@ -198,10 +204,54 @@ export class TaskExecution {
       ...(pending ? { publicationPending: true } : {}),
       ...(row.state === 'completed' && saved?.receipt ? {publication: JSON.parse(saved.receipt)} : {}) };
   }
-  async document(executor, { executionId, index, offset = 0, length = 196608 } = {}) {
+  moderationPassed(executionId, stage, digest = '') {
+    return Boolean(this.store.db.prepare(`SELECT 1 FROM task_moderation
+      WHERE execution_id=? AND stage=? AND policy_version=? AND package_digest=?`).get(executionId,stage,policyVersion,digest));
+  }
+  saveModeration(executionId,stage,digest = '') {
+    this.store.db.prepare(`INSERT INTO task_moderation VALUES(?,?,?,?)
+      ON CONFLICT(execution_id,stage) DO UPDATE SET policy_version=excluded.policy_version,package_digest=excluded.package_digest`)
+      .run(executionId,stage,policyVersion,digest);
+  }
+  async moderateSubmission(executor,{executionId},publicationOwner) {
+    const row = this.execution(executor,executionId);
+    if (row.state !== 'running' || row.finished_at) return this.status(executor,{executionId});
+    if (this.moderationPassed(executionId,'submission')) return {status:'passed'};
+    const task = this.present(row), files = [];
+    for (const [index, request] of (task.requests ?? [task]).entries()) {
+      const changeId = request.id ?? row.change_id;
+      files.push({changeId,path:'request-'+index+'.json',bytes:Buffer.from(JSON.stringify({
+        values:request.values,annotations:request.annotations,source:request.source
+      }))});
+      for (const file of request.files) {
+        const {bytes, file:stored} = await this.documentBytes(executor,executionId,file.index);
+        files.push({changeId,path:'attachment-'+file.index+path.extname(stored.name),bytes});
+      }
+    }
+    const finding = await this.moderate({taskId:task.taskId,stage:'submission'},files);
+    const current = this.execution(executor,executionId);
+    if (current.state !== 'running' || current.finished_at) return this.status(executor,{executionId});
+    if (this.moderationPassed(executionId,'submission')) return {status:'passed'};
+    if (finding) return this.finishModeration(executor,executionId,finding,publicationOwner);
+    this.saveModeration(executionId,'submission');
+    return {status:'passed'};
+  }
+  finishModeration(executor,executionId,{category,changeId},publicationOwner) {
+    return this.finish(executor,{executionId,state:'failed',error:blockedMessage(category)},{
+      publicationOwner, rejectedChange:category === 'unreviewable' ? null : changeId
+    });
+  }
+  async document(executor,{executionId,index,offset=0,length=196608} = {}) {
+    if (![index,offset,length].every(Number.isSafeInteger) || index < 0 || offset < 0 || length < 1 || length > 196608) fail('Invalid document range');
+    const {bytes,file} = await this.documentBytes(executor,executionId,index);
+    if (offset > bytes.length) fail('Document offset exceeds size');
+    const chunk = bytes.subarray(offset,offset+length);
+    return {originalName:file.originalName,sha256:file.sha256,size:bytes.length,offset,nextOffset:offset+chunk.length,
+      eof:offset+chunk.length===bytes.length,encoding:'base64',data:chunk.toString('base64')};
+  }
+  async documentBytes(executor,executionId,index) {
     const row = this.execution(executor, executionId);
     if (row.state !== 'running' || row.finished_at) fail('Execution is not running', 409);
-    if (![index, offset, length].every(Number.isSafeInteger) || index < 0 || offset < 0 || length < 1 || length > 196608) fail('Invalid document range');
     const members = row.base_revision === null
       ? [this.store.db.prepare('SELECT * FROM changes WHERE id=?').get(row.change_id)]
       : this.store.editionRequests(row.task_id);
@@ -238,14 +288,10 @@ export class TaskExecution {
     } finally { await handle.close(); }
     if (bytes.length > 50000000) fail('Document exceeds the size limit');
     if (crypto.createHash('sha256').update(bytes).digest('hex') !== file.sha256) fail('Document integrity check failed');
-    if (offset > bytes.length) fail('Document offset exceeds size');
-    // A cancellation committed while reading must prevent further delivery.
-    if (this.execution(executor, executionId).state !== 'running') fail('Execution is not running', 409);
-    const chunk = bytes.subarray(offset, offset + length);
-    return { originalName: file.originalName, sha256: file.sha256, size: bytes.length,
-      offset, nextOffset: offset + chunk.length, eof: offset + chunk.length === bytes.length, encoding: 'base64', data: chunk.toString('base64') };
+    if (this.execution(executor,executionId).state !== 'running') fail('Execution is not running',409);
+    return {bytes,file};
   }
-  finish(executor, { executionId, state, result = '', error = '' } = {}, { publication = false, publicationOwner } = {}) {
+  finish(executor, { executionId, state, result = '', error = '' } = {}, { publication = false, publicationOwner, rejectedChange } = {}) {
     if (!['completed','failed','cancelled'].includes(state) || typeof result !== 'string' || result.length > 32768
       || typeof error !== 'string' || error.length > 16000 || (state === 'failed' && !error.trim())
       || (state === 'completed' && (!result.trim() || error))) fail('Invalid execution result');
@@ -271,6 +317,13 @@ export class TaskExecution {
       this.store.db.prepare('UPDATE tasks SET state=?,result=?,error=?,updated_at=? WHERE id=?').run(state,result,error || null,time,row.task_id);
       this.store.db.prepare('UPDATE task_executions SET finished_at=?,finish_digest=? WHERE id=?').run(time,digest,executionId);
       const change = this.store.db.prepare('SELECT book_id FROM changes WHERE id=?').get(row.change_id);
+      if (rejectedChange && row.base_revision !== null) {
+        const rejected = this.store.db.prepare(`UPDATE changes SET state='rejected',decided_at=?,decided_by=?,decision_note=?
+          WHERE id=? AND state='accepted' AND kind<>'edition-request' AND EXISTS
+          (SELECT 1 FROM task_changes WHERE task_id=? AND change_id=changes.id)`)
+          .run(time,'system:moderation',error,rejectedChange,row.task_id);
+        if (rejected.changes) this.store.db.prepare('UPDATE tasks SET moderation_rejected=1 WHERE id=?').run(row.task_id);
+      }
       if (state === 'completed') {
         this.store.db.prepare('UPDATE books SET revision=revision+1 WHERE id=?').run(change.book_id);
         this.store.cycles.rewardPublishedEdition(row.task_id,change.book_id,this.store.book(change.book_id).revision);

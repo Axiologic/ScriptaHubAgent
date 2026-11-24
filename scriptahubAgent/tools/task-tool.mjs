@@ -26,7 +26,7 @@ try {
   const config = configuredTools.has(tool) ? validateSourceConfig(await loadSourceConfig({ dataDir })) : null;
   store = new DashboardStore(dataDir,{manageApprovals:true});
   const service = new TaskExecution(store, dataDir);
-  const methods = { scriptahub_task_batch_snapshot:'snapshot', scriptahub_task_batch_settle:'settle', scriptahub_task_batch_close:'closeBatch', scriptahub_task_claim: 'claim', scriptahub_task_status: 'status', scriptahub_task_document_read: 'document', scriptahub_task_finish: 'finish' };
+  const methods = { scriptahub_task_batch_snapshot:'snapshot', scriptahub_task_batch_settle:'settle', scriptahub_task_batch_close:'closeBatch', scriptahub_task_claim: 'claim', scriptahub_task_status: 'status', scriptahub_task_moderate:'moderateSubmission', scriptahub_task_document_read: 'document', scriptahub_task_finish: 'finish' };
   const args = envelope.input ?? envelope.arguments ?? {};
   const publisher = new TaskPublication(service);
   let result;

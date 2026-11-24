@@ -52,3 +52,7 @@ Invoke `node <skill-directory>/scripts/run.mjs OPERATION` from the flow root wit
 Successful build/validation receipts belong outside temporary native job directories. Store their path and SHA-256 in the handoff. Successful output with an unchanged hash may be reused; the helper checks actual local bytes and performs transfer/cache reuse automatically.
 
 For incomplete diagnostics, inspect the retained job directory before `release-incomplete`. Release requires the service-confirmed terminal state and verified available evidence. Errors retain the pending journal. The operation frees remote artifacts after keeping local evidence; it does not merge incomplete output.
+
+## Moderate content
+
+Call `moderate-content` with `{"executionId":"<claimed executionId>"}`. Continue only on `status=passed`. If the service stopped the task, report its `taskError` to the parent. A temporary moderation service failure is a processing blocker. Publication independently checks service-held moderation evidence for the staged bytes.

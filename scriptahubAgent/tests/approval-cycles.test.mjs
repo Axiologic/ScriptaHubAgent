@@ -369,3 +369,27 @@ test('a standalone edition request stays out of corrections and preserves its in
   const next=store.submitEdition(admin,'bk-source',crypto.randomUUID(),8);
   assert.deepEqual(store.editionRequests(next.taskId).map(item=>item.id),[correction.submissionId]);
 });
+
+test('a blocked correction closes its paid edition after the refund and leaves other corrections available',async t=>{
+  const {store,executorApi}=await fixture(t);
+  const blocked=store.submit(record('edit',author,{feedback:'Replace a picture'},'bk-source'));
+  const accepted=store.submit(record('edit',author,{feedback:'Fix the caption'},'bk-source'));
+  for(const item of [blocked,accepted]) store.decide(admin,item.submissionId,'accept');
+  const cycle=store.submitEdition(admin,'bk-source',crypto.randomUUID(),8);
+  const operations=[];
+  const worker={apply:async (_row,operation)=>{operations.push(operation);return {};},
+    send:async()=>({providerMessageId:'mail'})};
+  await advanceCycles(store,worker);
+  const {task}=executorApi.claim(executor,{runId:'moderation-edition',taskType:'edit'});
+  executorApi.moderate=async()=>({category:'extreme_presentation',changeId:blocked.submissionId});
+  await executorApi.moderateSubmission(executor,{executionId:task.executionId});
+  await advanceCycles(store,worker);
+  assert.equal(store.cycles.read(cycle.id).phase,'restoring');
+  assert.equal(store.overview(admin).editionCycles.length,1);
+  await advanceCycles(store,worker);
+  assert.deepEqual(operations,['debit','refund']);
+  assert.equal(store.cycles.read(cycle.id).phase,'rejected');
+  assert.equal(store.overview(admin).editionCycles.length,0);
+  const replacement=store.submitEdition(admin,'bk-source',crypto.randomUUID(),8);
+  assert.deepEqual(store.editionRequests(replacement.taskId).map(change=>change.id),[accepted.submissionId]);
+});

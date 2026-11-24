@@ -18,7 +18,7 @@ test('only requested translation may branch and every publication path passes va
   assert.equal(paths.length,2,'only the translation/no-translation alternatives exist');
   assert.equal(paths.filter(path=>path.includes('translate-resources')).length,1,'translation must be bypassable');
   const stages=['comprehensive-summary','relevant-keywords','shared-editorial-analysis','marketing-summary','short-description'];
-  const required=['resume-book','prepare-manuscript',...stages,'process-content','review-correct','export-book-pdf','validate-final','publish-result','book-result'];
+  const required=['resume-book','moderate-submission','prepare-manuscript',...stages,'process-content','review-correct','export-book-pdf','validate-final','publish-result','book-result'];
   for(const path of paths)assert.deepEqual(path.filter(id=>id!=='translate-resources'),required);
   const translated=paths.find(path=>path.includes('translate-resources'));
   assert.ok(translated.indexOf('process-content')<translated.indexOf('translate-resources'));
@@ -60,7 +60,7 @@ test('a normal edit reaches publication only after package preparation and valid
   const parent=await flow('edit-book'),child=await flow('edit-edition');
   assert.match(parent.tasks.find(task=>task.id==='select-task').prompt,/workflow=edit-edition/);
   assert.equal(parent.tasks.find(task=>task.id==='select-task').continueOnChildFailure,true);
-  const chain=['claim-edit','apply-edit','prepare-edit-package','validate-edit','submit-edit'];
+  const chain=['claim-edit','moderate-submission','apply-edit','prepare-edit-package','validate-edit','submit-edit'];
   assert.equal(child.entryTaskId,chain[0]);
   assert.deepEqual(child.edges.map(edge=>[edge.sourceTaskId,edge.targetTaskId]),chain.slice(1).map((id,index)=>[chain[index],id]));
   assert.ok(child.tasks.every(task=>!task.creator));
@@ -73,4 +73,17 @@ test('all distributed workflow prompts fit RoboTeam native 16000-character admis
     const graph=JSON.parse(await fs.readFile(new URL(file,directory),'utf8'));
     for(const task of graph.tasks)assert.ok((task.prompt||'').length<=16000,`${file}/${task.id}: ${(task.prompt||'').length} characters would remove the whole workflow from the native catalogue`);
   }
+});
+
+test('generation, translation and editing apply moderation before accepting new material', async () => {
+  const create = await flow('create-book'), edit = await flow('edit-edition');
+  const prompt = (graph, id) => graph.tasks.find(task => task.id === id).prompt;
+  assert.match(prompt(create, 'prepare-manuscript'), /Deliver full chapters with complete prose\. Keep romance non-graphic/);
+  assert.match(prompt(create, 'prepare-manuscript'), /Before pinning the authored HTML.*revise only an affected passage/);
+  assert.match(prompt(create, 'translate-resources'), /correct the affected batch against its source/);
+  assert.match(prompt(create, 'review-correct'), /Inspect the generated artwork before staging/);
+  assert.match(prompt(create, 'prepare-manuscript'), /restrained language and non-graphic imagery for every sensitive subject/);
+  assert.match(prompt(create, 'review-correct'), /non-graphic imagery for sensitive subjects/);
+  assert.match(prompt(edit, 'apply-edit'), /restrained language and non-graphic visuals for sensitive subjects/);
+  assert.match(prompt(edit, 'apply-edit'), /Keep romantic passages non-graphic/);
 });

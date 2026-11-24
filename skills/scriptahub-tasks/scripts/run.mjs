@@ -13,7 +13,7 @@ import crypto from 'node:crypto';
 import http from 'node:http';
 import { fileURLToPath } from 'node:url';
 
-const operations = { claim: 'scriptahub_task_claim', status: 'scriptahub_task_status', finish: 'scriptahub_task_finish' };
+const operations = { 'moderate-content':'scriptahub_task_moderate', claim: 'scriptahub_task_claim', status: 'scriptahub_task_status', finish: 'scriptahub_task_finish' };
 export function chooseRepository({ repositories, candidates } = {}) {
     if (!Array.isArray(repositories) || !Array.isArray(candidates) || !candidates.length) throw new Error('Provide configured repositories and matching candidates');
     const unique = [...new Set(candidates)];
@@ -181,7 +181,7 @@ async function main() {
   let client;
   try {
     const operation = process.argv[2];
-    if (process.argv.length !== 3 || (!operations[operation] && !['batch-start', 'batch-status', 'batch-next', 'batch-close', 'batch-defer', 'exec', 'exec-sequence', 'release-incomplete', 'discard-translation-job', 'download', 'choose', 'publish', 'retry-publication', 'preflight', 'handoff', 'verify-package', 'prepare-reading-routes', 'shared-editorial'].includes(operation))) throw new Error('Use batch-start, batch-status, batch-next, batch-close, batch-defer, exec, exec-sequence, preflight, claim, status, download, choose, handoff, shared-editorial, prepare-reading-routes, verify-package, publish, retry-publication or finish');
+    if (process.argv.length !== 3 || (!operations[operation] && !['batch-start', 'batch-status', 'batch-next', 'batch-close', 'batch-defer', 'exec', 'exec-sequence', 'release-incomplete', 'discard-translation-job', 'download', 'choose', 'publish', 'retry-publication', 'preflight', 'handoff', 'verify-package', 'prepare-reading-routes', 'shared-editorial'].includes(operation))) throw new Error('Use batch-start, batch-status, batch-next, batch-close, batch-defer, exec, exec-sequence, preflight, claim, status, moderate-content, download, choose, handoff, shared-editorial, prepare-reading-routes, verify-package, publish, retry-publication or finish');
     const chunks = [];
     let size = 0;
     for await (const chunk of process.stdin) {
@@ -209,7 +209,7 @@ async function main() {
     }
     if (operation === 'claim' || operation === 'batch-next') await requirePreflight();
     client = await loadClient();
-    const call = async (tool, args) => unwrap(await client.callTool(tool, args, { timeoutMs: tool === 'scriptahub_task_publish' ? 600000 : 90000 }));
+    const call = async (tool, args) => unwrap(await client.callTool(tool, args, { timeoutMs: ['scriptahub_task_publish','scriptahub_task_moderate'].includes(tool) ? 600000 : 90000 }));
     if (operation === 'claim' || operation === 'batch-next') await preflight(await call('scriptahub_skills_preflight',{}));
     if (operation === 'exec') { process.exitCode = await runRemoteSkill(input,call); return; }
     if (operation === 'exec-sequence') { process.exitCode = await runRemoteSequence(input,call); return; }

@@ -6,6 +6,7 @@ import {promisify} from 'node:util';
 import {execFile} from 'node:child_process';
 import {openBrowser} from '../../validate-book/src/browser.mjs';
 import {navigate} from '../../validate-book/src/layout-browser.mjs';
+import {renderModeration} from './moderation-render.mjs';
 import {hasReaderWords, readerWords} from './pdf-text.mjs';
 
 const rights = {
@@ -147,10 +148,19 @@ try {
   const {positionals:[command,input,...extra],values} = parseArgs({allowPositionals:true,options:{
     output:{type:'string'},language:{type:'string'}
   }});
-  if (command !== 'export' || !input || extra.length || !values.output || !values.language) {
-    throw Error('Usage: book-pdf export INPUT.html --output FILE.pdf --language TAG');
+  if (command === 'moderation-render' && input && !extra.length && values.output) {
+    try {
+      await renderModeration(input,values.output);
+    } catch (error) {
+      console.error('Moderation rendering: ' + error.message);
+      process.exitCode = /unavailable|ENOENT|timed out/i.test(error.message) ? 1 : 42;
+    }
+  } else {
+    if (command !== 'export' || !input || extra.length || !values.output || !values.language) {
+      throw Error('Usage: book-pdf export INPUT.html --output FILE.pdf --language TAG');
+    }
+    console.log(JSON.stringify(await exportPdf(input,values.output,values.language)));
   }
-  console.log(JSON.stringify(await exportPdf(input,values.output,values.language)));
 } catch (error) {
   console.error('book-pdf: ' + error.message);
   process.exitCode = 1;

@@ -27,7 +27,7 @@ async function fixture(t, { schemaVersion = 1, kind = 'manuscript', manageApprov
   await fs.writeFile(path.join(seed,'collection.json'),JSON.stringify(previous));
   await git(seed,'add','.'); await git(seed,'commit','-m','Initial catalogue'); await git(seed,'remote','add','origin',remote); await git(seed,'push','origin','main');
   const baseCommit = await git(seed,'rev-parse','HEAD');
-  const store = new DashboardStore(data,{manageApprovals}), service = new TaskExecution(store,data);
+  const store = new DashboardStore(data,{manageApprovals}), service = new TaskExecution(store,data,{moderate:async () => null});
   t.after(async () => { store.close(); await fs.rm(root,{recursive:true,force:true}); });
   store.remember({id:'user:owner',email:'owner@example.test',displayName:'Owner'});
   const source = Buffer.from('%PDF-1.7\nOriginal manuscript\n');
@@ -36,6 +36,7 @@ async function fixture(t, { schemaVersion = 1, kind = 'manuscript', manageApprov
     files:[...(kind==='manuscript'?[{name:crypto.randomUUID()+'.pdf',originalName:'source.pdf',sha256:sha256(source)}]:[]),
       ...(coverImage?[{role:'cover',name:crypto.randomUUID()+'.png',originalName:'cover.png',sha256:sha256(coverImage)}]:[])],createdAt:new Date().toISOString(),state:'received',task:null}));
   const task = service.claim(agent,{runId:'run-publication',taskType:kind}).task;
+  service.saveModeration(task.executionId,'submission');
   const catalogue = 'https://github.com/example/books/blob/main/collection.json';
   const config = {repositories:[catalogue]};
   let pushes = 0, losePushResponse = false, beforeGit, afterGit;
@@ -262,6 +263,7 @@ test('publications to the same repo and branch take the same lease across differ
       name:crypto.randomUUID()+'.pdf',originalName:file.originalName,sha256:file.sha256
     }))}));
   const {task} = f.service.claim(agent,{runId:'another-book',taskId:other.task.id,taskType:'manuscript'});
+  f.service.saveModeration(task.executionId,'submission');
   const replace = value => value.replaceAll(f.task.bookId,task.bookId);
   const files = [...f.files].map(([name,bytes]) => [replace(name),Buffer.from(replace(bytes.toString()))]);
   const catalogue = 'https://raw.githubusercontent.com/EXAMPLE/BOOKS/main/collection.json';
@@ -655,4 +657,20 @@ test('catalogue validation ships with the service independently of the installed
   const skillModule = await fs.readFile(new URL('../../skills/scriptahub-tasks/scripts/catalogue-keywords.mjs',import.meta.url),'utf8');
   assert.equal(serviceModule,skillModule,'the separately deployed service and task helper must use identical keyword rules');
   assert.doesNotMatch(serviceModule,/\/opt\/scriptahub|\.\.\/skills/);
+});
+
+test('a robot declaration cannot publish a package that the service moderator blocks',async t=>{
+  const f=await fixture(t,{kind:'book-proposal'});
+  f.input.validation.moderation={version:3,status:'passed'};
+  f.service.moderate=async (context,files)=>{
+    assert.equal(context.stage,'package');
+    assert.ok(files.some(file=>file.path.endsWith('/full.html')));
+    return {category:'extreme_presentation'};
+  };
+  f.upload();
+  const result=await f.publisher.publish(agent,{executionId:f.task.executionId},f.config);
+  assert.equal(result.state,'failed');
+  assert.match(result.taskError,/outside the ScriptaHub content policy/);
+  assert.equal(f.pushes(),0);
+  assert.equal(f.service.moderationPassed(f.task.executionId,'package',f.publisher.row(f.task.executionId).digest),false);
 });

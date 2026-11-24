@@ -56,7 +56,7 @@ Activate both updated UserPersisto and ScriptaHub runtimes; restart UserPersisto
 
 ## Service execution through Ploinky
 
-The standard AgentServer exposes four `internal` MCP tools: `scriptahub_task_claim`, `scriptahub_task_status`, `scriptahub_task_document_read`, and `scriptahub_task_finish`. AgentServer verifies secure-wire grants; the tool wrapper additionally requires an agent actor/caller/subject match, the expected tool, no browser/delegated user, and an identity listed in `SCRIPTA_EXECUTOR_AGENT_IDS`. The manifest configures `agent:AchillesIDE/roboTeamAgent` by default; installations can explicitly replace the comma-separated canonical identities. Empty or invalid configuration fails closed. No administrator email/password, shared ScriptaHub signing key, private data mount or direct SQLite access is given to robots.
+The standard AgentServer exposes these task lifecycle operations as `internal` MCP tools: `scriptahub_task_claim`, `scriptahub_task_status`, `scriptahub_task_document_read`, `scriptahub_task_moderate`, and `scriptahub_task_finish`. AgentServer verifies secure-wire grants; the tool wrapper additionally requires an agent actor/caller/subject match, the expected tool, no browser/delegated user, and an identity listed in `SCRIPTA_EXECUTOR_AGENT_IDS`. The manifest configures `agent:AchillesIDE/roboTeamAgent` by default; installations can explicitly replace the comma-separated canonical identities. Empty or invalid configuration fails closed. No administrator email/password, shared ScriptaHub signing key, private data mount or direct SQLite access is given to robots.
 
 Claim accepts `runId` and optional `taskId`. In one immediate transaction it selects the oldest accepted, queued manuscript and persists `task_executions`, bound to source agent and run ID. The same agent/run recovers the same execution; a terminal execution must not be reprocessed. Other task kinds are left untouched. No eligible task returns `task:null`. Running work is never reclaimed automatically after a crash: an interrupted run needs operator review so a completed push is not silently repeated.
 
@@ -184,3 +184,9 @@ Both add-books and edit-book enter through select-task once and continue through
 ## Native child-workflow admission
 
 The batch selectors confirm that their child workflow is runnable before reserving or claiming. Add books uses `create-book`; Edit book uses `edit-edition`. Both workflow types isolate per-item failures and continue after terminal confirmation or durable deferral. A pending registered publication is reconciled using its service execution ID, including when no local handoff is present. Workflow routing tests enforce RoboTeam’s 16,000-character limit per task prompt.
+
+### Content moderation
+
+Set `SCRIPTA_MODERATION_MODEL` to the ID of a vision-capable model enabled in the workspace Soul Gateway. The model must accept text and PNG input and return JSON verdicts. ScriptaHub uses its Ploinky service credential, and sends the selected model content from author submissions and unpublished books. Use a model approved for this material. When moderation is unavailable, book processing stops before publication.
+
+The service renders documents and artwork in its networkless processing sandbox. It records the resulting verdict against the execution and, for publication, the exact package digest. See the [moderation policy](skills/scriptahub-tasks/SKILL.md#content-moderation) for the categories and editorial guidance.

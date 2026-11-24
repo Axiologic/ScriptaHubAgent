@@ -66,7 +66,7 @@ for (const language of ['en', 'ro']) test(`HTTP proposal → Git receipt → leg
   const receipt = await accepted.json();
   assert.deepEqual(await (await submit(true)).json(), receipt, 'same submission must not create another task');
   store = new DashboardStore(dataDir);
-  const service = new TaskExecution(store, dataDir);
+  const service = new TaskExecution(store, dataDir, {moderate:async () => null});
   const task = service.claim(executor, {runId:'journey-' + language, taskType:'book-proposal'}).task;
   assert.equal(task.taskId, receipt.task.id);
   assert.equal(store.db.prepare('SELECT count(*) AS n FROM tasks').get().n, 1);

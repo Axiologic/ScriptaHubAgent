@@ -257,6 +257,9 @@ function changeCard(change) {
   });
   node.append(information);
   if (change.decision_note) node.append(element('p', change.decision_note));
+  if (change.processing?.error && change.processing.error !== change.decision_note) {
+    node.append(element('p', change.processing.error));
+  }
   if (canReview && annotations.length) {
     const actions=element('div',undefined,'dashboard-actions');
     actions.append(button('Finish review',()=>{

@@ -10,7 +10,7 @@ const sendEmail = ({recipient,subject,message}) => callAgent('emailAgent','email
 
 export async function advanceCycles(store, { apply = points, send = sendEmail, report = console.error } = {}) {
   const { db, cycles } = store;
-  const pending = db.prepare(`SELECT ac.*,t.state AS task_state FROM approval_cycles ac
+  const pending = db.prepare(`SELECT ac.*,t.state AS task_state,t.error AS task_error,t.moderation_rejected FROM approval_cycles ac
     LEFT JOIN tasks t ON t.id=ac.task_id WHERE ac.phase IN ('funding','rewarding','restoring')
     OR (ac.phase='active' AND t.state IN ('failed','cancelled','completed')) ORDER BY ac.updated_at`).all();
   for (const row of pending) {
@@ -50,8 +50,14 @@ export async function advanceCycles(store, { apply = points, send = sendEmail, r
             db.prepare("UPDATE changes SET state='accepted',decided_at=NULL,decided_by=NULL,decision_note=NULL WHERE id=?").run(row.change_id);
           }
           const restored = row.cost ? ' The debit was reversed. Check your points history for any expirations.' : '';
+          if (row.moderation_rejected) {
+            const notice = cycles.notify(row,'Edition could not be published',
+              row.task_error + restored + ' You can submit a new edition from the remaining accepted corrections.');
+            transition('rejected',row.task_error,null,notice);
+            return;
+          }
           const notice = cycles.notify(row,'Request restored',`Processing ${row.task_state === 'cancelled' ? 'was cancelled' : 'failed'}. Your request was restored.${restored} You can try again from your dashboard.`);
-          transition('retryable',row.task_state === 'cancelled' ? 'Processing was cancelled.' : 'Processing failed.',null,notice);
+          transition('retryable',row.task_error || (row.task_state === 'cancelled' ? 'Processing was cancelled.' : 'Processing failed.'),null,notice);
         });
       } else if (row.task_state === 'completed') {
         store.transaction(() => {

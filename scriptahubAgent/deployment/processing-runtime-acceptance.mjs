@@ -57,6 +57,10 @@ PY`;
   await fs.copyFile('/opt/scriptahub/runtime/skills/pdf2html/tests/fixtures/semantic.pdf',path.join(task,'source.pdf'));
   await run('pdf2html',['convert',work+'/source.pdf','--output',work+'/pdf-output']);
   if(!(await fs.readdir(path.join(task,'pdf-output'))).some(name=>name.endsWith('.html')))throw new Error('PDF conversion produced no HTML');
+  await run('book-pdf',['moderation-render',work+'/source.pdf','--output',work+'/moderation-pages']);
+  const reviewUnits=JSON.parse(await fs.readFile(path.join(task,'moderation-pages/units.json'),'utf8'));
+  const page=reviewUnits[0] && await fs.readFile(path.join(task,'moderation-pages',reviewUnits[0].image));
+  if(page?.subarray(0,8).toString('hex')!=='89504e470d0a1a0a')throw new Error('PDF moderation produced no visual evidence');
   const html='<!doctype html><html><body><main data-reader-content><h1>Acceptance</h1><p>A small test edition.</p></main></body></html>';
   await fs.writeFile(path.join(task,'baseline.html'),html);await fs.writeFile(path.join(task,'candidate.html'),html);
   await fs.writeFile(path.join(task,'print-reader.html'),html
