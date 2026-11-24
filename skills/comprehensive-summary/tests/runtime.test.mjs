@@ -47,6 +47,17 @@ test('portable CLI, startup diagnostics and argument validation', async t => {
   assert.equal(prepared.status, 0, prepared.stderr);
   assert.equal(JSON.parse(prepared.stdout).status, 'prepared');
   assert.equal(run(['status', job]).status, 0);
+  const capped = run(['prepare', input, '--minutes', '10', '--max-duration',
+    '--job-dir', path.join(dir, 'capped')]);
+  assert.equal(capped.status, 0, capped.stderr);
+  const budget = JSON.parse(capped.stdout);
+  assert.equal(budget.wordRange[0], 1);
+  assert.equal(budget.wordRange[1], budget.sourceWords - 1);
+  assert.ok(budget.targetWords < budget.wordRange[1]);
+  const timeLimited = run(['prepare', input, '--minutes', '0.5', '--max-duration',
+    '--job-dir', path.join(dir, 'time-limited')]);
+  assert.equal(timeLimited.status, 0, timeLimited.stderr);
+  assert.deepEqual(JSON.parse(timeLimited.stdout).wordRange, [1, 100]);
   assert.equal(run(['prepare']).status, 2);
   assert.equal(run(['prepare', input, '--unknown']).status, 2);
   assert.equal(run(['--help']).status, 0);

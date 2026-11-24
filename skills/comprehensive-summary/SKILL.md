@@ -16,6 +16,7 @@ Use this skill when the user wants a book summarized to a requested reading time
 
 1. Run `scripts/comprehensivesummary doctor`.
 2. Run `scripts/comprehensivesummary prepare INPUT --minutes N`. Pass `--wpm`, `--output`, or `--job-dir` only when requested or necessary. Keep the returned job path.
+   Use `--max-duration` when N is a maximum. Treat the job's target as guidance and let the available evidence determine the draft length within the returned word range.
 3. Read all of `context.json`, `chapters.json`, and each ready batch. Analyze up to `recommendedParallelAnalyses` batches concurrently and submit each candidate with batch-contract/submit-batch using the exact analysis schema from [references/job-format.md](references/job-format.md). Do not ask for per-batch confirmation.
 4. Repeat `status` until it returns `synthesis_required`. Read every analysis, merge split chapters, identify the book's central message, cluster semantic recurrence, preserve distinctive ideas, and write `synthesis.json` with the exact schema.
 5. Run `status` again. When it returns `draft_required`, read the synthesis and relevant analyses, then write `draft.json`. Produce a thematic, unified essay for an educated general reader, not a list of chapter summaries.
@@ -43,7 +44,7 @@ Use this skill when the user wants a book summarized to a requested reading time
 
 ## Completion standard
 
-Deliver only after every content chapter has a valid analysis, the evidence graph is complete, all source-bound factual tokens are supported, the main essay is within ±10% of the requested reading time, and the generated HTML passes structural validation. Keep the actual word count and estimated reading time in the technical report and hidden document metadata; do not render them in the user-facing page or handoff. LLM review and deterministic checks improve traceability but cannot guarantee perfect factual or interpretive accuracy.
+Deliver only after every content chapter has a valid analysis, the evidence graph is complete, all source-bound factual tokens are supported, the main essay fits the job's word range, and the generated HTML passes structural validation. Keep the actual word count and estimated reading time in the technical report and hidden document metadata; do not render them in the user-facing page or handoff. LLM review and deterministic checks improve traceability but cannot guarantee perfect factual or interpretive accuracy.
 
 ## Runtime
 

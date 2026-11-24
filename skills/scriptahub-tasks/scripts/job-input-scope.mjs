@@ -33,7 +33,7 @@ export async function jobInputScope(root, {skill,args,taskDirectory,virtualCwd,s
     return name;
   };
   const {values,positionals:[input]} = parseArgs({args:args.slice(1),allowPositionals:true,
-    options:{...Object.fromEntries(['batch','batch-sha256','replace-sha256','language','minutes','wpm','count','synonyms','job-dir','output','html','to','from'].map(name=>[name,{type:'string'}])),'shared-editorial':{type:'boolean'},overwrite:{type:'boolean'},help:{type:'boolean',short:'h'}}});
+    options:{...Object.fromEntries(['batch','batch-sha256','replace-sha256','language','minutes','wpm','count','synonyms','job-dir','output','html','to','from'].map(name=>[name,{type:'string'}])),'shared-editorial':{type:'boolean'},'max-duration':{type:'boolean'},overwrite:{type:'boolean'},help:{type:'boolean',short:'h'}}});
   const option = flag => values[flag.slice(2)];
   const addFile = value => { const name=relative(value); files.add(name); return name; };
   const prepare = ['prepare','analyze'].includes(args[0]);

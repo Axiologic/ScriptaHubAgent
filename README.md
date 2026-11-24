@@ -88,7 +88,7 @@ node --check site/assets/workflow-bridge.js
 
 ## Summary reading time
 
-Comprehensive summaries have a fixed target reading time of **10 minutes**. This is not configurable in settings, task instructions or the workflow. ScriptaHub supplies `processingSettings.summaryReadingMinutes` when claiming a manuscript, separately from task-authored values.
+ScriptaHub comprehensive summaries have a maximum estimated reading time of **10 minutes**. Short books can have shorter summaries based on the available content. ScriptaHub supplies `processingSettings.summaryReadingMinutes` when claiming a manuscript, separately from task-authored values.
 
 RoboTeam commits and pushes the independently validated book using the assigned robot’s Git identity and GitHub credentials. ScriptaHub checks the configured destination and confirms the remote commit before completing the task. See [robot publication](DASHBOARD.md#robot-publication) for authorization, transfers, cancellation and recovery. Reload the agent’s MCP configuration and the robot’s updated skill before a new run.
 
@@ -143,3 +143,7 @@ Requested translations are independent optional outputs. For a generated book re
 ## Shared batch runtime
 
 The editorial and translation skills import one [batch admission module](skills/scriptahub-tasks/shared/batch-io.mjs). Distribute the selected skill folders alongside `skills/scriptahub-tasks/shared/`; no generated copies or synchronization command are required. Each skill retains its schema adapter and declares its shared source dependency. Image preparation and processing admission include that dependency in source fingerprints.
+
+## Explorer toolbar
+
+The `scriptahub` application plugin opens the ScriptaHub catalogue in Explorer’s shared fullscreen modal, beside Bizanso on desktop. Its manifest targets the canonical Router-relative `index.html` document directly, avoiding the service root’s redirect during the host readiness probe, and declares the owning agent reference; it embeds no host address or credential. The host supplies the modal descriptor and owns loading, window controls and lifecycle. Mobile follows Explorer’s existing Tools menu placement. The separate settings plugin still configures repositories and publication.

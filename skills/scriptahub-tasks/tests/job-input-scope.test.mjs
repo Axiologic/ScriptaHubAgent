@@ -46,6 +46,10 @@ test('preparation scopes include only explicit job/output, and validation needs 
   const reordered=await f.scope({skill:'short-description',args:['prepare','--output=tasks/a/editorial/description.html','--job-dir','tasks/a/editorial-jobs/description','tasks/a/sources/book.html']});
   assert.deepEqual(reordered.files,scope.files);
   assert.deepEqual(reordered.trees,scope.trees);
+  const summary=await f.scope({skill:'comprehensive-summary',args:['prepare','tasks/a/sources/book.html',
+    '--minutes','10','--max-duration','--job-dir','tasks/a/editorial-jobs/summary','--output','tasks/a/editorial/summary.html']});
+  assert.deepEqual(summary.files,['editorial/summary.html','sources/book.html','sources/figure.svg']);
+  assert.deepEqual(summary.trees,['editorial-jobs/summary']);
   const validation=await f.scope({skill:'translate-html',args:['validate','tasks/a/sources/book.html','--html','tasks/a/translations/ro/full.html','--to','ro']});
   assert.equal(validation.allows('translations/ro/full.html'),true);
   assert.equal(validation.allows('translation-jobs/ro/full/job.json'),false);

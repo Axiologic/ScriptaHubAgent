@@ -2,7 +2,7 @@
 import {handleBatch} from '../../scriptahub-tasks/shared/batch-io.mjs';
 import { parseArgs } from 'node:util';
 const help =
-  'Usage: comprehensivesummary doctor | prepare INPUT --minutes N [--wpm N] [--language TAG] [--output FILE] [--job-dir DIR] | batch-contract JOB --batch NAME | submit-batch JOB --batch NAME --batch-sha256 SHA [--replace-sha256 SHA] < analysis.json | status JOB | build JOB [--overwrite] | validate SOURCE --html FILE [--language TAG]';
+  'Usage: comprehensivesummary doctor | prepare INPUT --minutes N [--max-duration] [--wpm N] [--language TAG] [--output FILE] [--job-dir DIR] | batch-contract JOB --batch NAME | submit-batch JOB --batch NAME --batch-sha256 SHA [--replace-sha256 SHA] < analysis.json | status JOB | build JOB [--overwrite] | validate SOURCE --html FILE [--language TAG]';
 try {
   if (Number(process.versions.node.split('.')[0]) < 22)
     throw Error('Node.js >=22 is required. See dependencies.md.');
@@ -29,6 +29,7 @@ try {
     prepare: {
       language: { type: 'string' },
       minutes: { type: 'string' },
+      'max-duration': { type: 'boolean' },
       wpm: { type: 'string' },
       output: { type: 'string' },
       'job-dir': { type: 'string' }
@@ -85,6 +86,7 @@ try {
   else if (command === 'prepare')
     result = await core.prepareJob(input, {
       minutes: Number(values.minutes),
+      maxDuration: values['max-duration'],
       wordsPerMinute: values.wpm === undefined ? 200 : Number(values.wpm),
       language: values.language,
       output: values.output,

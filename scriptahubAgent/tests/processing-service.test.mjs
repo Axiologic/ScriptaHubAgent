@@ -571,6 +571,30 @@ test('an already retained tree with an unreadable directory is repaired or charg
   } finally {await reopened.drain();}
 });
 
+test('a replaced input cache does not block upload, retry or conversion',async t=>{
+  const f=await fixture(t,"console.log('conversion ran')"),book=Buffer.from('manuscript'),cover=Buffer.from('cover');
+  const entries=[{path:'sources/manuscript.pdf',size:book.length,sha256:hash(book)},{path:'sources/cover.pdf',size:cover.length,sha256:hash(cover)}];
+  const manifest=Buffer.from(JSON.stringify(entries));
+  const job={executionId:'execution',jobId:'job'};
+  await f.service.prepare(owner,{...f.request,args:['convert','tasks/task/sources/manuscript.pdf'],manifestSha256:hash(manifest),manifestSize:manifest.length});
+  const uploadManifest=()=>f.service.upload(owner,{...job,kind:'manifest',offset:0,data:manifest.toString('base64')});
+  const uploadFile=(index,bytes)=>f.service.upload(owner,{...job,kind:'file',path:entries[index].path,offset:0,data:bytes.toString('base64')});
+  assert.deepEqual(uploadManifest().availableFiles,[]);
+  uploadFile(0,book);
+  const cacheRoot=f.service.cache.root;
+  await fs.rename(cacheRoot,cacheRoot+'-old');
+  assert.deepEqual(uploadManifest().availableFiles,[0],'a missing cache preserves verified uploads');
+  await fs.mkdir(cacheRoot);
+  await fs.writeFile(path.join(cacheRoot,'sentinel'),'untouched');
+  assert.deepEqual(uploadManifest().availableFiles,[0],'a replacement cache is ignored');
+  uploadFile(1,cover);
+  assert.deepEqual(uploadManifest().availableFiles,[0,1]);
+  await f.service.start(owner,job);
+  assert.equal(await terminal(f.service),'succeeded');
+  assert.equal(f.launches(),1);
+  assert.deepEqual(await fs.readdir(cacheRoot),['sentinel']);
+});
+
 test('later jobs reuse verified released outputs and upload only changed inputs, including an interrupted retry',async t=>{
   const f=await fixture(t,"console.log('status checked')"),book=Buffer.from('unchanged book'),draft=Buffer.from('first draft');
   const entries=[{path:'book.html',size:book.length,sha256:hash(book)},{path:'draft.json',size:draft.length,sha256:hash(draft)}];

@@ -5,6 +5,7 @@ import {verifyProcessingFile} from './processing-files.mjs';
 
 const LIMIT=64*1024*1024, TTL=24*60*60*1000;
 const hash=value=>crypto.createHash('sha256').update(value).digest('hex');
+export const INPUT_CACHE_CHANGED='PROCESSING_INPUT_CACHE_CHANGED';
 export function createInputCacheTable(db) {
   db.exec(`CREATE TABLE IF NOT EXISTS processing_input_cache (
     execution_id TEXT NOT NULL, executor TEXT NOT NULL, sha256 TEXT NOT NULL, size INTEGER NOT NULL,
@@ -43,8 +44,11 @@ export class ProcessingInputCache {
     this.prune();
   }
   checkRoot() {
-    const st=fs.lstatSync(this.root);
-    if(!st.isDirectory()||st.isSymbolicLink()||st.dev!==this.identity.dev||st.ino!==this.identity.ino)throw new Error('Processing input cache changed');
+    let st;
+    try {st=fs.lstatSync(this.root);} catch(error) {if(error.code!=='ENOENT')throw error;}
+    if(!st?.isDirectory()||st.isSymbolicLink()||st.dev!==this.identity.dev||st.ino!==this.identity.ino) {
+      throw Object.assign(new Error('Processing input cache changed'),{code:INPUT_CACHE_CHANGED});
+    }
   }
   rows() {return this.db.prepare('SELECT * FROM processing_input_cache ORDER BY touched').all();}
   name(row) {return hash(row.executor+'\0'+row.execution_id)+'-'+row.sha256;}
