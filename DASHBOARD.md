@@ -86,7 +86,7 @@ New manuscripts and book proposals queue immediately, without a pre-generation a
 
 On failure or cancellation, a managed task stays blocked until processing and any in-flight publication have been resolved. ScriptaHub then reverses the confirmed debit, restores the request and records a dashboard notice and an EmailAgent notification in the same local transaction. A retry is a new attempt on the same request, with a different task ID. A delayed result from an older execution cannot advance the new attempt. Failed email delivery is retried independently. A rejected editorial review is a final decision for that version.
 
-Deploy the updated UserPersisto and ScriptaHub agent checkouts together. Restart the Router so it registers the new tools and HTTP delegations. Restart both agents and reload the Add book workflow in RoboTeam. The UserPersisto service points tool defaults to the exact `agent:ScriptaHubAgent/scriptahubAgent` principal. Set `USERPERSISTO_SCRIPTAHUB_AGENT_ID` in UserPersisto when the installation assigns a different canonical identity. Stripe Checkout is shown once the existing UserPersisto billing and webhook settings are configured.
+Deploy the updated Router, UserPersisto and ScriptaHub together. ScriptaHub declares UserPersisto in its manifest and sends a stable reference, amount and reason to UserPersisto's `credits_apply` tool. Stripe Checkout is shown once the existing UserPersisto billing and webhook settings are configured.
 
 
 
@@ -187,6 +187,4 @@ The batch selectors confirm that their child workflow is runnable before reservi
 
 ### Content moderation
 
-Set `SCRIPTA_MODERATION_MODEL` to the ID of a vision-capable model enabled in the workspace Soul Gateway. The model must accept text and PNG input and return JSON verdicts. ScriptaHub uses its Ploinky service credential, and sends the selected model content from author submissions and unpublished books. Use a model approved for this material. When moderation is unavailable, book processing stops before publication.
-
-The service renders documents and artwork in its networkless processing sandbox. It records the resulting verdict against the execution and, for publication, the exact package digest. See the [moderation policy](skills/scriptahub-tasks/SKILL.md#content-moderation) for the categories and editorial guidance.
+The assigned RoboTeam model reviews the submission and the frozen publication package. The ScriptaHub service prepares the review units, renders documents and artwork in its networkless sandbox, and binds each unit to the execution and package digest. The robot uses its existing model selection, including its existing visual capability. If it cannot inspect a required image, the task is blocked with that reason. See the [moderation policy](skills/scriptahub-tasks/SKILL.md#content-moderation).

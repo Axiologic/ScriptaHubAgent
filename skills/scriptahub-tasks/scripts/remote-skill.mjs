@@ -11,7 +11,7 @@ import {openRoot,openDir,withParent,executionLock,at} from './anchored-files.mjs
 const digest = value => crypto.createHash('sha256').update(value).digest('hex');
 const id = value => typeof value === 'string' && /^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$/.test(value);
 const validPath = value => typeof value === 'string' && value && !value.startsWith('/') && !/[\\\0]/.test(value) && value.split('/').every(p => p && p !== '.' && p !== '..');
-const localControlPath=name=>['run-state/handoff.json','run-state/claimed.json'].includes(name);
+const localControlPath=name=>['run-state/handoff.json','run-state/claimed.json','run-state/editorial'].includes(name) || name.startsWith('run-state/editorial/');
 const excluded = new Set(['.git','.apikeys','credentials','credential','node_modules']);
 const protectedPath = name => name.split('/').some(part=>excluded.has(part)||part==='.env'||part.startsWith('.env.')) || name === 'run-state/remote-processing' || name.startsWith('run-state/remote-processing/');
 const sourceExcluded = new Set(['node_modules','.cache','.venv','__pycache__','.pytest_cache','target','output','cache','.theatrical-audio','hf-cache','.DS_Store','.idea','.git','.apikeys','audio.config.json']);

@@ -98,6 +98,7 @@ test('the flow helper drains its fixed batch sequentially, preserving claims, ev
   assert.deepEqual(initialHandoff.context.task,JSON.parse(JSON.stringify(first.task)));
   assert.equal(initialHandoff.context.claimedPath,first.claimedPath);
   const acceptedHandoff=JSON.stringify({...initialHandoff,step:'process-content',context:{...initialHandoff.context,
+    notes:'x'.repeat(128*1024),
     editorialSource:{path:first.taskDirectory+'/sources/book.html',sha256:'a'.repeat(64),language:'ro'},
     editorialResults:{summary:{path:first.taskDirectory+'/editorial/summary.html',sha256:'b'.repeat(64)}}}})+'\n';
   await fs.writeFile(path.join(f.root,first.handoffPath),acceptedHandoff);

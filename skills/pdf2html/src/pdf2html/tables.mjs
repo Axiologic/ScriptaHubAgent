@@ -3,6 +3,43 @@ import { text, blockWords, setStyle } from './dom.mjs';
 const min = (items, key) => Math.min(...items.map(item => item[key]));
 const max = (items, key) => Math.max(...items.map(item => item[key]));
 
+export function preserveUnconfirmedTableText($, section, sourceGrids) {
+  const matched = new Set();
+  const sequence = values => tokens(values.join(' ')).join(' ');
+  for (const table of $(section).find('table').toArray()) {
+    if ($(table).hasClass('toc-table')) continue;
+    const rows = $(table).find('tr').toArray().filter(row => $(row).closest('table')[0] === table);
+    const cells = rows.flatMap(row => $(row).children('th,td').toArray());
+    const content = sequence(cells.map(text));
+    const box = table.attribs['data-pdf-box']?.split(',').map(Number);
+    const grid = sourceGrids.find(candidate => !matched.has(candidate) && (
+      rows.length === candidate.rows && content && content === sequence(candidate.cells.map(cell => cell.text))
+      || box?.length === 4 && box.every(Number.isFinite)
+        && Math.abs(box[0] - candidate.leftPt) <= 3 && Math.abs(box[2] - candidate.leftPt - candidate.widthPt) <= 3
+        && Math.abs(box[1] - candidate.topPt) <= 3 && Math.abs(box[3] - candidate.bottomPt) <= 3
+    ));
+    if (grid) {
+      matched.add(grid);
+      continue;
+    }
+    if (!rows.length || $(table).find('table').length) continue;
+
+    const group = $('<div data-pdf-table-uncertain></div>');
+    const caption = $(table).children('caption').first();
+    if (caption.length) group.append($('<p></p>').append(caption.contents()));
+    for (const row of rows) {
+      const items = $(row).children('th,td').toArray();
+      const line = $(items).children('p,div,ul,ol,blockquote,figure').length ? $('<div></div>') : $('<p></p>');
+      for (const [index, cell] of items.entries()) {
+        if (index) line.append(' ');
+        line.append($(cell).contents());
+      }
+      if (line.contents().length) group.append(line);
+    }
+    $(table).replaceWith(group);
+  }
+}
+
 export function sourceBorder(strokes, side, coordinate, start, end) {
   const candidates = [];
   for (const stroke of strokes) {

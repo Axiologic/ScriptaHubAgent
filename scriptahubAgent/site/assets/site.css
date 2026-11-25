@@ -502,7 +502,7 @@ button, select { cursor: pointer; }
 }
 
 .workflow-page { padding-bottom: 0; }
-.workflow-hero { display: grid; grid-template-columns: minmax(0, 1fr) minmax(250px, .46fr); gap: clamp(28px, 5vw, 76px); padding: clamp(28px, 5vw, 64px) 0 30px; border-bottom: 1px solid var(--line); }
+.workflow-hero { display: grid; grid-template-columns: minmax(0, 1fr) minmax(250px, .46fr); gap: clamp(28px, 5vw, 76px); padding: clamp(28px, 5vw, 64px) 0 30px; }
 .workflow-hero h1 { max-width: 15ch; margin: 0; font-size: clamp(2.35rem, 5.2vw, 5.4rem); letter-spacing: -.065em; line-height: .94; }
 .workflow-hero .lead { align-self: end; margin: 0; color: var(--content); line-height: 1.62; text-align: justify; hyphens: auto; }
 .workflow-layout { display: grid; grid-template-columns: minmax(0, 1fr) minmax(240px, .38fr); align-items: start; gap: clamp(28px, 4vw, 62px); padding: 30px 0 50px; }
@@ -1018,10 +1018,19 @@ button, select { cursor: pointer; }
   :root .site-header .theme-switcher button { width: 28px; min-width: 28px; height: 28px; }
 }
 
-/* Book proposals: editorial fields beside a dedicated attachment panel. */
+/* Creation title, method cards and forms share one content column. */
+[data-workflow-page="create"] [data-workflow-content] {
+  --create-section-gap: clamp(14px, 1.6vw, 20px);
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: var(--create-section-gap);
+  width: min(100%, 960px);
+  margin-inline: auto;
+  padding-block: clamp(10px, 1.2vw, 16px) clamp(24px, 3vw, 40px);
+}
 [data-workflow-page="create"] .workflow-hero {
   grid-template-columns: minmax(0, 1fr);
-  padding: clamp(26px, 3vw, 42px) 0 24px;
+  padding: 0;
 }
 html[lang] [data-workflow-page="create"] .workflow-hero h1 {
   max-width: 24ch;
@@ -1032,7 +1041,7 @@ html[lang] [data-workflow-page="create"] .workflow-hero h1 {
 }
 [data-workflow-page="create"] .create-workflow-layout {
   grid-template-columns: minmax(0, 1fr);
-  padding: 24px 0 40px;
+  padding: 0;
 }
 .create-workflow-form { min-width: 0; }
 [data-workflow-page="create"] .create-workflow-form.workflow-form {
@@ -1777,7 +1786,7 @@ body[data-book-workflow] .animation-contribution>.workflow-hero{padding-bottom:8
   grid-template-areas: "title" "description" "instructions" "cover" "files";
   gap: 0;
 }
-[data-workflow-page="create"] .create-form-grid > :is(.form-field, .form-file-field),
+[data-workflow-page="create"] .create-form-grid > .form-field,
 [data-workflow-page="create"] .instruction-picker {
   margin: 0;
   padding: 16px 0;
@@ -1823,17 +1832,19 @@ body[data-book-workflow] .animation-contribution>.workflow-hero{padding-bottom:8
 .cover-upload-remove:hover { border-color: var(--green); }
 .cover-upload [hidden], .create-cover-panel [data-cover-generated][hidden] { display: none; }
 
-/* Create a book: a clear brief, optional sources, then editorial and visual direction. */
+/* Create a book: group the brief, editorial direction and cover. */
 [data-workflow-page="create"] .create-form-grid {
-  grid-template-columns: minmax(0, 2fr) minmax(240px, 1fr);
-  grid-template-areas: "brief files" "instructions instructions" "cover cover";
-  gap: 20px;
+  grid-template-columns: minmax(0, 1fr);
+  gap: var(--create-section-gap);
   align-items: stretch;
+}
+[data-workflow-page="create"] .create-form-footer {
+  margin-top: var(--create-section-gap);
+  padding-top: var(--create-section-gap);
 }
 .create-book-brief,
 .create-instructions-body,
-.cover-upload-body,
-[data-workflow-page="create"] .create-form-grid > .form-file-field {
+.cover-upload-body {
   min-width: 0;
   padding: clamp(18px, 2vw, 28px);
   border: 1px solid var(--line);
@@ -1874,20 +1885,60 @@ body[data-book-workflow] .animation-contribution>.workflow-hero{padding-bottom:8
   gap: 22px 24px;
 }
 [data-workflow-page="create"] .instruction-picker { padding: 0; border: 0; }
-[data-workflow-page="create"] .create-form-grid > .form-file-field {
-  margin: 0;
-  grid-template-rows: auto 1fr;
-  align-content: start;
-  gap: 16px;
-  background: var(--panel);
-  border-style: dashed;
-}
 [data-workflow-page="create"] .form-file-picker {
   justify-content: center;
   align-items: flex-start;
   padding: 10px;
   border: 0;
   background: transparent;
+}
+.create-book-brief > .form-file-field {
+  align-self: start;
+  grid-template-rows: none;
+  gap: 6px;
+}
+.manuscript-file-caption {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 2px 8px;
+}
+[data-create-mode="manuscript"] .create-book-brief :is(.form-field > span, .form-file-label) {
+  line-height: 1.4;
+}
+.create-book-brief > .form-file-field .form-file-picker {
+  min-height: var(--control-height);
+  padding: 0 12px;
+  flex-direction: row;
+  align-items: center;
+  justify-content: flex-start;
+  border: 1px solid var(--line);
+  border-radius: var(--control-radius);
+  background: var(--field);
+  color: var(--ink);
+  font-family: var(--control-font-family);
+  font-size: var(--control-font-size);
+  font-weight: 400;
+}
+.create-book-brief > .form-file-field:is(:hover, :focus-within) .form-file-picker {
+  border-color: var(--green);
+  background: var(--field);
+  box-shadow: none;
+}
+.create-book-brief .form-file-input:focus-visible ~ .form-file-picker {
+  outline: 2px solid var(--green);
+  outline-offset: 3px;
+}
+.create-book-brief .manuscript-file-caption .form-file-hint {
+  font-size: .72rem;
+  line-height: 1.2;
+}
+.create-book-brief .form-file-selection ul { gap: 4px; }
+.create-book-brief .form-file-selection li {
+  padding: 0;
+  border: 0;
+  background: transparent;
+  font-size: .8rem;
 }
 [data-workflow-page="create"] .form-file-selection:empty { display: none; }
 [data-workflow-page="create"] .create-cover-field .cover-note {
@@ -1909,11 +1960,6 @@ body[data-book-workflow] .animation-contribution>.workflow-hero{padding-bottom:8
   [data-workflow-page="create"] .create-instructions-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 }
 @media (max-width: 700px) {
-  [data-workflow-page="create"] .create-form-grid {
-    grid-template-columns: minmax(0, 1fr);
-    grid-template-areas: "brief" "files" "instructions" "cover";
-    gap: 16px;
-  }
   [data-workflow-page="create"] .create-instructions-grid { grid-template-columns: minmax(0, 1fr); gap: 18px; }
   [data-workflow-page="create"] .form-file-picker { gap: 14px; }
   .create-cover-layout { grid-template-columns: minmax(0, 1fr); gap: 16px; }
@@ -1925,4 +1971,61 @@ body[data-book-workflow] .animation-contribution>.workflow-hero{padding-bottom:8
 /* White controls contrast with the tinted creation sections in light themes. */
 :root:not(:is([data-theme="dark"], [data-theme="dark-orange"])) :is(.create-book-brief, .create-cover-panel) {
   --field: #ffffff;
+}
+
+.create-methods,
+[data-create-mode="manuscript"] .create-book-brief {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--create-section-gap);
+}
+.create-methods { display: grid; }
+:root body .site-shell .create-methods .create-method {
+  display: flex;
+  align-items: flex-start;
+  justify-content: flex-start;
+  gap: 12px;
+  min-width: 0;
+  height: auto;
+  padding: clamp(14px, 1.8vw, 20px);
+  text-align: start;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: var(--panel);
+  color: var(--ink);
+  cursor: pointer;
+}
+:root body .site-shell .create-methods .create-method:is(:hover, [aria-expanded="true"]) { border-color: var(--green); }
+:root body .site-shell .create-methods .create-method[aria-expanded="true"] {
+  background: color-mix(in srgb, var(--green) 8%, var(--panel));
+  box-shadow: inset 0 -2px var(--green);
+}
+.create-method > svg {
+  flex: none;
+  width: 22px;
+  height: 22px;
+  fill: none;
+  stroke: var(--green);
+  stroke-width: 1.6;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+.create-method > span { display: grid; gap: 4px; }
+.create-method strong { font-size: .95rem; font-weight: 660; }
+.create-method strong + span { color: var(--muted); font-size: .82rem; line-height: 1.45; }
+.create-workflow-layout[data-create-mode][hidden] { display: none; }
+[data-workflow-page="create"] [data-create-mode="manuscript"] .create-form-grid {
+  grid-template-areas: "brief" "cover";
+}
+[data-create-mode="manuscript"] .create-book-brief {
+  grid-template-areas: "title files";
+  align-items: start;
+}
+[data-workflow-page="create"] [data-create-mode="book-proposal"] .create-form-grid {
+  grid-template-areas: "brief" "instructions" "cover" "cost";
+}
+.create-cost { grid-area: cost; margin: 0; }
+@media (max-width: 700px) {
+  .create-methods,
+  [data-create-mode="manuscript"] .create-book-brief { grid-template-columns: minmax(0, 1fr); }
+  [data-create-mode="manuscript"] .create-book-brief { grid-template-areas: "title" "files"; }
 }

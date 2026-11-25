@@ -1,3 +1,4 @@
+import {defaultPoints} from '../points-policy.mjs';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs/promises';
@@ -67,7 +68,7 @@ test('a description without attachments reaches the Add book executor with its i
   const endpoint = `http://127.0.0.1:${server.address().port}/api/submissions`;
   const send = (values, withFile = false) => {
     const body = new FormData();
-    body.set('metadata', JSON.stringify({ submissionId: crypto.randomUUID(), kind: 'book-proposal', agreementVersion: '2026-09-10', agreementAccepted: true, language: 'ro', values }));
+    body.set('metadata', JSON.stringify({ submissionId: crypto.randomUUID(), kind: 'book-proposal', confirmedCost:defaultPoints.promptBookCost, agreementVersion: '2026-09-10', agreementAccepted: true, language: 'ro', values }));
     if (withFile) body.set('documents', new File(['%PDF-1.7\npage'], 'test.pdf'));
     return fetch(endpoint, { method: 'POST', body });
   };
@@ -102,7 +103,7 @@ test('an uploaded cover stays separate from manuscripts and reaches the executor
   const png=Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+jXioAAAAASUVORK5CYII=','base64');
   const makeBody=(id=crypto.randomUUID(),{kind='book-proposal',mode='upload',image=new File([png],'cover.png'),duplicate=false}={})=>{
     const body=new FormData();
-    body.set('metadata',JSON.stringify({submissionId:id,kind,agreementVersion:'2026-09-10',agreementAccepted:true,language:'ro',values:{description:'O carte despre grădini.',coverMode:mode}}));
+    body.set('metadata',JSON.stringify({submissionId:id,kind,confirmedCost:defaultPoints.promptBookCost,agreementVersion:'2026-09-10',agreementAccepted:true,language:'ro',values:{...(kind==='manuscript' ? {readerTypography:'readable'} : {description:'O carte despre grădini.'}),coverMode:mode}}));
     if(image)body.append('coverImage',image);
     if(duplicate)body.append('coverImage',image);
     if(kind==='manuscript')body.append('documents',new File(['%PDF-1.7\nsource'],'source.pdf'));
@@ -131,4 +132,32 @@ test('an uploaded cover stays separate from manuscripts and reaches the executor
     {image:new File([new Uint8Array(10_000_001)],'cover.png')},
     {kind:'animation'},
   ])assert.equal((await send(makeBody(undefined,options))).status,400);
+});
+
+test('intake enforces the configured prompt cost and limits manuscript changes to presentation', async t => {
+  const root=await fs.mkdtemp(path.join(os.tmpdir(),'scripta-create-modes-'));
+  const user={id:'user:alice',email:'alice@example.test'};
+  const site=createSiteServer(root,{dataDir:root,manageApprovals:true,verifyUser:async()=>user});
+  await new Promise(resolve=>site.listen(0,'127.0.0.1',resolve));
+  t.after(async()=>{await new Promise(resolve=>site.close(resolve));await fs.rm(root,{recursive:true,force:true});});
+  const base=`http://127.0.0.1:${site.address().port}`;
+  const send=(kind,values,confirmedCost)=>{
+    const body=new FormData();
+    body.set('metadata',JSON.stringify({submissionId:crypto.randomUUID(),kind,values,confirmedCost,
+      agreementVersion:'2026-09-10',agreementAccepted:true}));
+    if (kind==='manuscript') body.set('documents',new File(['%PDF-1.7'],'manuscript.pdf'));
+    return fetch(base+'/api/submissions',{method:'POST',body});
+  };
+  assert.equal((await send('manuscript',{prompt:'Rewrite the book'})).status,400);
+  assert.equal((await send('book-proposal',{description:'Write a handbook'},0)).status,409);
+  const source=await send('manuscript',{titles:'Original manuscript',readerLayout:'reflow'});
+  const prompt=await send('book-proposal',{description:'Write a handbook'},defaultPoints.promptBookCost);
+  assert.equal(source.status,202);
+  assert.equal(prompt.status,202);
+  const receipts=await Promise.all([source.json(),prompt.json()]);
+  const {books}=await fetch(base+'/api/dashboard').then(result=>result.json());
+  const rows=receipts.map(receipt=>books.find(book=>book.id===receipt.bookId).creation);
+  assert.deepEqual(rows.map(({kind,state,cycle})=>[kind,state,cycle.phase,cycle.cost]),[
+    ['manuscript','queued','active',0],['book-proposal','queued','funding',defaultPoints.promptBookCost]
+  ]);
 });

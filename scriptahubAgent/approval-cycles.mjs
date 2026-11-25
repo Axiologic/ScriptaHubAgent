@@ -100,7 +100,7 @@ export class ApprovalCycles {
     if(row.kind==='edition' && this.db.prepare(`SELECT 1 FROM tasks t JOIN changes c ON c.id=t.change_id
       WHERE c.book_id=? AND t.state IN ('queued','running','stop_requested')`).get(row.book_id)) fail('This book already has a pending or running edition task.');
     const nextAttempt = row.attempt + 1;
-    const phase = ['fork','edition'].includes(row.kind) ? 'funding' : 'active';
+    const phase = row.kind === 'edition' || row.cost > 0 ? 'funding' : 'active';
     this.db.prepare(`UPDATE approval_cycles SET attempt=?,phase=?,task_id=NULL,issue=NULL,missing=NULL,
       reviewer=NULL,notification_id=NULL,updated_at=? WHERE id=?`).run(nextAttempt,phase,now(),row.id);
     if (row.kind === 'edition') {

@@ -82,14 +82,14 @@
   Object.entries(agreementSteps).forEach(([code, words]) => { text[code].contractItems[0] = words[5]; });
 
   const createFieldLabels = {
-    en: { title: "Proposed title", titleHint: "A working title (optional)", chooseFiles: "Choose attachments", filesHint: "Attach a manuscript or reference material to support your proposal (optional)." },
-    fr: { title: "Titre proposé", titleHint: "Un titre de travail (facultatif)", chooseFiles: "Choisir les pièces jointes", filesHint: "Joignez un manuscrit ou des documents de référence à votre proposition (facultatif)." },
-    de: { title: "Vorgeschlagener Titel", titleHint: "Ein Arbeitstitel (optional)", chooseFiles: "Anhänge auswählen", filesHint: "Fügen Sie ein Manuskript oder Referenzmaterial hinzu (optional)." },
-    es: { title: "Título propuesto", titleHint: "Un título provisional (opcional)", chooseFiles: "Elegir adjuntos", filesHint: "Adjunta un manuscrito o material de referencia a tu propuesta (opcional)." },
-    pt: { title: "Título proposto", titleHint: "Um título provisório (opcional)", chooseFiles: "Escolher anexos", filesHint: "Anexe um manuscrito ou material de referência à proposta (opcional)." },
-    it: { title: "Titolo proposto", titleHint: "Un titolo provvisorio (facoltativo)", chooseFiles: "Scegli allegati", filesHint: "Allega un manoscritto o materiale di riferimento alla proposta (facoltativo)." },
-    ro: { title: "Titlu propus", titleHint: "Un titlu de lucru (opțional)", chooseFiles: "Alege atașamente", filesHint: "Atașează un manuscris sau materiale de referință pentru propunerea ta (opțional)." },
-    pl: { title: "Proponowany tytuł", titleHint: "Tytuł roboczy (opcjonalnie)", chooseFiles: "Wybierz załączniki", filesHint: "Dodaj rękopis lub materiały źródłowe do propozycji (opcjonalnie)." },
+    en: { title: "Proposed title", titleHint: "A working title (optional)", chooseFiles: "Choose attachments" },
+    fr: { title: "Titre proposé", titleHint: "Un titre de travail (facultatif)", chooseFiles: "Choisir les pièces jointes" },
+    de: { title: "Vorgeschlagener Titel", titleHint: "Ein Arbeitstitel (optional)", chooseFiles: "Anhänge auswählen" },
+    es: { title: "Título propuesto", titleHint: "Un título provisional (opcional)", chooseFiles: "Elegir adjuntos" },
+    pt: { title: "Título proposto", titleHint: "Um título provisório (opcional)", chooseFiles: "Escolher anexos" },
+    it: { title: "Titolo proposto", titleHint: "Un titolo provvisorio (facoltativo)", chooseFiles: "Scegli allegati" },
+    ro: { title: "Titlu propus", titleHint: "Un titlu de lucru (opțional)", chooseFiles: "Alege atașamente" },
+    pl: { title: "Proponowany tytuł", titleHint: "Tytuł roboczy (opcjonalnie)", chooseFiles: "Wybierz załączniki" },
   };
 
   const instructionFields = ["audience", "purpose", "scope", "structure", "viewpoints", "qualityCriteria"];
@@ -336,18 +336,18 @@
     it: ["Usa una tua immagine per la copertina", "Crea con l’IA o carica la tua immagine.", "Scegli un’immagine", "Rimuovi immagine", "La copertina scelta", "Questa immagine sarà usata come copertina. Rimuovila se vuoi crearne una nuova.", "Scegli un’immagine PNG, JPG o WebP che si apra correttamente.", "Scegli un’immagine di massimo 10 MB.", "Preparazione dell’immagine…", "PNG, JPG o WebP, fino a 10 MB. La tua immagine sarà usata così com’è."],
     pl: ["Użyj własnego obrazu na okładkę", "Stwórz z AI lub prześlij swój obraz.", "Wybierz obraz", "Usuń obraz", "Wybrana okładka", "Ten obraz zostanie użyty jako okładka. Usuń go, jeśli chcesz utworzyć nową.", "Wybierz obraz PNG, JPG lub WebP, który otwiera się poprawnie.", "Wybierz obraz o rozmiarze do 10 MB.", "Przygotowywanie obrazu…", "PNG, JPG lub WebP, do 10 MB. Twój obraz zostanie użyty bez zmian."],
   };
-  function bookCover(lang) {
+  function bookCover(lang, panelId) {
     const copy = coverCopy[lang];
     const upload = coverUploadCopy[lang];
     return bookInstructions(copy[0], copy.slice(2, 5), lang, {
-      fields: coverFields, options: coverOptions[lang].map(row => row.split(";")), hints: copy.slice(5, 8), cover: true,
+      fields: coverFields, idPrefix: panelId, options: coverOptions[lang].map(row => row.split(";")), hints: copy.slice(5, 8), cover: true,
       note: upload[1], description: textarea(copy[8], "coverDescription", copy[9], false, "cover-description-field", 4000),
       upload: `<div class="cover-upload">
-        <span class="form-file-label" id="cover-image-label">${escape(upload[0])}</span>
+        <span class="form-file-label" id="${panelId}-cover-image-label">${escape(upload[0])}</span>
         <div class="cover-upload-body">
-          <label class="form-file-field cover-upload-picker"><input class="form-file-input" type="file" name="coverImage" accept="image/png,image/jpeg,image/webp,.png,.jpg,.jpeg,.webp" aria-labelledby="cover-image-label" aria-describedby="cover-image-hint cover-image-status"><span class="form-file-picker"><span id="cover-image-hint" class="form-file-hint">${escape(upload[9])}</span><span class="form-file-button"><svg aria-hidden="true" viewBox="0 0 24 24"><path d="M8.5 12.8 14 7.3a3.2 3.2 0 0 1 4.5 4.5l-7.1 7.1a5 5 0 0 1-7.1-7.1l7.5-7.5"/></svg>${escape(upload[2])}</span></span></label>
+          <label class="form-file-field cover-upload-picker"><input class="form-file-input" type="file" name="coverImage" accept="image/png,image/jpeg,image/webp,.png,.jpg,.jpeg,.webp" aria-labelledby="${panelId}-cover-image-label" aria-describedby="${panelId}-cover-image-hint ${panelId}-cover-image-status"><span class="form-file-picker"><span id="${panelId}-cover-image-hint" class="form-file-hint">${escape(upload[9])}</span><span class="form-file-button"><svg aria-hidden="true" viewBox="0 0 24 24"><path d="M8.5 12.8 14 7.3a3.2 3.2 0 0 1 4.5 4.5l-7.1 7.1a5 5 0 0 1-7.1-7.1l7.5-7.5"/></svg>${escape(upload[2])}</span></span></label>
           <div class="cover-upload-preview" hidden><img alt="${escape(upload[4])}"><span data-cover-filename></span></div>
-          <p id="cover-image-status" class="cover-upload-status" role="status"></p>
+          <p id="${panelId}-cover-image-status" class="cover-upload-status" role="status"></p>
           <button type="button" class="cover-upload-remove" hidden>${escape(upload[3])}</button>
         </div>
       </div>`,
@@ -443,7 +443,7 @@
     const hints = config.hints || instructionHints[lang];
     const [done, close, , custom, add] = instructionPickerCopy[lang];
     const fields = names.map((name, index) => {
-      const id = `book-instruction-${name}`;
+      const id = `${config.idPrefix || "book"}-instruction-${name}`;
       const label = escape(labels[index]);
       const choices = options[index].map(option => `<label class="instruction-choice"><input type="checkbox" name="${name}" value="${escape(option)}"><span>${escape(option)}</span></label>`).join("");
       return `<div class="instruction-picker" data-instruction-picker="${name}" data-instruction-hint="${escape(hints[index])}">
@@ -642,7 +642,7 @@
     form._draftFiles = draft.files;
     return draft.values;
   }
-  async function submitContribution(subject, lines, lang, form, expectedNames = [], data) {
+  async function submitContribution(subject, lines, lang, form, expectedNames = [], data, kind) {
     if(!form.reportValidity())return;
     const status=form.querySelector('[data-workflow-status]'),button=form.querySelector('button[type="submit"]');
     const accepted=form.querySelector('[data-contract-accept]')?.checked===true;
@@ -652,7 +652,7 @@
       if(!files.length && expectedNames.length) files=await ScriptaContributionBridge.loadDraftFiles(params().get('draft'),expectedNames);
       const values=Object.fromEntries([...(data || new FormData(form))].filter(([,value])=>typeof value==='string'));
       const coverImage=form.elements.coverImage?.files[0];
-      const submitted=await ScriptaContributionBridge.submitContribution({subject,lines,values,language:lang,returnUrl:location.href,agreementAccepted:accepted,coverImage},files,status,button);
+      const submitted=await ScriptaContributionBridge.submitContribution({subject,lines,values,language:lang,returnUrl:location.href,agreementAccepted:accepted,coverImage,kind},files,status,button);
       if(submitted && params().get('draft')) {
         sessionStorage.removeItem(draftPrefix+params().get('draft'));
         await ScriptaContributionBridge.deleteDraftFiles(params().get('draft')).catch(()=>{});
@@ -682,7 +682,7 @@
   function creationData(form, lang) {
     const data = new FormData(form);
     const description = String(data.get("description") || "").trim();
-    data.set("description", description);
+    if (data.has("description")) data.set("description", description);
     const sections = pickerFields.flatMap((name, index) => {
       const value = data.getAll(name).join("; ");
       if (!value) return [];
@@ -692,81 +692,156 @@
     if (data.get('coverMode') === 'upload') {
       for (const name of [...coverFields, 'coverDescription']) data.delete(name);
     } else data.set("coverDescription", String(data.get("coverDescription") || "").trim());
-    data.set("prompt", [description, ...sections].join("\n\n"));
+    if (data.has("description")) data.set("prompt", [description, ...sections].join("\n\n"));
     return data;
   }
-  function renderCreate(lang, fork = false) {
-    const book = fork ? activeBook() : null;
-    const labels = proposalLabels[lang];
-    const words = fork ? {...text[lang], createTitle: labels[0], createKicker: "Fork", prompt: labels[2], promptHint: labels[3], createSubject: "ScriptaHub derived book proposal"} : text[lang];
-    if (fork && !book) { root.innerHTML = pageHero("Fork", words.missingBook); return; }
-    const fields = createFieldLabels[lang];
-    const instructionNames = instructionLabels[lang];
-    const [descriptionLabel, descriptionHint] = descriptionCopy[lang];
-    document.title = `${words.createTitle} · ScriptaHub`;
-
-    root.innerHTML = `${fork ? backToBook(book, lang) : ""}${pageHero(words.createKicker, words.createTitle, fork ? labels[1] : "")}${fork ? `<div class="fork-source">${compactBookContext(book, lang, words, false)}</div>` : ""}<section class="workflow-layout create-workflow-layout"><form class="workflow-form create-workflow-form" data-workflow-form><div class="form-grid create-form-grid">
-      ${fork ? "" : '<div class="create-book-brief">'}${field(fields.title, "titles", "text", fork, fields.titleHint, false, "create-title-field")}
-      ${fork ? "" : `${textarea(descriptionLabel, "description", descriptionHint, true, "create-description-field")}</div>`}
-      ${fork ? textarea(words.prompt, "prompt", words.promptHint, true, "create-instructions-field") : `<section class="create-preferences-panel">${bookInstructions(words.prompt, instructionNames, lang)}</section>`}
-      ${fork ? "" : `<input type="hidden" name="coverMode" value="generate"><section class="create-cover-panel">${bookCover(lang)}</section>`}
-      ${fork ? `<p data-fork-cost class="workflow-note" aria-live="polite"></p><input type="file" name="documents" hidden>` : `<label class="form-file-field"><input class="form-file-input" type="file" name="documents" multiple aria-label="${escape(words.files)}"><span class="form-file-label">${escape(words.files)}</span><span class="form-file-picker"><span class="form-file-hint">${escape(fields.filesHint)}</span><span class="form-file-button"><svg aria-hidden="true" viewBox="0 0 24 24"><path d="M8.5 12.8 14 7.3a3.2 3.2 0 0 1 4.5 4.5l-7.1 7.1a5 5 0 0 1-7.1-7.1l7.5-7.5"/></svg>${escape(fields.chooseFiles)}</span><span class="form-file-selection" data-file-selection aria-live="polite"></span></span></label>`}
-      </div><div class="create-form-footer"><p class="workflow-note">${escape(ScriptaContributionBridge.note(lang))}</p><button class="workflow-submit" type="submit">${escape(submitLabels[lang])}<svg aria-hidden="true" viewBox="0 0 24 24"><path d="M4 12h16m-6-6 6 6-6 6"/></svg></button></div><p class="workflow-status" data-workflow-status aria-live="polite"></p></form></section>`;
-    const form = root.querySelector("form");
-    const saved = restoreDraft(form);
-    let forkCost;
-    if (fork) {
-      const notice = form.querySelector('[data-fork-cost]');
-      notice.textContent = lang === 'ro' ? 'Se încarcă prețul…' : 'Loading credit cost…';
-      fetch(new URL('api/dashboard/points-policy',siteRoot),{cache:'no-store'}).then(response=>{
-        if (!response.ok) throw new Error();
-        return response.json();
-      }).then(policy=>{
-        forkCost = policy.forkCost;
-        notice.textContent = lang === 'ro' ? `Cost: ${forkCost} ${forkCost === 1 ? 'credit' : 'credite'}` : `Cost: ${forkCost} ${forkCost === 1 ? 'credit' : 'credits'}`;
-      }).catch(()=>{notice.textContent = lang === 'ro' ? 'Costul nu este disponibil. Reîncarcă pagina.' : 'The cost is unavailable. Reload this page.';});
+  const creationCopy = {
+    en: {
+      title: "Create a book", manuscript: "Upload a manuscript", prompt: "Generate with AI",
+      manuscriptHint: "Publish a PDF or Word manuscript. Adjust its presentation and earn credits after publication.",
+      promptHint: "Describe your book and give the AI editorial direction. Generation uses credits.",
+      layout: "Reader layout", sourceLayout: "Standard reader layout", reflow: "Fit tables and images to the screen",
+      typography: "Typography", sourceType: "Standard reader typography", readable: "Use reader-friendly spacing and type size",
+      displayedTitle: "Display title (optional)", creditCost: count => `Cost to generate: ${count} ${count === 1 ? 'credit' : 'credits'}`,
+      unavailable: "The credit cost is unavailable. Reload to try again.", loading: "Loading credit cost…",
+      sendManuscript: "Submit manuscript", sendPrompt: "Generate book",
+    },
+    ro: {
+      title: "Creează o carte", manuscript: "Încarcă un manuscris", prompt: "Generează cu AI",
+      manuscriptHint: "Publică un manuscris PDF sau Word. Ajustează afișarea și primești credite după publicare.",
+      promptHint: "Descrie cartea și dă-i modelului indicații editoriale. Generarea consumă credite.",
+      layout: "Afișarea în cititor", sourceLayout: "Aranjare standard", reflow: "Adaptează tabelele și imaginile la ecran",
+      typography: "Tipografie", sourceType: "Tipografie standard", readable: "Folosește caractere și spațiere pentru citire pe ecran",
+      displayedTitle: "Titlu afișat (opțional)", creditCost: count => `Cost de generare: ${count} ${count === 1 ? 'credit' : 'credite'}`,
+      unavailable: "Costul în credite nu este disponibil. Reîncarcă pagina.", loading: "Se încarcă costul în credite…",
+      sendManuscript: "Trimite manuscrisul", sendPrompt: "Generează cartea",
     }
-    if (!fork) {
-      bindInstructionPickers(form, lang, saved);
-      bindCoverUpload(form, lang);
-    }
-    prepareContributionForm(form,lang);
-    const documents = form.elements.documents;
-    const fileSelection = form.querySelector("[data-file-selection]");
-    const updateFileSelection = () => {
-      const names = documents.files.length ? [...documents.files].map((file) => file.name) : (form._draftFiles || []);
-      fileSelection.replaceChildren();
-      if (!names.length) return;
-      const list = document.createElement("ul");
-      names.forEach((name) => {
-        const item = document.createElement("li");
-        item.textContent = name;
-        item.title = name;
-        list.append(item);
-      });
-      fileSelection.append(list);
-    };
-    if (!fork) {
-      documents.addEventListener("change", () => { form._draftFiles = []; updateFileSelection(); });
-      updateFileSelection();
-    }
-
-    form.addEventListener("submit", (event) => {
-      event.preventDefault();
-      if (!form.reportValidity()) return;
-      const data = fork ? new FormData(form) : creationData(form, lang);
-      if (fork) {
-        if (!Number.isSafeInteger(forkCost)) return;
-        data.set('sourceEdition',book.currentEdition || book.animation?.edition || 'edition-1');
-        data.set('confirmedCost',String(forkCost));
+  };
+  const costNotice = (form, lang, key) => {
+    const copy = creationCopy[lang] || creationCopy.en;
+    const notice = form.querySelector('[data-creation-cost]');
+    let cost;
+    async function load() {
+      form.dataset.contributionReady = 'false';
+      form.updateContributionState?.();
+      notice.textContent = copy.loading;
+      try {
+        const response = await fetch(new URL('api/dashboard/points-policy',siteRoot),{cache:'no-store'});
+        if (!response.ok) throw Error();
+        cost = (await response.json())[key];
+        if (!Number.isSafeInteger(cost) || cost < 0) throw Error();
+        notice.textContent = copy.creditCost(cost);
+        form.dataset.contributionReady = 'true';
+      } catch {
+        cost = undefined;
+        notice.textContent = copy.unavailable;
       }
-      const files = fork ? [] : form.elements.documents.files.length ? [...form.elements.documents.files].map((file) => file.name) : (form._draftFiles || []);
-      const lines = [
-        ...(fork ? [`Source book ID: ${book.id}`, `Source book: ${book.title.en}`, `Source directory: ${book.directory}`, `Source edition: ${book.currentEdition || book.animation?.edition || "Current published edition"}`, ""] : []),
-        `Selected documents: ${files.join(", ") || "None"}`, "", "PROPOSED TITLE", data.get("titles") || "", "", "BOOK INSTRUCTIONS", data.get("prompt") || "", "", `Interface language: ${lang}`,
-      ];
-      submitContribution(words.createSubject, lines, lang, form, files, data);
-    });
+      form.updateContributionState?.();
+    }
+    void load();
+    return {value: () => cost, load};
+  };
+  const creationForm = (contents, label, lang, attrs = '') =>
+    `<section class="workflow-layout create-workflow-layout" ${attrs}><form class="workflow-form create-workflow-form" data-workflow-form><div class="form-grid create-form-grid">${contents}</div><div class="create-form-footer"><p class="workflow-note">${escape(ScriptaContributionBridge.note(lang))}</p><button class="workflow-submit" type="submit">${escape(label)}</button></div><p class="workflow-status" data-workflow-status aria-live="polite"></p></form></section>`;
+
+  function renderCreate(lang) {
+    const words = text[lang], copy = creationCopy[lang] || creationCopy.en, fields = createFieldLabels[lang];
+    const [descriptionLabel, descriptionHint] = descriptionCopy[lang];
+    const kinds = ['manuscript','book-proposal'];
+    const covers = kind => `<input type="hidden" name="coverMode" value="generate"><section class="create-cover-panel">${bookCover(lang,kind)}</section>`;
+    const select = (name, label, options) => `<label class="form-field"><span>${escape(label)}</span><select name="${name}">${options.map(([value,caption]) => `<option value="${value}">${escape(caption)}</option>`).join('')}</select></label>`;
+    const manuscript = `<div class="create-book-brief">
+      ${field(copy.displayedTitle,"titles","text",false,fields.titleHint,false,"create-title-field")}
+      <label class="form-file-field">
+        <input class="form-file-input" type="file" name="documents" accept=".pdf,.doc,.docx" required multiple aria-labelledby="manuscript-file-label" aria-describedby="manuscript-file-formats">
+        <span class="manuscript-file-caption">
+          <span class="form-file-label" id="manuscript-file-label">${escape(words.files)}<span class="required-indicator" aria-hidden="true"> *</span></span>
+          <span class="form-file-hint" id="manuscript-file-formats">PDF, DOC, DOCX</span>
+        </span>
+        <span class="form-file-picker">${escape(fields.chooseFiles)}</span>
+        <span class="form-file-selection" data-file-selection aria-live="polite"></span>
+      </label>
+      ${select('readerLayout',copy.layout,[['source',copy.sourceLayout],['reflow',copy.reflow]])}
+      ${select('readerTypography',copy.typography,[['source',copy.sourceType],['readable',copy.readable]])}
+    </div>
+      ${covers('manuscript')}`;
+    const prompt = `<div class="create-book-brief">${field(fields.title,"titles","text",false,fields.titleHint,false,"create-title-field")}${textarea(descriptionLabel,"description",descriptionHint,true,"create-description-field")}</div>
+      <section class="create-preferences-panel">${bookInstructions(words.prompt,instructionLabels[lang],lang)}</section>${covers('book-proposal')}<p class="workflow-note create-cost" data-creation-cost role="status"></p>`;
+    document.title = `${copy.title} · ScriptaHub`;
+    const choices = [[copy.manuscript,copy.manuscriptHint,'<path d="M6 3h8l4 4v14H6zM14 3v5h4M9 12h6m-6 4h6"/>'],
+      [copy.prompt,copy.promptHint,'<path d="M12 2l2.5 7.5L22 12l-7.5 2.5L12 22l-2.5-7.5L2 12l7.5-2.5z"/>']];
+    root.innerHTML = `<section class="workflow-hero"><h1>${escape(copy.title)}</h1></section><div class="create-methods">${choices.map(([title,hint,icon],index) =>
+      `<button type="button" class="create-method" data-method="${kinds[index]}" aria-controls="create-${kinds[index]}" aria-expanded="false"><svg viewBox="0 0 24 24" aria-hidden="true">${icon}</svg><span><strong>${escape(title)}</strong><span>${escape(hint)}</span></span></button>`).join('')}</div>
+      ${creationForm(manuscript,copy.sendManuscript,lang,'id="create-manuscript" data-create-mode="manuscript" hidden')}
+      ${creationForm(prompt,copy.sendPrompt,lang,'id="create-book-proposal" data-create-mode="book-proposal" hidden')}`;
+    const cards = [...root.querySelectorAll('[data-method]')];
+    const sections = [...root.querySelectorAll('[data-create-mode]')];
+    function selectMode(kind) {
+      for (const card of cards) card.setAttribute('aria-expanded',String(card.dataset.method === kind));
+      for (const section of sections) section.hidden = section.dataset.createMode !== kind;
+    }
+    for (const card of cards) card.onclick = () => selectMode(card.dataset.method);
+    for (const section of sections) {
+      const kind = section.dataset.createMode, form = section.querySelector('form');
+      bindInstructionPickers(form,lang);
+      bindCoverUpload(form,lang);
+      prepareContributionForm(form,lang);
+      form.querySelector('[type="submit"]').textContent = kind === 'manuscript' ? copy.sendManuscript : copy.sendPrompt;
+      const cost = kind === 'book-proposal' ? costNotice(form,lang,'promptBookCost') : null;
+      const documents = form.elements.documents;
+      const selection = form.querySelector('[data-file-selection]');
+      if (documents) documents.addEventListener('change', () => {
+        const list = document.createElement('ul');
+        for (const file of documents.files) {
+          const item = document.createElement('li');item.textContent = file.name;list.append(item);
+        }
+        selection.replaceChildren(...(list.childElementCount ? [list] : []));
+      });
+      form.addEventListener('submit',async event => {
+        event.preventDefault();
+        if (section.hidden || form.dataset.contributionReady === 'false') return;
+        const data = creationData(form,lang);
+        if (cost) data.set('confirmedCost',String(cost.value()));
+        const received = await submitContribution(words.createSubject,[],lang,form,[],data,kind);
+        if (received?.bookId) {
+          const destination = new URL('account/dashboard.html',siteRoot);
+          destination.search = new URLSearchParams({lang,tab:'books',book:received.bookId});
+          location.assign(destination.href);
+        } else if (cost && form.dataset.refreshContributionCost === 'true') {
+          delete form.dataset.refreshContributionCost;
+          await cost.load();
+        }
+      });
+    }
+    selectMode('manuscript');
+  }
+
+  function renderFork(lang) {
+    const book = activeBook(), labels = proposalLabels[lang], fields = createFieldLabels[lang];
+    if (!book) { root.innerHTML = pageHero("Fork", text[lang].missingBook); return; }
+    document.title = `${labels[0]} · ScriptaHub`;
+    const inputs = field(fields.title,"titles","text",true,fields.titleHint,false,"create-title-field")
+      + textarea(labels[2],"prompt",labels[3],true,"create-instructions-field")
+      + '<p data-creation-cost class="workflow-note" role="status"></p>';
+    root.innerHTML = backToBook(book,lang) + pageHero("Fork",labels[0],labels[1])
+      + `<div class="fork-source">${compactBookContext(book,lang,text[lang],false)}</div>`
+      + creationForm(inputs,submitLabels[lang],lang);
+    const form = root.querySelector('form');
+    restoreDraft(form);
+    prepareContributionForm(form,lang);
+    const cost = costNotice(form,lang,'forkCost');
+    form.onsubmit = async event => {
+      event.preventDefault();
+      if (cost.value() === undefined) return;
+      const data = new FormData(form);
+      data.set('sourceEdition',book.currentEdition || book.animation?.edition || 'edition-1');
+      data.set('confirmedCost',String(cost.value()));
+      await submitContribution('ScriptaHub derived book proposal',[`Source book ID: ${book.id}`],lang,form,[],data);
+      if (form.dataset.refreshContributionCost === 'true') {
+        delete form.dataset.refreshContributionCost;
+        await cost.load();
+      }
+    };
   }
 
   function renderFeedback(lang, animation = false) {
@@ -901,7 +976,7 @@
     if (page === "agreement") renderAgreement(lang);
     else if (page === "animation-request" || document.body.dataset.animationBook) renderFeedback(lang, true);
     else if (page === "contributors") renderContributors(lang);
-    else if (page === "fork") renderCreate(lang, true);
+    else if (page === "fork") renderFork(lang);
     else if (page === "translate") renderTranslation(lang);
     else if (page === "create") renderCreate(lang);
     else if (page === "feedback") renderFeedback(lang);

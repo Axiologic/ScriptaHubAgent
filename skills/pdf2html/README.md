@@ -59,6 +59,8 @@ Ruled chapter labels omitted by layout recognition are recovered from exact sour
 
 Source font sizes keep their measured values. Host readers can set `--reader-font-size`; local iframe readers can send `axiologic-reader-settings`. A−/A+ changes page zoom, so text, images, tables and spacing scale together without reflow. A zoomed page can require horizontal scrolling. The generated HTML contains its own iframe bridge and local assets.
 
+Use `convert --layout reflow` for reading on narrow screens. The HTML retains PDF page anchors and source evidence while letting text wrap. Regions with uncertain table geometry are rendered in source reading order and reported as conversion warnings. ScriptaHub uses this mode for its manuscript editions.
+
 ## Technical output checks
 
 ```sh

@@ -22,7 +22,14 @@ export async function openDir(root,name,{create=false}={}) {return withParent(ro
 export async function lockDirectory(root,name="processing.lock") {
   const file=await withParent(root,name,p=>fs.open(p,constants.O_CREAT|constants.O_RDWR|constants.O_NOFOLLOW|constants.O_NONBLOCK,0o600));
   const stat=await file.stat();if(!stat.isFile()||stat.nlink!==1){await file.close();throw new Error('Invalid processing lock');}
-  try {await new Promise((resolve,reject)=>{const child=spawn('/usr/bin/flock',['--exclusive','--nonblock','3'],{stdio:['ignore','ignore','ignore',file.fd]});child.once('error',reject);child.once('close',code=>code===0?resolve():reject(new Error('Another processing command owns this task')));});return file;}
+  try {
+    await new Promise((resolve,reject)=>{
+      const child=spawn('/usr/bin/flock',['--exclusive','3'],{stdio:['ignore','ignore','ignore',file.fd]});
+      child.once('error',reject);
+      child.once('close',(code,signal)=>code===0?resolve():reject(new Error(`Could not acquire the processing lock (${signal || code})`)));
+    });
+    return file;
+  }
   catch(error){await file.close();throw error;}
 }
 export const at=(handle,name)=>proc(handle.fd)+'/'+name;

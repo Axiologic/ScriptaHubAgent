@@ -114,7 +114,17 @@ async function suggest(book) {
 }
 function bookCard(book) {
   const owner = book.owner === data.user.id;
-  const node = card(book.title, null, t('Accepted revision {revision} · {origin}', { revision: book.revision, origin: t(book.origin === 'catalogue' ? 'Imported book' : 'Created book') }));
+  const published = publishedBooks.find(item => item.id === book.id);
+  const language = document.documentElement.lang;
+  const title = published?.title?.[language] || published?.title?.en || book.title;
+  const creation = book.creation, cycle = creation?.cycle;
+  const publishedBook = Boolean(book.revision || book.origin === 'catalogue');
+  const status = publishedBook ? (creation ? states.completed : null) : cycle?.phase === 'funding' ? cycleCopy.funding : states[creation?.state];
+  const origin = t(book.origin === 'catalogue' ? 'Imported book' : 'Created book');
+  const node = card(title,status,publishedBook ? t('Accepted revision {revision} · {origin}', {revision:book.revision,origin}) : origin);
+  if (new URL(location.href).searchParams.get('book') === book.id) node.classList.add('dashboard-book-new');
+  if (!publishedBook && cycle?.phase === 'retryable') addCycleState(node,cycle,owner);
+  if (!publishedBook && creation?.error && creation.error !== cycle?.issue) node.append(element('p',creation.error,'dashboard-meta'));
   const ownership = element('span', undefined, 'dashboard-ownership');
   ownership.title = t(owner ? 'Your book' : 'Shared with you');
   ownership.setAttribute('role', 'img');
@@ -126,7 +136,7 @@ function bookCard(book) {
   ownership.innerHTML = `<svg viewBox="${owner ? '0 0 26 26' : '0 0 36 28'}" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${shape}</svg>`;
   node.querySelector('.dashboard-meta').prepend(ownership);
   const actions = element('div', undefined, 'dashboard-actions');
-  actions.append(button('Suggest a change', () => suggest(book)));
+  if (publishedBook) actions.append(button('Suggest a change', () => suggest(book)));
   node.querySelector('.dashboard-card-header').append(actions);
   if (owner) {
     const access = detail('Collaborators', `book:${book.id}:collaborators`);
@@ -407,9 +417,9 @@ function renderPointsSection(name) {
     node.append(element('p', t('Loading dashboard…'), 'dashboard-meta'));
     entry = {node};dashboardSections.set(name,entry);
     const modules = {
-      admin: () => import('./account-admin.js?v=admin-heading-1'),
+      admin: () => import('./account-admin.js?v=create-credit-1'),
       users: () => import('./account-users.js?v=credit-payment-feedback-10'),
-      points: () => import('./account-points.js?v=credit-payment-feedback-10'),
+      points: () => import('./account-points.js?v=create-credit-1'),
     };
     const loadModule = modules[name]();
     void loadModule.then(async module => {entry.controller=await (name === 'admin' ? module.mountAdministration(node) : name === 'users' ? module.mountUsers(node) : module.mountPoints(node,{accountId:data.user.id}));}).catch(error => {
@@ -433,7 +443,9 @@ function render() {
   if (['points','admin','users'].includes(view)) { renderPointsSection(view); return; }
   if(view==='tasks' && !data.canManageTasks) { selectView(tabs.find(tab=>tab.dataset.view==='changes')); return; }
   content.replaceChildren();
-  const collections = { books: data.books, changes: data.changes, tasks: data.tasks };
+  const selectedBook = new URL(location.href).searchParams.get('book');
+  const collections = { books: selectedBook ? [...data.books].sort((a,b) => Number(b.id === selectedBook) - Number(a.id === selectedBook)) : data.books,
+    changes: data.changes, tasks: data.tasks };
   const builders = { books: bookCard, changes: changeCard, tasks: taskCard };
   if(view==='books' && data.editions?.length)content.append(editionRequestForm());
   if (!collections[view].length) content.append(element('div', t({ books: 'No books yet. Create a book to get started.', changes: 'No change requests.', tasks: 'No tasks.' }[view]), 'dashboard-empty'));

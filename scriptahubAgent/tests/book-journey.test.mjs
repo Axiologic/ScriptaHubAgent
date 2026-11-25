@@ -1,3 +1,4 @@
+import {defaultPoints} from '../points-policy.mjs';
 // Integration boundary: real intake, SQLite, transfer, Git push and site rendering.
 // AI output is a fixed fixture; this does not claim to exercise an AI workflow.
 import test from 'node:test';
@@ -55,7 +56,7 @@ for (const language of ['en', 'ro']) test(`HTTP proposal → Git receipt → leg
   const submissionId = randomUUID();
   const submit = authenticated => {
     const body = new FormData();
-    body.set('metadata', JSON.stringify({submissionId, kind:'book-proposal', language,
+    body.set('metadata', JSON.stringify({submissionId, kind:'book-proposal', language, confirmedCost:defaultPoints.promptBookCost,
       agreementVersion:'2026-09-10', agreementAccepted:true,
       values:{titles:'Journey book', description:'A complete book about community gardens.', audience:'General readers'}}));
     return fetch(intake + 'api/submissions', {method:'POST', body, headers:authenticated ? {'x-test-user':'owner'} : {}});
@@ -66,7 +67,7 @@ for (const language of ['en', 'ro']) test(`HTTP proposal → Git receipt → leg
   const receipt = await accepted.json();
   assert.deepEqual(await (await submit(true)).json(), receipt, 'same submission must not create another task');
   store = new DashboardStore(dataDir);
-  const service = new TaskExecution(store, dataDir, {moderate:async () => null});
+  const service = new TaskExecution(store, dataDir);
   const task = service.claim(executor, {runId:'journey-' + language, taskType:'book-proposal'}).task;
   assert.equal(task.taskId, receipt.task.id);
   assert.equal(store.db.prepare('SELECT count(*) AS n FROM tasks').get().n, 1);
@@ -95,11 +96,13 @@ for (const language of ['en', 'ro']) test(`HTTP proposal → Git receipt → leg
       return run(...command);
     };
   }});
-  publisher.prepare(executor, {executionId:task.executionId, catalogue, branch:'main', baseCommit,
+  const {packageDigest} = publisher.prepare(executor, {executionId:task.executionId, catalogue, branch:'main', baseCommit,
     files:[...files].map(([path, bytes]) => ({path, size:bytes.length, sha256:sha256(bytes)})),
     validation:{executionId:task.executionId, runId:task.runId, bookId:task.bookId, publicationPermitted:true,
       audit:{autoCorrect:false, status:'passed_with_warnings', errorFindings:0, scope:'html_layout_integrity', nativeScope:'edition_layout_regression', existingFindings:0}}}, config);
   for (const [file, bytes] of files) publisher.upload(executor, {executionId:task.executionId, file, offset:0, data:bytes.toString('base64')});
+  service.saveModeration(task.executionId,'submission');
+  service.saveModeration(task.executionId,'package',packageDigest);
   assert.throws(() => service.finish(executor, {executionId:task.executionId, state:'completed', result:'Unverified success'}), /Only ScriptaHub/);
   const published = await publishFromRobot((_tool,input) => publisher.publish(executor,input,config),task.executionId,{
     executeGit:(binary,args,options)=>{

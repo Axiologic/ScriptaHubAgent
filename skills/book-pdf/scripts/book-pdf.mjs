@@ -6,6 +6,7 @@ import {promisify} from 'node:util';
 import {execFile} from 'node:child_process';
 import {openBrowser} from '../../validate-book/src/browser.mjs';
 import {navigate} from '../../validate-book/src/layout-browser.mjs';
+import {parsePdfGeometry} from '../../validate-book/src/layout-checks.mjs';
 import {renderModeration} from './moderation-render.mjs';
 import {hasReaderWords, readerWords} from './pdf-text.mjs';
 
@@ -49,6 +50,19 @@ async function verifyPdfText(file, expected, footer) {
   }
   if (!foundFooter) throw Error('The PDF is missing its rights notice');
   throw Error('The PDF is missing text from the full reader');
+}
+
+async function verifyPdfPages(file, browser) {
+  const {stdout} = await execute(process.env.VALIDATEBOOK_PDFTOTEXT || 'pdftotext',
+    ['-bbox-layout', file, '-'], {timeout:60000,maxBuffer:128*1024*1024});
+  const pages = await browser.evaluate(`(${parsePdfGeometry.toString()})(${JSON.stringify(stdout)})`);
+  if (!pages.length || !pages.some(page => page.blocks.length)) throw Error('The exported PDF has no printable pages');
+  for (const {page, width, height, blocks} of pages) {
+    if (!(width > 0 && height > 0) || blocks.some(({lines}) => lines.some(({left, right, top, bottom}) =>
+      ![left, right, top, bottom].every(Number.isFinite) || left < 0 || top < 0 || right > width || bottom > height))) {
+      throw Error('The exported PDF has text outside the page on page ' + page);
+    }
+  }
 }
 
 // Keep the original hyphen glyph and prevent short compounds from breaking at it.
@@ -135,6 +149,7 @@ async function exportPdf(input, output, language) {
     } finally { await file.close(); }
     await browser.send('IO.close', {handle:stream});
     await verifyPdfText(temporary,expected,footerText);
+    await verifyPdfPages(temporary,browser);
     if (digest(await fs.readFile(source)) !== sourceHash) throw Error('HTML changed during PDF export');
     await fs.rename(temporary,target);
     return {status:'exported',sourceSha256:sourceHash,sha256:hash.digest('hex'),size:total};

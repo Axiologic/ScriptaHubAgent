@@ -22,7 +22,7 @@
       "skillsets": [
         "ScriptaHubAgent/scriptahub-tasks"
       ],
-      "prompt": "Follow scriptahub-tasks SKILL.md and its Content moderation section. Apply processingMode. In process mode call moderate-content with executionId, and proceed only if the service returns status=passed. For state=failed report the stored taskError to the parent. Report an unavailable service as the processing blocker."
+      "prompt": "Follow scriptahub-tasks SKILL.md and its Content moderation section. In process mode classify every submission review unit with your current RoboTeam model using moderate-content. Proceed only on the service's final passed status. Report the actual reason if the task stops or the selected model cannot inspect required images."
     },
     {
       "id": "apply-edit",
@@ -59,11 +59,11 @@
       "id": "submit-edit",
       "name": "Publish the validated edition",
       "executionType": "terminal",
-      "effort": "low",
+      "effort": "high",
       "skillsets": [
         "ScriptaHubAgent/scriptahub-tasks"
       ],
-      "prompt": "Follow scriptahub-tasks SKILL.md and the operation reference for execution context, native calls, recovery, handoff, source scope and acceptance.\n\nUse the shared publication procedure with the actual service status and the approval saved by validate-edit. Keep the execution identity and exact validated bytes on any retry. Save the actual publication response and receipt paths with step=submit-edit. The parent reconciles this item independently."
+      "prompt": "Follow scriptahub-tasks SKILL.md and the operation reference for execution context, native calls, recovery, handoff, source scope and acceptance.\n\nIn process mode use stage-publication to upload the validated inventory, then classify the package review units with your current RoboTeam model as described in Content moderation. Once passed, follow the shared publication procedure for the staged package with the actual service status and the approval saved by validate-edit. Keep the execution identity and exact validated bytes on any retry. Save the actual publication response and receipt paths with step=submit-edit. The parent reconciles this item independently."
     }
   ],
   "edges": [

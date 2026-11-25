@@ -3,9 +3,32 @@ import { callAgent } from './identity.mjs';
 
 const day = 24 * 60 * 60 * 1000;
 const timestamp = () => new Date().toISOString();
-const points = (row, operation, amount) => callAgent('userPersistoAgent','userpersisto_scriptahub_points_apply',{
-  userId: row.owner.replace(/^user:/, ''), operation, requestId: row.id, attempt: row.attempt, amount, kind: row.kind, ...(operation === 'reward' && row.expires_at ? {expiresAt:row.expires_at} : {}),
-});
+const creditReasons = {
+  manuscript: 'Approved manuscript',
+  edit: 'Approved corrections',
+  'book-proposal': 'AI book generation',
+  edition: 'New book edition',
+  fork: 'Derived book',
+};
+
+export function creditOperation(row, operation, amount) {
+  const userId = row.owner.replace(/^user:/, '');
+  const rewardReference = `scriptahub:reward:${row.id}`;
+  if (operation === 'expiry') return { userId, operation: 'inspect-expiry', referenceId: rewardReference };
+  if (operation === 'reward') {
+    return {
+      userId, operation: 'grant', referenceId: rewardReference, amount, reason: creditReasons[row.kind],
+      ...(row.expires_at ? { expiresAt: row.expires_at } : {}),
+    };
+  }
+  return {
+    userId, operation, referenceId: `scriptahub:${row.kind}:${row.id}:${row.attempt}`,
+    amount, reason: creditReasons[row.kind],
+  };
+}
+
+const points = (row, operation, amount) =>
+  callAgent('userPersistoAgent', 'credits_apply', creditOperation(row, operation, amount));
 const sendEmail = ({recipient,subject,message}) => callAgent('emailAgent','email_send_text',{to:recipient,subject,text:message});
 
 export async function advanceCycles(store, { apply = points, send = sendEmail, report = console.error } = {}) {

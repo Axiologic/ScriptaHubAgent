@@ -21,7 +21,10 @@ async function formApi() {
 test('cover choices are optional, localized and use the existing accessible selection dialogs', async () => {
   const api = await formApi();
   for (const lang of ['en','ro','fr','de','es','pt','it','pl']) {
-    const html = api.bookCover(lang);
+    const html = api.bookCover(lang,'manuscript');
+    const generated = api.bookCover(lang,'book-proposal');
+    const ids = [...(html+generated).matchAll(/\sid="([^"]+)"/g)].map(match=>match[1]);
+    assert.equal(new Set(ids).size,ids.length);
     assert.match(html,/class="create-cover-field create-instructions"/);
     assert.equal((html.match(/<dialog /g)||[]).length,3);
     for (const name of ['coverStyle','coverPalette','coverComposition']) {

@@ -11,6 +11,17 @@ const safePath = value => typeof value === 'string' && value.split('/').every(pa
 const escape = value => String(value).replace(/[&<>"']/g, char => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'})[char]);
 const summaryMarker = /<meta\b(?=[^>]*\sname\s*=\s*["']summary-generator["'])(?=[^>]*\scontent\s*=\s*["']comprehensivesummary-skill["'])[^>]*>/i;
 
+export function applyManuscriptPresentation(html, values) {
+  const options = [
+    values?.readerLayout === 'reflow' && 'reflow',
+    values?.readerTypography === 'readable' && 'readable'
+  ].filter(Boolean);
+  if (!options.length) return html;
+  const marker = '<meta name="scriptahub-reader-presentation" content="' + options.join(' ') + '">';
+  const content = html.replace(/<meta\b[^>]*\bname\s*=\s*["']scriptahub-reader-presentation["'][^>]*>/gi,'');
+  return /<\/head\s*>/i.test(content) ? content.replace(/<\/head\s*>/i, closing => marker + closing) : marker + content;
+}
+
 export async function prepareReadingRoutes({executionId, directory, collectionPath, editions}) {
   if (!/^tasks\/[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$/.test(directory ?? '') || !safePath(collectionPath)
       || path.posix.basename(collectionPath) !== 'collection.json' || !Object.keys(editions ?? {}).length) throw Error('Provide the task, catalogue path and staged editions');
@@ -48,7 +59,16 @@ export async function prepareReadingRoutes({executionId, directory, collectionPa
       const [full, short] = required;
       const landing = language + '/book.html';
       if (!safePath(full) || !safePath(short) || full === short || full === landing || short === landing) throw Error('Stage the reader and summary at distinct HTML paths for ' + language);
-      const fullBytes = await read(bookRoot + '/' + full);
+      const readerFile = bookRoot + '/' + full;
+      let fullBytes = await read(readerFile);
+      if (claim.type === 'scriptahub.manuscript') {
+        const original = fullBytes.toString('utf8');
+        const presented = applyManuscriptPresentation(original,claim.values);
+        if (presented !== original) {
+          fullBytes = Buffer.from(presented);
+          await atomicFile(readerFile,fullBytes);
+        }
+      }
       const shortBytes = await read(bookRoot + '/' + short);
       if (!fullBytes.length || !summaryMarker.test(shortBytes.toString('utf8'))) throw Error('Stage the comprehensive summary and full reader for ' + language);
       const {shortDescription, aboutBook} = input;

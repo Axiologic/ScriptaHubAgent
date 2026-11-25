@@ -13,7 +13,7 @@ class Node {
   setCustomValidity(message){this.validationMessage=message;}
   get valueAsNumber(){return Number(this.value);}
 }
-const points={bookReward:10,correctionReward:5,editionCost:10,forkCost:15,rewardValidityDays:180,firstNoticeDays:30,lastNoticeDays:7};
+const points={bookReward:10,correctionReward:5,editionCost:10,forkCost:15,promptBookCost:18,rewardValidityDays:180,firstNoticeDays:30,lastNoticeDays:7};
 function setup(t){
   const original=Object.getOwnPropertyDescriptor(globalThis,'document'),events=[];
   Object.defineProperty(globalThis,'document',{configurable:true,value:{documentElement:{lang:'ro'},createElement:tag=>new Node(tag),createElementNS:(namespace,tag)=>Object.assign(new Node(tag),{namespaceURI:namespace}),dispatchEvent:event=>events.push(event.type)}});

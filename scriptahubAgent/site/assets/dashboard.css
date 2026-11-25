@@ -143,3 +143,5 @@
 @media (max-width: 600px) {
   .dashboard-toolbar { gap: 12px; }
 }
+
+.dashboard-book-new { border-color: var(--green); }

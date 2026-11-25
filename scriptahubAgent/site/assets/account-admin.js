@@ -10,12 +10,13 @@ export async function mountAdministration(host, api = pointsApi) {
   const fields=new Map();
   const groups=[
     [t('Contribution rewards','Recompense pentru contribuții'),[
-      ['bookReward',t('Published book reward','Recompensă pentru carte publicată')],
+      ['bookReward',t('Published manuscript reward','Recompensă pentru manuscris publicat')],
       ['correctionReward',t('Correction reward per contributor and published edition','Recompensă pentru corecturi, per contributor și ediție publicată')],
     ],t('Rewards are awarded only after publication. All accepted corrections from one contributor in an edition receive one reward.',
       'Recompensele se acordă doar după publicare. Toate corecturile acceptate ale unui contributor incluse într-o ediție primesc o singură recompensă.')],
     [t('Processing costs','Costuri de procesare'),[
       ['editionCost',t('New edition cost','Cost pentru ediție nouă')],
+      ['promptBookCost',t('AI book generation cost','Cost pentru generare carte cu AI')],
       ['forkCost',t('Derived book cost','Cost pentru carte derivată')],
     ]],
     [t('Expiration and notifications','Expirare și notificări'),[

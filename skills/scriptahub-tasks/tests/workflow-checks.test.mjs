@@ -4,10 +4,12 @@ import fs from 'node:fs/promises';
 import path from 'node:path';
 import os from 'node:os';
 import crypto from 'node:crypto';
-import {editionReaders, insideRun, writeHandoff, requirePreflight, verifyPackage} from '../scripts/workflow-checks.mjs';
+import {spawnSync} from 'node:child_process';
+import {fileURLToPath} from 'node:url';
+import {editionReaders, insideRun, writeHandoff, requirePreflight, verifyPackage, readManuscriptEditorial} from '../scripts/workflow-checks.mjs';
 import {combineCollections, validateCatalogueKeywords} from '../scripts/catalogue-keywords.mjs';
 import {publishPackage} from '../scripts/run.mjs';
-import {prepareReadingRoutes} from '../scripts/prepare-reading-routes.mjs';
+import {applyManuscriptPresentation, prepareReadingRoutes} from '../scripts/prepare-reading-routes.mjs';
 
 async function inRun(callback) {
   const previous = process.cwd();
@@ -16,6 +18,15 @@ async function inRun(callback) {
   finally { process.chdir(previous); await fs.rm(root, {recursive:true, force:true}); }
 }
 const context = {executionId:'execution-one', runId:'run-one', taskId:'task-one', bookId:'book-one'};
+test('manuscript reader preferences preserve the original body and are idempotent', () => {
+  const original = '<html><head><title>Source</title></head><body><main>Original text</main></body></html>';
+  const values = {readerLayout:'reflow',readerTypography:'readable'};
+  const marked = applyManuscriptPresentation(original,values);
+  assert.match(marked, /<meta name="scriptahub-reader-presentation" content="reflow readable"><\/head>/);
+  assert.equal(marked.slice(marked.indexOf('<body>')),original.slice(original.indexOf('<body>')));
+  assert.equal(applyManuscriptPresentation(marked,values),marked);
+  assert.equal(applyManuscriptPresentation(original,{readerLayout:'source'}),original);
+});
 const emptyKeywords = Object.fromEntries(['en','fr','de','es','pt','it','ro','pl'].map(code => [code, []]));
 
 for (const schemaVersion of [1, 2]) test('preparation writes the reading routes for schema ' + schemaVersion, {skip:process.platform!=='linux'}, async () => inRun(async () => {
@@ -131,14 +142,21 @@ test('both catalogue schemes bind each reading action to its own resource', asyn
   await assert.rejects(check(modern), /distinct routes/);
 }));
 
-test('durable handoffs preserve execution identity and reject secrets, oversized context and symlinks', async () => inRun(async root => {
+test('durable handoffs preserve execution identity, accept large context and reject secrets and symlinks', async () => inRun(async root => {
   const saved = await writeHandoff({step:'prepare-manuscript', context});
   assert.match(saved.sha256, /^[a-f0-9]{64}$/);
   await writeHandoff({step:'process-content', context:{...context, artifact:'book.html'}});
   assert.equal(JSON.parse(await fs.readFile(saved.path)).context.artifact, 'book.html');
   await assert.rejects(writeHandoff({step:'process-content', context:{...context, executionId:'another'}}), /another execution/);
   await assert.rejects(writeHandoff({step:'process-content', context:{...context, data:{password:'private'}}}), /Secrets/);
-  await assert.rejects(writeHandoff({step:'process-content', context:{...context, data:'x'.repeat(25000)}}), /24 KB/);
+  const data = 'x'.repeat(128*1024);
+  const launcher = fileURLToPath(new URL('../scripts/run.mjs',import.meta.url));
+  const result = spawnSync(process.execPath,[launcher,'handoff'],{
+    input:JSON.stringify({step:'process-content',context:{...context,data}}),encoding:'utf8',
+  });
+  assert.equal(result.status,0,result.stderr);
+  await writeHandoff({step:'process-content', context});
+  assert.equal(JSON.parse(await fs.readFile(saved.path)).context.data,data);
   await assert.rejects(insideRun('../outside'), /leaves/);
   await fs.symlink(path.join(root, saved.path), 'link.json');
   await assert.rejects(insideRun('link.json'), /symlinks/);
@@ -313,6 +331,42 @@ test('editorial, review and final validation preserve the pinned source and acce
   }
 }));
 
+test('many direct editions keep their accepted evidence in separate files', async () => inRun(async () => {
+  const directory = 'tasks/task-one';
+  const languages = ['en','ro','fr','de','es','it','pl','pt'];
+  const manuscriptEditions = Object.fromEntries(languages.map((language, index) => [language, {
+    language, path:`${directory}/sources/${language}/index.html`, sha256:String(index).repeat(64),
+    referencePdf:`${directory}/sources/${language}/book.pdf`, referencePdfSha256:'e'.repeat(64),
+  }]));
+  const pinned = {...context, editorialSource:manuscriptEditions.en, manuscriptEditions};
+  const roles = ['comprehensive-summary','relevant-keywords','marketing-summary','short-description'];
+  const manuscriptEditorial = Object.fromEntries(languages.map(language => [language, {
+    editorialResults:Object.fromEntries(roles.map(role => [role, {
+      output:`${directory}/editorial/${language}/${role}.html`, outputSha256:'a'.repeat(64),
+      sourcePath:manuscriptEditions[language].path, sourceSha256:manuscriptEditions[language].sha256,
+      job:`${directory}/editorial-jobs/${language}/${role}`,
+      receipt:`${directory}/editorial/${language}/${role}.json`, receiptSha256:'b'.repeat(64),
+      parameters:{language, editorialRequirements:'detail '.repeat(40)},
+    }])),
+  }]));
+  const saved = await writeHandoff({directory, step:'short-description', context:{...pinned, manuscriptEditorial}});
+  const read = async () => JSON.parse(await fs.readFile(saved.path)).context;
+  const first = await read();
+  assert.deepEqual(Object.keys(first.manuscriptEditorial.ro).sort(),['path','sha256']);
+  assert.deepEqual(await readManuscriptEditorial(first,directory,'ro'), manuscriptEditorial.ro);
+  const addition = {output:'updated Romanian summary'};
+  await writeHandoff({directory, step:'short-description', context:{...pinned, manuscriptEditorial:{
+    ro:{editorialResults:{'comprehensive-summary':addition}},
+  }}});
+  const revised = await read();
+  assert.deepEqual(revised.manuscriptEditorial.en, first.manuscriptEditorial.en);
+  assert.deepEqual(await readManuscriptEditorial(revised,directory,'ro'), {editorialResults:{
+    ...manuscriptEditorial.ro.editorialResults, 'comprehensive-summary':addition,
+  }});
+  await fs.appendFile(revised.manuscriptEditorial.ro.path, '\n');
+  await assert.rejects(readManuscriptEditorial(revised,directory,'ro'), /Editorial evidence changed for ro/);
+}));
+
 test('each published manuscript edition requires its own pinned PDF and reader audit', {skip: process.platform !== 'linux'}, async () => inRun(async root => {
   const previousPath = process.env.PATH;
   const directory = 'tasks/task-one';
@@ -321,6 +375,7 @@ test('each published manuscript edition requires its own pinned PDF and reader a
   const digest = value => crypto.createHash('sha256').update(value).digest('hex');
   const editions = {};
   const manuscriptEditions = {};
+  const sourceAudits = {};
   const audits = [];
   const files = [];
   const stage = async (file, content) => {
@@ -359,10 +414,26 @@ test('each published manuscript edition requires its own pinned PDF and reader a
         {file:candidate, sha256:digest(html)}, {file:path.join(root, referencePdf), sha256:digest(pdf)}
       ]});
       audits.push({language, report});
+      const early = directory + '/validation/source-layout/' + language;
+      await fs.mkdir(early, {recursive:true});
+      const earlyReport = early + '/report.json';
+      const sourceDocument = path.join(root, source);
+      const earlyResult = {...result, documents:[{file: sourceDocument}]};
+      const job = early + '/job.json';
+      const style = 'p { color: green }';
+      const styleFile = sourceDir + '/' + language + '.css';
+      await fs.writeFile(styleFile, style);
+      await stage(language + '.css', style);
+      await save(earlyReport, earlyResult);
+      await save(job, {result:earlyResult, inputs:[
+        {file:sourceDocument, sha256:digest(html)}, {file:path.join(root, referencePdf), sha256:digest(pdf)},
+        {file:path.join(root, styleFile), sha256:digest(style)},
+      ]});
+      sourceAudits[language] = {path:earlyReport, sha256:digest(await fs.readFile(earlyReport)), jobSha256:digest(await fs.readFile(job))};
     }
     const {language, path: source, sha256} = manuscriptEditions.en;
     await writeHandoff({step:'prepare-manuscript', directory, context:{
-      ...context, editorialSource:{language, path:source, sha256}, manuscriptEditions
+      ...context, editorialSource:{language, path:source, sha256}, manuscriptEditions, sourceAudits
     }});
     await save(directory + '/run-state/claimed.json', {task:{...context, type:'scriptahub.manuscript'}});
     await assert.rejects(writeHandoff({step:'review-correct', directory, context:{
@@ -379,6 +450,14 @@ test('each published manuscript edition requires its own pinned PDF and reader a
     await assert.rejects(verifyPackage({...input, audits:[audits[0], {...audits[1], report:audits[0].report}]}),
       /does not cover the published source edition: ro/);
     assert.ok((await verifyPackage({...input, audits})).approval);
+    const earlyAudits = Object.entries(sourceAudits).map(([language, reference]) => ({language, report:reference.path}));
+    assert.ok((await verifyPackage({...input, audits:earlyAudits})).approval);
+    const changedStyle = 'p { color: orange }';
+    await fs.writeFile(packageRoot + '/ro.css', changedStyle);
+    Object.assign(files.find(file => file.path === 'ro.css'), {size:Buffer.byteLength(changedStyle), sha256:digest(changedStyle)});
+    await save(inventory, {executionId:context.executionId, baseCommit:null, files});
+    await assert.rejects(verifyPackage({...input, audits:earlyAudits}), /resources changed for ro/);
+    assert.ok((await verifyPackage({...input, audits:[earlyAudits[0], audits[1]]})).approval);
     await fs.appendFile(manuscriptEditions.ro.referencePdf, 'changed');
     await assert.rejects(verifyPackage({...input, audits}), /Pinned manuscript source changed for ro/);
   } finally {

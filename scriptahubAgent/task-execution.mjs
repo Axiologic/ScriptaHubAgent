@@ -1,4 +1,4 @@
-import { blockedMessage, policyVersion, reviewContent } from './content-moderation.mjs';
+import { blockedMessage, categories, policyVersion, portableVisualKey, prepareReviewUnits } from './content-moderation.mjs';
 import { approvedAnnotations } from './annotations.mjs';
 import crypto from 'node:crypto';
 import fs from 'node:fs/promises';
@@ -6,7 +6,8 @@ import { constants } from 'node:fs';
 import path from 'node:path';
 import { verifyRecord } from './record-integrity.mjs';
 import { validateSourceConfig, SUMMARY_READING_MINUTES } from './settings.mjs';
-import { createPublicationTables } from './publication-transfer.mjs';
+import { createPublicationTables, PublicationTransfer } from './publication-transfer.mjs';
+import {publicationTarget} from './publication-policy.mjs';
 import { createProcessingTables, requireNoActiveProcessing } from './processing-store.mjs';
 
 const fail = (message, status = 400) => { throw Object.assign(new Error(message), { status }); };
@@ -32,10 +33,10 @@ export function requireExecutor(auth, tool, env = process.env) {
 }
 
 export class TaskExecution {
-  constructor(store, dataDir, {moderate = reviewContent} = {}) {
+  constructor(store, dataDir, {prepareModeration = prepareReviewUnits} = {}) {
     this.store = store;
     this.dataDir = dataDir;
-    this.moderate = moderate;
+    this.prepareModeration = prepareModeration;
     store.db.exec(`CREATE TABLE IF NOT EXISTS task_executions (
       id TEXT PRIMARY KEY, task_id TEXT NOT NULL UNIQUE REFERENCES tasks(id),
       executor_agent_id TEXT NOT NULL, run_id TEXT NOT NULL, created_at TEXT NOT NULL,
@@ -52,7 +53,12 @@ export class TaskExecution {
     store.db.exec(`CREATE TABLE IF NOT EXISTS task_moderation (
       execution_id TEXT NOT NULL REFERENCES task_executions(id), stage TEXT NOT NULL,
       policy_version INTEGER NOT NULL, package_digest TEXT NOT NULL DEFAULT '',
-      PRIMARY KEY(execution_id,stage));`);
+      PRIMARY KEY(execution_id,stage));
+      CREATE TABLE IF NOT EXISTS task_moderation_units (
+      execution_id TEXT NOT NULL REFERENCES task_executions(id), stage TEXT NOT NULL,
+      package_digest TEXT NOT NULL, policy_version INTEGER NOT NULL, position INTEGER NOT NULL,
+      digest TEXT NOT NULL, change_id TEXT, file TEXT NOT NULL, text TEXT NOT NULL, image BLOB,
+      approved INTEGER NOT NULL DEFAULT 0, PRIMARY KEY(execution_id,stage,position));`);
     createPublicationTables(store);
     createProcessingTables(store);
   }
@@ -213,28 +219,92 @@ export class TaskExecution {
       ON CONFLICT(execution_id,stage) DO UPDATE SET policy_version=excluded.policy_version,package_digest=excluded.package_digest`)
       .run(executionId,stage,policyVersion,digest);
   }
-  async moderateSubmission(executor,{executionId},publicationOwner) {
-    const row = this.execution(executor,executionId);
-    if (row.state !== 'running' || row.finished_at) return this.status(executor,{executionId});
-    if (this.moderationPassed(executionId,'submission')) return {status:'passed'};
-    const task = this.present(row), files = [];
+  async moderationFiles(executor, row, stage, publication) {
+    const task = this.present(row);
+    if (stage === 'package') {
+      const transfer = new PublicationTransfer(this);
+      const manifest = JSON.parse(publication.manifest);
+      const catalogue = publicationTarget(manifest.catalogue, manifest.branch).collection;
+      const accepted = new Set(task.files.map(file => portableVisualKey(file.originalName,file.sha256)).filter(Boolean));
+      return manifest.files.map(({path:name,sha256,size}) => {
+        const bytes = transfer.bytes(row.id,{path:name,sha256,size});
+        if (name !== catalogue) return {path:name,bytes,sha256,alreadyReviewed:accepted.has(portableVisualKey(name,sha256))};
+        const book = JSON.parse(bytes).books?.find(book => book.id === task.bookId);
+        if (!book) fail('The publication catalogue does not contain the current book');
+        return {path:name,bytes:Buffer.from(JSON.stringify(book))};
+      });
+    }
+    const files = [];
     for (const [index, request] of (task.requests ?? [task]).entries()) {
       const changeId = request.id ?? row.change_id;
       files.push({changeId,path:'request-'+index+'.json',bytes:Buffer.from(JSON.stringify({
         values:request.values,annotations:request.annotations,source:request.source
       }))});
       for (const file of request.files) {
-        const {bytes, file:stored} = await this.documentBytes(executor,executionId,file.index);
+        const {bytes,file:stored} = await this.documentBytes(executor,row.id,file.index);
         files.push({changeId,path:'attachment-'+file.index+path.extname(stored.name),bytes});
       }
     }
-    const finding = await this.moderate({taskId:task.taskId,stage:'submission'},files);
-    const current = this.execution(executor,executionId);
-    if (current.state !== 'running' || current.finished_at) return this.status(executor,{executionId});
-    if (this.moderationPassed(executionId,'submission')) return {status:'passed'};
-    if (finding) return this.finishModeration(executor,executionId,finding,publicationOwner);
-    this.saveModeration(executionId,'submission');
-    return {status:'passed'};
+    return files;
+  }
+  async moderateTask(executor,{executionId,stage='submission',action='next',position,digest,verdict,category,offset=0} = {}) {
+    if (!['submission','package'].includes(stage) || !['status','next','image','record'].includes(action)) fail('Invalid moderation operation');
+    const row = this.execution(executor,executionId);
+    if (row.state !== 'running' || row.finished_at) return this.status(executor,{executionId});
+    const db = this.store.db;
+    const publication = stage === 'package' ? new PublicationTransfer(this).row(executionId) : null;
+    if (stage === 'package' && (!publication || !this.moderationPassed(executionId,'submission'))) {
+      fail('Upload the validated package and complete submission moderation first',409);
+    }
+    const packageDigest = publication?.digest ?? '';
+    const key = [executionId,stage,packageDigest,policyVersion];
+    const scope = 'execution_id=? AND stage=? AND package_digest=? AND policy_version=?';
+    if (this.moderationPassed(executionId,stage,packageDigest)) return {status:'passed'};
+    if (action === 'status') return {status:'pending'};
+    const nextUnit = () => db.prepare(`SELECT position,digest,file,text,length(image) AS imageSize
+      FROM task_moderation_units WHERE ${scope} AND approved=0 ORDER BY position LIMIT 1`).get(...key);
+    if (action === 'next') {
+      let unit = nextUnit();
+      if (unit) return {status:'review',...unit};
+      const files = await this.moderationFiles(executor,row,stage,publication);
+      const prepared = await this.prepareModeration({taskId:row.task_id,stage},files);
+      const current = this.execution(executor,executionId);
+      if (current.state !== 'running' || current.finished_at) return this.status(executor,{executionId});
+      if (this.moderationPassed(executionId,stage,packageDigest)) return {status:'passed'};
+      unit = nextUnit();
+      if (unit) return {status:'review',...unit};
+      if (prepared.finding) return this.finishModeration(executor,executionId,prepared.finding);
+      if (!prepared.units.length) fail('No material was prepared for moderation',409);
+      this.store.transaction(() => {
+        db.prepare('DELETE FROM task_moderation_units WHERE execution_id=? AND stage=?').run(executionId,stage);
+        const insert = db.prepare('INSERT INTO task_moderation_units VALUES(?,?,?,?,?,?,?,?,?,?,0)');
+        prepared.units.forEach((item,index) => insert.run(...key,index,item.digest,item.changeId,item.file,item.text,item.image));
+      });
+      return {status:'review',...nextUnit()};
+    }
+    if (!Number.isSafeInteger(position) || position < 0 || typeof digest !== 'string') fail('Invalid moderation unit');
+    const unit = db.prepare(`SELECT digest,change_id,approved,length(image) as size
+      FROM task_moderation_units WHERE ${scope} AND position=?`).get(...key,position);
+    if (!unit || unit.digest !== digest) fail('Moderation unit does not match the prepared material',409);
+    if (action === 'image') {
+      if (!Number.isSafeInteger(offset) || offset < 0 || !unit.size || offset >= unit.size) fail('Invalid moderation image range');
+      const {chunk} = db.prepare(`SELECT substr(image,?,98304) AS chunk FROM task_moderation_units
+        WHERE ${scope} AND position=?`).get(offset+1,...key,position);
+      const bytes = Buffer.from(chunk);
+      return {size:unit.size,nextOffset:offset+bytes.length,data:bytes.toString('base64')};
+    }
+    if (verdict === 'blocked' && categories.has(category) && !unit.approved) {
+      return this.finishModeration(executor,executionId,{category,changeId:unit.change_id});
+    }
+    if (verdict !== 'passed' || category !== undefined) fail('Invalid moderation verdict');
+    return this.store.transaction(() => {
+      db.prepare(`UPDATE task_moderation_units SET approved=1,image=NULL,text='' WHERE ${scope} AND position=?`).run(...key,position);
+      const next = nextUnit();
+      if (next) return {status:'review',...next};
+      this.saveModeration(executionId,stage,packageDigest);
+      db.prepare('DELETE FROM task_moderation_units WHERE execution_id=? AND stage=?').run(executionId,stage);
+      return {status:'passed'};
+    });
   }
   finishModeration(executor,executionId,{category,changeId},publicationOwner) {
     return this.finish(executor,{executionId,state:'failed',error:blockedMessage(category)},{
@@ -316,6 +386,7 @@ export class TaskExecution {
       const time = timestamp();
       this.store.db.prepare('UPDATE tasks SET state=?,result=?,error=?,updated_at=? WHERE id=?').run(state,result,error || null,time,row.task_id);
       this.store.db.prepare('UPDATE task_executions SET finished_at=?,finish_digest=? WHERE id=?').run(time,digest,executionId);
+      this.store.db.prepare('DELETE FROM task_moderation_units WHERE execution_id=?').run(executionId);
       const change = this.store.db.prepare('SELECT book_id FROM changes WHERE id=?').get(row.change_id);
       if (rejectedChange && row.base_revision !== null) {
         const rejected = this.store.db.prepare(`UPDATE changes SET state='rejected',decided_at=?,decided_by=?,decision_note=?

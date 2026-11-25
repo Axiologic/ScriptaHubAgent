@@ -119,14 +119,14 @@ test('a moderation failure is visible to the contributor and excludes only their
   const rejected=await f.add(author,{file:true}), accepted=await f.add(other);
   f.approve(rejected);f.approve(accepted);f.edition();
   const task=f.service.claim(agent,{runId:'edition-moderated',taskType:'edit'}).task;
-  f.service.moderate=async (context,files)=>{
+  f.service.prepareModeration=async (context,files)=>{
     assert.equal(context.stage,'submission');
     const attachment=files.find(file=>file.path.endsWith('.pdf'));
     assert.equal(attachment.changeId,rejected.id);
     assert.match(attachment.bytes.toString(), /user:author/);
-    return {category:'extreme_presentation',changeId:attachment.changeId};
+    return {finding:{category:'extreme_presentation',changeId:attachment.changeId}};
   };
-  const result=await f.service.moderateSubmission(agent,{executionId:task.executionId});
+  const result=await f.service.moderateTask(agent,{executionId:task.executionId});
   assert.equal(result.state,'failed');
   assert.equal(f.service.moderationPassed(task.executionId,'submission'),false);
   const contributor=f.store.overview(author);

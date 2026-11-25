@@ -153,11 +153,12 @@ export class DashboardStore {
           JSON.stringify({ metadata: meta, files: record.files, ...(record.source ? {source:record.source} : {}), ...(annotations(meta) && state === 'accepted' ? {annotationDecisions:Object.fromEntries(annotations(meta).map(item=>[item.id,'accept']))} : {}) }), record.createdAt,
           state === 'accepted' ? now() : null, state === 'accepted' ? record.owner : null);
       this.event(record.owner, state === 'accepted' ? 'change.accepted' : 'change.proposed', change.book_id, change.id);
+      const cost = meta.kind === 'fork' ? policy.forkCost ?? 0 : meta.kind === 'book-proposal' ? policy.promptBookCost ?? 0 : 0;
       if (managed) this.cycles.addContribution(record,change,{
-        cost: meta.kind === 'fork' ? policy.forkCost : 0,
-        reward: meta.kind === 'edit' ? policy.correctionReward : meta.kind === 'fork' ? 0 : policy.bookReward,
+        cost,
+        reward: meta.kind === 'edit' ? policy.correctionReward : meta.kind === 'manuscript' ? policy.bookReward : 0,
         validityDays:policy.rewardValidityDays,
-        phase: meta.kind === 'fork' ? 'funding' : isNewBook ? 'active' : state === 'open' ? 'review' : meta.kind === 'edit' ? 'awaiting_publication' : 'completed',
+        phase: cost > 0 ? 'funding' : isNewBook ? 'active' : state === 'open' ? 'review' : meta.kind === 'edit' ? 'awaiting_publication' : 'completed',
       });
       if (state === 'accepted' && isNewBook) this.task(change, record.owner);
       return this.receipt(this.db.prepare('SELECT * FROM changes WHERE id=?').get(record.id));
@@ -279,8 +280,20 @@ export class DashboardStore {
   }
   overview(user) {
     const canManageTasks = Array.isArray(user.roles) && user.roles.includes('admin');
-    const books = this.db.prepare(`SELECT b.* FROM books b WHERE owner=? OR EXISTS
-      (SELECT 1 FROM collaborators c WHERE c.book_id=b.id AND c.user_id=?) ORDER BY created_at DESC`).all(user.id, user.id);
+    const books = this.db.prepare(`SELECT b.*, c.id AS creation_id, c.kind AS creation_kind,
+      t.state AS creation_state, t.error AS creation_error
+      FROM books b LEFT JOIN changes c ON c.id=(SELECT initial.id FROM changes initial
+        WHERE initial.book_id=b.id AND initial.kind IN ('book-proposal','manuscript','fork')
+        AND json_extract(initial.payload,'$.metadata.targetBookId') IS NULL ORDER BY initial.rowid LIMIT 1)
+      LEFT JOIN tasks t ON t.id=(SELECT recent.id FROM tasks recent WHERE recent.change_id=c.id AND recent.base_revision IS NULL
+        ORDER BY recent.rowid DESC LIMIT 1)
+      WHERE b.owner=? OR EXISTS (SELECT 1 FROM collaborators member WHERE member.book_id=b.id AND member.user_id=?)
+      ORDER BY b.created_at DESC,b.rowid DESC`).all(user.id, user.id)
+      .map(({creation_id,creation_kind,creation_state,creation_error,...book})=>({
+        ...book,
+        ...(creation_id && {creation:{kind:creation_kind,state:creation_state,error:creation_error,
+          cycle:book.owner === user.id ? this.cycles.present(this.cycles.read(creation_id)) : null}})
+      }));
     const changes = this.db.prepare(`SELECT c.*,b.title,b.owner,t.state AS processing_state,t.updated_at AS processing_updated_at, t.error AS processing_error,
       COALESCE(NULLIF(trim(p.name),''),p.email) AS author_name FROM changes c LEFT JOIN books b ON b.id=c.book_id
       LEFT JOIN people p ON p.id=c.author LEFT JOIN tasks t ON t.id=(SELECT latest.id FROM tasks latest JOIN task_changes tc ON tc.task_id=latest.id WHERE tc.change_id=c.id ORDER BY latest.rowid DESC LIMIT 1) WHERE c.kind<>'edition-request' AND (c.author=? OR b.owner=? OR EXISTS

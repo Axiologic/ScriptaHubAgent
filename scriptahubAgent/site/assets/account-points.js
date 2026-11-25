@@ -269,6 +269,7 @@ export async function mountPoints(section, {userId = '', accountId = ''} = {}) {
       'Approved manuscript': t('Published book reward','Recompensă pentru carte publicată'),
       'Approved corrections': t('Corrections included in a published edition','Corecturi incluse într-o ediție publicată'),
       'New book edition': t('New book edition','Ediție nouă a cărții'),
+      'AI book generation': t('AI book generation','Generare carte cu AI'),
       'Derived book': t('Derived book','Carte derivată'),
     };
     for (const entry of ledger.entries) {

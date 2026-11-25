@@ -116,6 +116,9 @@ a { color: inherit; text-decoration: inherit; }
   body { padding: 0.75rem; }
   .source-page { margin-bottom: 1rem; }
   .source-page::after { bottom: 0.5rem; }
+  [data-pdf-layout="reflow"] .source-page:not(.source-page-full-image) { aspect-ratio: auto; }
+  [data-pdf-layout="reflow"] .table-scroll { min-width: 0; }
+  [data-pdf-layout="reflow"] .source-page :is(p,li,td,th) { overflow-wrap: anywhere; }
 }
 @media print {
   html { background: #fff; }

@@ -18,7 +18,7 @@ import { sealRecord } from '../record-integrity.mjs';
 import { combineCollections } from '../catalogue-keywords.mjs';
 const exec = promisify(execFile), agent = 'agent:test/processor';
 process.env.SCRIPTA_RECORD_KEY = 'publication-tests-record-key-012345678901234567890';
-async function fixture(t, { schemaVersion = 1, kind = 'manuscript', manageApprovals = false, coverMode, coverImage } = {}) {
+async function fixture(t, { schemaVersion = 1, kind = 'manuscript', manageApprovals = false, coverMode, coverImage, approvePackage = true } = {}) {
   const root = await fs.mkdtemp(path.join(os.tmpdir(),'scripta-publication-'));
   const remote = path.join(root,'remote.git'), seed = path.join(root,'seed'), data = path.join(root,'data');
   const git = async (cwd,...args) => (await exec('git',args,{cwd,env:{...process.env,GIT_CONFIG_GLOBAL:'/dev/null',GIT_CONFIG_NOSYSTEM:'1',GIT_AUTHOR_NAME:'Test',GIT_AUTHOR_EMAIL:'test@example.test',GIT_COMMITTER_NAME:'Test',GIT_COMMITTER_EMAIL:'test@example.test'}})).stdout.trim();
@@ -27,7 +27,7 @@ async function fixture(t, { schemaVersion = 1, kind = 'manuscript', manageApprov
   await fs.writeFile(path.join(seed,'collection.json'),JSON.stringify(previous));
   await git(seed,'add','.'); await git(seed,'commit','-m','Initial catalogue'); await git(seed,'remote','add','origin',remote); await git(seed,'push','origin','main');
   const baseCommit = await git(seed,'rev-parse','HEAD');
-  const store = new DashboardStore(data,{manageApprovals}), service = new TaskExecution(store,data,{moderate:async () => null});
+  const store = new DashboardStore(data,{manageApprovals}), service = new TaskExecution(store,data);
   t.after(async () => { store.close(); await fs.rm(root,{recursive:true,force:true}); });
   store.remember({id:'user:owner',email:'owner@example.test',displayName:'Owner'});
   const source = Buffer.from('%PDF-1.7\nOriginal manuscript\n');
@@ -52,6 +52,15 @@ async function fixture(t, { schemaVersion = 1, kind = 'manuscript', manageApprov
       return result;
     };
   }});
+  if (approvePackage) {
+    const prepare = publisher.prepare.bind(publisher);
+    publisher.prepare = (...args) => {
+      const prepared = prepare(...args);
+      service.saveModeration(prepared.executionId,'submission');
+      service.saveModeration(prepared.executionId,'package',prepared.packageDigest);
+      return prepared;
+    };
+  }
   const publishService = publisher.publish.bind(publisher);
   publisher.publish = (executor, payload, settings) => payload.action
     ? publishService(executor,payload,settings)
@@ -659,18 +668,55 @@ test('catalogue validation ships with the service independently of the installed
   assert.doesNotMatch(serviceModule,/\/opt\/scriptahub|\.\.\/skills/);
 });
 
-test('a robot declaration cannot publish a package that the service moderator blocks',async t=>{
-  const f=await fixture(t,{kind:'book-proposal'});
-  f.input.validation.moderation={version:3,status:'passed'};
-  f.service.moderate=async (context,files)=>{
+test('publication requires all server-prepared units for the exact uploaded package',async t=>{
+  const f=await fixture(t,{kind:'book-proposal',approvePackage:false});
+  f.input.validation.moderation={version:4,status:'passed'};
+  f.service.prepareModeration=async (context,files)=>{
     assert.equal(context.stage,'package');
-    assert.ok(files.some(file=>file.path.endsWith('/full.html')));
-    return {category:'extreme_presentation'};
+    const html=files.find(file=>file.path.endsWith('/full.html'));
+    assert.ok(html);
+    return {units:[
+      {digest:'a'.repeat(64),file:html.path,text:'First part',changeId:null,image:null},
+      {digest:'b'.repeat(64),file:html.path,text:'Second part',changeId:null,image:Buffer.from('fixture image')}
+    ]};
   };
   f.upload();
-  const result=await f.publisher.publish(agent,{executionId:f.task.executionId},f.config);
+  const args={executionId:f.task.executionId,stage:'package'};
+  await assert.rejects(f.publisher.publish(agent,args,f.config),/Complete robot moderation/);
+  const first=await f.service.moderateTask(agent,args);
+  assert.equal(first.position,0);
+  await assert.rejects(f.service.moderateTask(agent,{...args,action:'record',position:0,digest:'0'.repeat(64),verdict:'passed'}),/does not match/);
+  const second=await f.service.moderateTask(agent,{...args,action:'record',position:0,digest:first.digest,verdict:'passed'});
+  assert.deepEqual(await f.service.moderateTask(agent,args),second);
+  await assert.rejects(f.publisher.publish(agent,args,f.config),/Complete robot moderation/);
+  const image=await f.service.moderateTask(agent,{...args,action:'image',position:1,digest:second.digest});
+  assert.equal(Buffer.from(image.data,'base64').toString(),'fixture image');
+  const result=await f.service.moderateTask(agent,{...args,action:'record',position:1,digest:second.digest,
+    verdict:'blocked',category:'extreme_presentation'});
   assert.equal(result.state,'failed');
   assert.match(result.taskError,/outside the ScriptaHub content policy/);
   assert.equal(f.pushes(),0);
   assert.equal(f.service.moderationPassed(f.task.executionId,'package',f.publisher.row(f.task.executionId).digest),false);
+});
+
+test('the robot can publish after recording all submission and package verdicts',async t=>{
+  const f=await fixture(t,{kind:'book-proposal',approvePackage:false});
+  f.store.db.prepare("DELETE FROM task_moderation WHERE execution_id=? AND stage='submission'").run(f.task.executionId);
+  f.service.prepareModeration=async ({stage},files)=>({units:[
+    {digest:sha256(stage),file:files[0].path,text:'Content for review',changeId:null,image:null}
+  ]});
+  const executionId=f.task.executionId;
+  const approve=async stage=>{
+    const args={executionId,stage};
+    const unit=await f.service.moderateTask(agent,args);
+    assert.equal(unit.status,'review');
+    return f.service.moderateTask(agent,{...args,action:'record',position:unit.position,digest:unit.digest,verdict:'passed'});
+  };
+  assert.deepEqual(await approve('submission'),{status:'passed'});
+  const {packageDigest}=f.upload();
+  assert.deepEqual(await approve('package'),{status:'passed'});
+  assert.equal(f.service.moderationPassed(executionId,'package',packageDigest),true);
+  assert.equal(f.service.moderationPassed(executionId,'package','another-digest'),false);
+  assert.equal((await f.publisher.publish(agent,{executionId},f.config)).state,'completed');
+  assert.equal(f.pushes(),1);
 });
