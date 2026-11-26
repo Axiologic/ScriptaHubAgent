@@ -153,6 +153,39 @@ test('log overflow stops worker and cannot report success',async t=>{
   const status=await f.service.dispatch('scriptahub_skill_job_status',owner,{executionId:'execution',jobId:'job'});assert.equal(status.reason,'Log limit exceeded');
 });
 
+test('live workspace accounting tolerates temporary files and directories removed during a scan', async t => {
+  const f = await fixture(t, 'setInterval(() => {}, 1000)');
+  await f.prepare();
+  await f.service.start(owner, {executionId:'execution', jobId:'job'});
+  const job = f.service.directory({execution_id:'execution', job_id:'job'});
+  const task = path.join(job, 'task'), temporary = path.join(task, 'temporary');
+  const scratch = path.join(task, 'scratch');
+  await fs.writeFile(temporary, 'temporary');
+  await fs.mkdir(scratch);
+  await fs.writeFile(path.join(task, 'final.html'), 'result');
+  const io = (await import('node:fs')).default;
+  const list = io.readdirSync;
+  let removedFile = false, removedDirectory = false;
+  io.readdirSync = function (directory, ...args) {
+    if (directory === scratch && !removedDirectory) {
+      removedDirectory = true;
+      io.rmdirSync(scratch);
+    }
+    const entries = list.call(this, directory, ...args);
+    if (directory === task && !removedFile) {
+      removedFile = true;
+      io.unlinkSync(temporary);
+    }
+    return entries;
+  };
+  try { assert.ok(f.service.diskUsage() >= Buffer.byteLength('result')); }
+  finally { io.readdirSync = list; }
+  assert.ok(removedFile && removedDirectory);
+  assert.equal((await f.service.dispatch('scriptahub_skill_job_status', owner, {
+    executionId:'execution', jobId:'job'
+  })).state, 'running');
+});
+
 test('low storage refuses start and monitor failure stops an active worker',async t=>{
   const f=await fixture(t,'setInterval(()=>{},1000)');await f.prepare();
   const available=f.service.available;f.service.available=()=>0;
@@ -573,6 +606,30 @@ test('an already retained tree with an unreadable directory is repaired or charg
     await fs.chmod(locked,0);fsSync.chmodSync=function(filename,...args) {if(String(filename).endsWith('/locked'))throw Object.assign(new Error('injected'),{code:'EPERM'});return original.call(this,filename,...args);};
     try {reopened.store.db.prepare('UPDATE task_processing_jobs SET reserved_bytes=? WHERE job_id=?').run(999,'job');assert.ok(reopened.diskUsage()>=999);} finally {fsSync.chmodSync=original;}
   } finally {await reopened.drain();}
+});
+
+test('a replaced input cache does not block upload, retry or conversion',async t=>{
+  const f=await fixture(t,"console.log('conversion ran')"),book=Buffer.from('manuscript'),cover=Buffer.from('cover');
+  const entries=[{path:'sources/manuscript.pdf',size:book.length,sha256:hash(book)},{path:'sources/cover.pdf',size:cover.length,sha256:hash(cover)}];
+  const manifest=Buffer.from(JSON.stringify(entries));
+  const job={executionId:'execution',jobId:'job'};
+  await f.service.prepare(owner,{...f.request,args:['convert','tasks/task/sources/manuscript.pdf'],manifestSha256:hash(manifest),manifestSize:manifest.length});
+  const uploadManifest=()=>f.service.upload(owner,{...job,kind:'manifest',offset:0,data:manifest.toString('base64')});
+  const uploadFile=(index,bytes)=>f.service.upload(owner,{...job,kind:'file',path:entries[index].path,offset:0,data:bytes.toString('base64')});
+  assert.deepEqual(uploadManifest().availableFiles,[]);
+  uploadFile(0,book);
+  const cacheRoot=f.service.cache.root;
+  await fs.rename(cacheRoot,cacheRoot+'-old');
+  assert.deepEqual(uploadManifest().availableFiles,[0],'a missing cache preserves verified uploads');
+  await fs.mkdir(cacheRoot);
+  await fs.writeFile(path.join(cacheRoot,'sentinel'),'untouched');
+  assert.deepEqual(uploadManifest().availableFiles,[0],'a replacement cache is ignored');
+  uploadFile(1,cover);
+  assert.deepEqual(uploadManifest().availableFiles,[0,1]);
+  await f.service.start(owner,job);
+  assert.equal(await terminal(f.service),'succeeded');
+  assert.equal(f.launches(),1);
+  assert.deepEqual(await fs.readdir(cacheRoot),['sentinel']);
 });
 
 test('later jobs reuse verified released outputs and upload only changed inputs, including an interrupted retry',async t=>{

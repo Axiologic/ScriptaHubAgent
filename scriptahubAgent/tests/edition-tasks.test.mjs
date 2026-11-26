@@ -113,3 +113,27 @@ test('task schema upgrade preserves existing IDs, running executions, reservatio
     assert.equal(store.db.prepare('SELECT released FROM task_batch_items WHERE task_id=?').get(receipt.task.id).released,0);
   }finally{store.close();}
 });
+
+test('a moderation failure is visible to the contributor and excludes only their correction from the next edition',async t=>{
+  const f=await fixture(t);
+  const rejected=await f.add(author,{file:true}), accepted=await f.add(other);
+  f.approve(rejected);f.approve(accepted);f.edition();
+  const task=f.service.claim(agent,{runId:'edition-moderated',taskType:'edit'}).task;
+  f.service.prepareModeration=async (context,files)=>{
+    assert.equal(context.stage,'submission');
+    const attachment=files.find(file=>file.path.endsWith('.pdf'));
+    assert.equal(attachment.changeId,rejected.id);
+    assert.match(attachment.bytes.toString(), /user:author/);
+    return {finding:{category:'extreme_presentation',changeId:attachment.changeId}};
+  };
+  const result=await f.service.moderateTask(agent,{executionId:task.executionId});
+  assert.equal(result.state,'failed');
+  assert.equal(f.service.moderationPassed(task.executionId,'submission'),false);
+  const contributor=f.store.overview(author);
+  assert.deepEqual(contributor.tasks,[]);
+  const change=contributor.changes.find(change=>change.id===rejected.id);
+  assert.equal(change.state,'rejected');
+  assert.equal(change.processing.error,result.taskError);
+  const next=f.edition();
+  assert.deepEqual(f.store.editionRequests(next.taskId).map(change=>change.id),[accepted.id]);
+});

@@ -146,12 +146,13 @@ export async function prepare(root, options = {}) {
   if(options.paginate&&!options.autoCorrect)throw Error('--paginate requires --auto-correct');
   if(options.wordSpacing&&!['source','natural'].includes(options.wordSpacing))throw Error('--word-spacing must be source or natural');
   const selection = await discover(root, options);
+  const sourceLanguage = options['source-language'] ? new Intl.Locale(options['source-language']).baseName : 'en';
   const initialInputs = await Promise.all([selection.pdf, ...selection.documents.map(d => d.file)].map(async file => ({ file, sha256: await fileHash(file) })));
   if(options.patches || options['reviewed-differences']) throw Error('External repair and review plans are unsupported; validateBook verifies and corrects from local source evidence only.');
   const graphicsProvider=options.pdf2html || process.env.VALIDATEBOOK_PDF2HTML;
   if(!graphicsProvider || !path.isAbsolute(graphicsProvider))throw Error('Configure --pdf2html or VALIDATEBOOK_PDF2HTML with the absolute pdf2html skill launcher path');
   await fs.access(graphicsProvider);
-  const requestHash=hash(JSON.stringify({scope:'layout_and_structure',graphicsProvider,paginate:!!options.paginate,restoreSourcePublisher:!!options.restoreSourcePublisher,wordSpacing:options.wordSpacing||'source',root:selection.root,pdf:selection.pdf,documents:selection.documents,autoCorrect:!!options.autoCorrect}));
+  const requestHash=hash(JSON.stringify({scope:'layout_and_structure',graphicsProvider,paginate:!!options.paginate,restoreSourcePublisher:!!options.restoreSourcePublisher,wordSpacing:options.wordSpacing||'source',root:selection.root,pdf:selection.pdf,documents:selection.documents,sourceLanguage,autoCorrect:!!options.autoCorrect}));
   const directory = path.resolve(options.jobDir || path.join(selection.root, '.validatebook-layout-jobs', requestHash.slice(0,20)));
   if (await exists(path.join(directory, 'job.json'))) { const job=await readJson(path.join(directory,'job.json')); if(job.requestHash!==requestHash)throw Error('Job belongs to another book or request; use a separate directory'); return layoutReport(directory); }
   const runtime = await doctor(options);
@@ -456,6 +457,7 @@ export async function prepare(root, options = {}) {
       before.manuscriptText=await browser.evaluate(`(${inspectManuscriptText.toString()})()`);
       if(item.language==='en')initialFindings.push(...compareManuscriptText(manuscript,before));
       const validateVisual=item.language==='en';
+      const readerLanguage=validateVisual ? sourceLanguage : item.language;
       const typeComparison=validateVisual?compareTypography(sourceType,before,item.language,{sourceFontMap}):{findings:[],mappings:[]};
       if(displayPages.length&&item.language==='en'){
         const familyKey=s=>s.replace(/^[A-Z]{6}\+/,'').replace(/[^a-z]/gi,'').toLowerCase();
@@ -468,7 +470,8 @@ export async function prepare(root, options = {}) {
       if(borderComparison)initialFindings.push(...borderComparison.findings);
       initialFindings.push(...typeComparison.findings);
       if(item.language==='en'&&decorations?.lists){await navigate(browser,item.file);const listCheck=await browser.evaluate(`(${recoverLists.toString()})(${JSON.stringify(decorations.lists)})`);initialFindings.push(...listCheck.findings.map(f=>issue('en',f.kind,'page '+f.page,'PDF list structure differs from HTML.',f)));}
-      const beforeDisplay = validateVisual?[...before.layouts,before].flatMap(l => checkDisplay(l, item.language)):[];
+      const beforeDisplay = validateVisual?[...checkDisplay(before,item.language,{documentLanguage:readerLanguage}),
+        ...before.layouts.flatMap(l => checkDisplay(l,item.language,{responsiveOnly:true,documentLanguage:readerLanguage}))]:[];
       const structure = null;
       const translationScalePresentation=item.language==='en'?presentation:(englishPresentation||presentation);
       const repairShells=beforeDisplay.some(f=>['page_spacing_ownership_conflict','reader_root_incomplete'].includes(f.category));
@@ -493,7 +496,7 @@ export async function prepare(root, options = {}) {
           presentation.geometryCss=await browser.evaluate(`(${readerGeometryCss.toString()})(${JSON.stringify(await fs.readFile(fileURLToPath(presentation.articleContract.readerCss),'utf8'))})`);
           actions.unshift(...readerTypographyRepairs(before,imported,presentation.defaultSizePx*(presentation.scale||1)));
         }
-        if (before.language.toLowerCase() !== item.language.toLowerCase()) actions.unshift({ kind: 'language_tag', language: item.language, safeTranslationStyle: item.language !== 'en' });
+        if (before.language.toLowerCase() !== readerLanguage.toLowerCase()) actions.unshift({ kind: 'language_tag', language: readerLanguage, safeTranslationStyle: item.language !== 'en' });
         if (beforeDisplay.some(f => ['horizontal_overflow', 'outside_content'].includes(f.category))) actions.push({ kind: 'stylesheet', css: responsiveCss });
         // English presentation is the master. Propagate only when its local layout has no unresolved errors.
         if (english && !unresolved.some(f => f.language === 'en' && f.severity === 'error')) {
@@ -539,7 +542,8 @@ export async function prepare(root, options = {}) {
       final.typography=validateVisual?compareTypography(sourceType,final,item.language,{sourceFontMap}):{findings:[],mappings:[]};
       const displayFindings=layouts=>item.language==='en'?checkDisplayPages(displayPages,layouts,sourceFontMap).map(f=>issue('en','source_display_page_difference','page '+f.page,f.detail,f)):[];
       const assets = await collectAssets(final); resourceInputs.push(...assets.inputs);
-      let findings = validateVisual?[...listFindings,...final.typography.findings,...final.layouts.flatMap(l=>checkDisplay(l,item.language)),...assets.findings]:[...assets.findings];
+      let findings = validateVisual?[...listFindings,...final.typography.findings,...checkDisplay(final,item.language,{documentLanguage:readerLanguage}),
+        ...final.layouts.flatMap(l=>checkDisplay(l,item.language,{responsiveOnly:true,documentLanguage:readerLanguage})),...assets.findings]:[...assets.findings];
       if(validateVisual){
         findings.push(...compareManuscriptText(manuscript,final));
         final.referenceSpacing=compareReferenceSpacing(pdfGeometry,final,item.language);
@@ -553,7 +557,7 @@ export async function prepare(root, options = {}) {
       if(validateVisual)findings.push(...paddingFindings([final]));
       const heightFindings=layouts=>layouts.flatMap(l=>pageHeightDifferences(l,pagePresentation)).map(detail=>issue(item.language,'page_height_below_minimum','page '+detail.page,'Rendered page is shorter than the source page proportions; translations retain full pages while allowing content growth.',detail));
       if(validateVisual)findings.push(...heightFindings([final]));
-      if(validateVisual&&english)findings.push(...final.layouts.flatMap((l,i)=>compareImageStyles(english.layouts[i],l,item.language).findings));
+      if(validateVisual&&english)findings.push(...compareImageStyles(english,final,item.language).findings);
       if(validateVisual&&presentation.articleContract){
         const article=await measureDocument(item.file,{importedArticle:presentation.articleContract});
         article.manuscriptText=await browser.evaluate(`(${inspectManuscriptText.toString()})()`);
@@ -564,22 +568,24 @@ export async function prepare(root, options = {}) {
         findings.push(...compareTables(tableProfile,article,tableOptions).findings);
         findings.push(...displayFindings([article]));
         if(item.language==='en'&&decorations?.lists){const checked=await browser.evaluate(`(${recoverLists.toString()})(${JSON.stringify(decorations.lists)})`);findings.push(...checked.findings.map(f=>issue('en',f.kind,'page '+f.page,'Imported reader list structure or typography differs from PDF.',f)));}
-        findings.push(...article.typography.findings,...article.layouts.flatMap(l=>checkDisplay(l,item.language)));
+        findings.push(...article.typography.findings,...checkDisplay(article,item.language,{documentLanguage:readerLanguage}),
+          ...article.layouts.flatMap(l=>checkDisplay(l,item.language,{responsiveOnly:true,documentLanguage:readerLanguage})));
         findings.push(...compareDecorations(targetDecorations,article,item.language).findings);
         findings.push(...paddingFindings([article]));
         findings.push(...heightFindings([article]));
-        if(english)findings.push(...article.layouts.flatMap((l,i)=>compareImageStyles(english.articleLayouts[i],l,item.language).findings));
-        for(let v=0;v<final.layouts.length;v++){
-          const source=final.layouts[v].records,target=article.layouts[v].records;
+        if(english?.articleReference)findings.push(...compareImageStyles(english.articleReference,article,item.language).findings);
+        const views = [[final,article], ...final.layouts.map((layout,i)=>[layout,article.layouts[i]])];
+        for (const [v, [standaloneView, articleView]] of views.entries()) {
+          const source=standaloneView.records,target=articleView.records;
           if(source.length!==target.length)findings.push(issue(item.language,'reader_import_structure','article','Imported article changes the measured block count.'));
           else for(let i=0;i<source.length;i++){
             const a=source[i],b=target[i];
             if(a.text!==b.text||a.tag!==b.tag)findings.push(issue(item.language,'reader_import_structure',b.selector,'Imported article changes text or block order.'));
-            else if(a.text&&a.tag!=='img'&&a.tag!=='table'&&a.displayGroup==null&&(Math.abs(parseFloat(a.font.size)/(a.pageScale||1)-parseFloat(b.font.size)/(b.pageScale||1))>.1||a.font.family!==b.font.family||Math.abs(parseFloat(a.style.lineHeight)/(a.pageScale||1)-parseFloat(b.style.lineHeight)/(b.pageScale||1))>.1))findings.push(issue(item.language,'reader_typography_difference',b.selector,'Imported article differs from standalone typography after normalizing their page widths.',{standalone:a.font,imported:b.font,width:article.layouts[v].width}));
+            else if(v===0&&a.text&&a.tag!=='img'&&a.tag!=='table'&&a.displayGroup==null&&(Math.abs(parseFloat(a.font.size)/(a.pageScale||1)-parseFloat(b.font.size)/(b.pageScale||1))>.1||a.font.family!==b.font.family||Math.abs(parseFloat(a.style.lineHeight)/(a.pageScale||1)-parseFloat(b.style.lineHeight)/(b.pageScale||1))>.1))findings.push(issue(item.language,'reader_typography_difference',b.selector,'Imported article differs from standalone typography at reference width.',{standalone:a.font,imported:b.font,width:articleView.width}));
           }
         }
         const articleFile=path.join(directory,item.language+'-article-layout.json');await writeJson(articleFile,article);artifacts.push({file:articleFile,sha256:await fileHash(articleFile)});
-        if(item.language==='en')final.articleLayouts=article.layouts;
+        if(item.language==='en')final.articleReference={records:article.records,width:article.width};
       }
       if(validateVisual)for (const f of final.platformFonts) if (!f.fonts.some(font => font.glyphCount > 0)) findings.push(issue(item.language, 'unrendered_text', f.selector, 'No platform font reports rendered glyphs for this nonempty text block.'));
       if (!english) {

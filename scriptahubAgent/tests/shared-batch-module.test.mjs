@@ -44,8 +44,11 @@ test('each dependent runtime digest includes shared bytes and unrelated source s
 test('image dependency discovery accepts callable skills without optional descriptors',async()=>{
   const {skillDependencies}=await import('../deployment/skill-source.mjs');
   const config=JSON.parse(await fs.readFile(path.join(root,'scriptahubAgent/deployment/skills-runtime.json')));
-  const dependencies=await skillDependencies(path.join(root,'skills'),config.skills,{'scriptahub-tasks/shared/batch-io.mjs':'a'.repeat(64)});
-  assert.deepEqual(Object.keys(dependencies).sort(),[...skills].sort());
+  const dependencies=await skillDependencies(path.join(root,'skills'),config.skills,{
+    'scriptahub-tasks/shared/batch-io.mjs':'a'.repeat(64), 'validate-book/src/browser.mjs':'b'.repeat(64)
+  });
+  assert.deepEqual(Object.keys(dependencies).sort(),[...skills,'book-pdf'].sort());
+  assert.deepEqual(dependencies['book-pdf'],['validate-book/src']);
   assert.equal(Object.hasOwn(dependencies,'shf-presentation-creator'),false);
 });
 

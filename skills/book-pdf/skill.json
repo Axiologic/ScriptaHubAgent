@@ -1,0 +1,8 @@
+{
+  "title": "Book PDF",
+  "family": "document-export",
+  "summary": "Prints semantic book HTML to a downloadable PDF with a discreet attribution footer.",
+  "dependsOn": ["validate-book", "doc2pdf"],
+  "sourceDependencies": ["validate-book/src"],
+  "entrypoints": ["SKILL.md", "scripts/book-pdf.mjs"]
+}

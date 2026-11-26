@@ -335,7 +335,10 @@ function cleanReadableDocument(sourceDocument, sourceUrl) {
   const original = sourceDocument.querySelector('[data-reader-content], article, main, .edition-reading') || sourceDocument.body;
   const content = document.createElement('article');
   content.className = 'reader-html-content';
-  for (const marker of ['data-pdf-fidelity', 'data-validatebook-root']) {
+  const presentation = sourceDocument.querySelector('head meta[name="scriptahub-reader-presentation"]')?.content.split(/\s+/) ?? [];
+  if (presentation.includes('reflow')) content.classList.add('reader-manuscript-reflow');
+  if (presentation.includes('readable')) content.classList.add('reader-manuscript-readable');
+  for (const marker of ['data-pdf-fidelity', 'data-validatebook-root', 'data-pdf-layout']) {
     if (original.hasAttribute(marker)) content.setAttribute(marker, original.getAttribute(marker));
   }
   const clone = original.cloneNode(true);

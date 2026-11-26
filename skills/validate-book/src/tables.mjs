@@ -15,15 +15,6 @@ const sourceCoveredByPageTables = (source,tables,pageRecords=[]) => {
   const pageWords=[...pageTables.flatMap(t=>(t.cells||[]).flatMap(c=>words(c.text))),...pageRecords.filter(r=>Number(r.page)===source.page&&r.text).flatMap(r=>words(r.text))];
   return pageText.includes(sourceText)||source.cells.every(c=>!compact(c.text)||pageText.includes(compact(c.text))||coveredByWords(c.text,pageWords));
 };
-const htmlCoveredBySourceTables = (table,profile) => {
-  const text=htmlTableText(table);
-  if(!text)return true;
-  const pageSources=profile.filter(source=>(!table.page||Number(table.page)===source.page));
-  if(!pageSources.length)return false;
-  const pageText=pageSources.map(sourceTableText).join('');
-  const pageWords=pageSources.flatMap(source=>source.cells.flatMap(c=>words(c.text)));
-  return pageText.includes(text)||table.cells.every(c=>!compact(c.text)||pageText.includes(compact(c.text))||coveredByWords(c.text,pageWords));
-};
 const tableRows = table => {
   const rows = new Map();
   for (const cell of table.cells || []) {
@@ -575,7 +566,7 @@ export function compareTables(profile, document, {sourceFontMap={},defaultSizePx
   for(const table of tables)if(!matched.has(table.selector)){
     const readable=readableColumnAction(table);
     if(readable)actions.push(readable);
-    findings.push(issue(language,'html_table_unmapped',table.selector,'HTML table has no certified source grid; unsupported or ambiguous tables require a native handler.',htmlCoveredBySourceTables(table,profile)?{severity:'warning',coverage:'HTML table text is covered by source table evidence or generated contents structure'}:{}));
+    findings.push(issue(language,'html_table_unmapped',table.selector,'HTML table geometry could not be certified against the source.',{severity:'warning'}));
   }
   // A collision invalidates all repair actions: do not let source iteration
   // order select which duplicate table wins.

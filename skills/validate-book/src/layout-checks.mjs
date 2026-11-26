@@ -49,6 +49,7 @@ export function inspectLayout() {
       hidden: Boolean(text && (s.display === 'none' || s.visibility !== 'visible' || [...function*(){for(let e=n;e;e=e.parentElement)yield e;}()].some(e=>Number(getComputedStyle(e).opacity)===0) || !textRects.length)), clipped,
       outside: (r.left < -2 || r.right > innerWidth + 2) && ![...function*(){for(let e=n;e;e=e.parentElement)yield e;}()].some(e=>{const box=e.getBoundingClientRect(),ox=getComputedStyle(e).overflowX;return /auto|scroll/.test(ox)&&box.right<=innerWidth+2&&box.left>=-2;}), font: { family: s.fontFamily, size: s.fontSize, weight: s.fontWeight, style: s.fontStyle },
       bounds: {left:r.left,right:r.right,top:r.top,bottom:r.bottom}, ancestors:[...function*(){for(let e=n.parentElement;e;e=e.parentElement)yield index.get(e);}()],
+      ...(innerWidth<=640 && text ? {textBounds:textRects.map(box=>({left:box.left,right:box.right,top:box.top,bottom:box.bottom}))} : {}),
       style: { marginTop:parseFloat(s.marginTop), lineHeight: s.lineHeight, textAlign: s.textAlign, textIndent: s.textIndent, marginBottom:parseFloat(s.marginBottom), wordSpacing:s.wordSpacing, letterSpacing:s.letterSpacing, color:s.color },
       displayGroup:n.getAttribute('data-source-display-group'),displayLines:n.querySelectorAll('br').length+1,
       ...(n.hasAttribute('data-source-display-group')?{displayAvailableWidth:n.parentElement.clientWidth-parseFloat(getComputedStyle(n.parentElement).paddingLeft)-parseFloat(getComputedStyle(n.parentElement).paddingRight),displayRule:{width:parseFloat(s.borderBottomWidth),color:s.borderBottomColor}}:{}),
@@ -82,13 +83,16 @@ export function inspectLayout() {
   for (const n of document.querySelectorAll('[src],link[rel="stylesheet"]')) resources.push({ tag: n.tagName.toLowerCase(), url: n.src || n.href });
   const bodyText = document.body?.textContent || '';
   const pageAnchors=[...document.querySelectorAll('[id]')].filter(n=>/^page_\d+$/.test(n.id));
-  const pageContainers=[...document.querySelectorAll('.pdf-source-page')].map(n=>Number(n.getAttribute('data-source-page')||n.getAttribute('data-reader-page'))).filter(Number.isInteger);
-  const pagination={anchors:pageAnchors.length,pages:[...document.querySelectorAll('section.pdf-source-page[data-reader-page]')].map(n=>{const r=n.getBoundingClientRect();const style=getComputedStyle(n);return {number:Number(n.getAttribute('data-reader-page')),top:r.top,bottom:r.bottom,width:r.width,height:r.height,padding:[style.paddingTop,style.paddingRight,style.paddingBottom,style.paddingLeft].map(parseFloat),cover:!!n.querySelector(':scope > figure#page_1')};}),misplacedAnchors:pageAnchors.filter(n=>n.closest('section.pdf-source-page')&&Number(n.id.slice(5))!==Number(n.closest('section.pdf-source-page').getAttribute('data-reader-page'))).map(n=>n.id)};
+  const pageSelector='section.pdf-source-page[data-reader-page], [data-pdf-layout="reflow"] section.source-page[data-source-page]';
+  const pageNumber=node=>Number(node.getAttribute('data-reader-page')||node.getAttribute('data-source-page'));
+  const pageNodes=[...document.querySelectorAll(pageSelector)];
+  const pageContainers=pageNodes.map(pageNumber).filter(Number.isInteger);
+  const pagination={anchors:pageAnchors.length,pages:pageNodes.map(n=>{const r=n.getBoundingClientRect();const style=getComputedStyle(n);return {number:pageNumber(n),top:r.top,bottom:r.bottom,width:r.width,height:r.height,padding:[style.paddingTop,style.paddingRight,style.paddingBottom,style.paddingLeft].map(parseFloat),cover:!!n.querySelector(':scope > figure#page_1')};}),misplacedAnchors:pageAnchors.filter(n=>n.closest(pageSelector)&&Number(n.id.slice(5))!==pageNumber(n.closest(pageSelector))).map(n=>n.id)};
   // Inspect the entire container chain, not just the generated page box.
   // Author spacing is not reset speculatively: conflicting ownership blocks
   // installation until a source-supported handler can resolve it.
-  for(const page of pagination.pages){
-    const node=document.querySelector('section.pdf-source-page[data-reader-page="'+page.number+'"]');
+  for(const [index,page] of pagination.pages.entries()){
+    const node=pageNodes[index];
     page.cover=!!node.querySelector('figure#page_1');
     page.nestedSpacing=[...node.querySelectorAll('main,article,section,div')].filter(n=>!n.matches('.pdf-table-wrap')&&n.querySelector('p,h1,h2,h3,h4,h5,h6,figure,img,table')).flatMap(n=>{
       const s=getComputedStyle(n);
@@ -97,7 +101,7 @@ export function inspectLayout() {
     });
   }
   const selected=document.querySelector('[data-reader-content], article, main, .edition-reading')||document.body;
-  const readerOmittedPages=[...document.querySelectorAll('section.pdf-source-page[data-reader-page]')].filter(n=>!selected.contains(n)).map(n=>n.getAttribute('data-reader-page'));
+  const readerOmittedPages=pageNodes.filter(n=>!selected.contains(n)).map(pageNumber);
   let readerPage;
   const article=document.querySelector('article.reader-html-content');
   if(article){
@@ -119,7 +123,7 @@ export function inspectLayout() {
   const conversionNotices=[...document.querySelectorAll('[data-pdf-conversion-warning],.pdf-conversion-warning,[data-conversion-notice]')].map(selector);
   return { language: document.documentElement.lang, title: document.title, records, duplicates, brokenLinks: links, resources, localLinks,
     overflowing,
-    conversionNotices,
+    conversionNotices, unconfirmedTableRegions:[...document.querySelectorAll('[data-pdf-table-uncertain]')].map(selector),
     readerPage, readerOmittedPages, pageContainers,
     pagination,
     loadedResources: performance.getEntriesByType('resource').map(e => e.name), fontFaces: [...document.fonts].map(f => ({ family: f.family, status: f.status })),
@@ -132,23 +136,26 @@ export function inspectLayout() {
     width: innerWidth, scrollWidth: document.documentElement.scrollWidth, height: document.documentElement.scrollHeight };
 }
 
-export function checkDisplay(document, language) {
+export function checkDisplay(document, language, {responsiveOnly = false, documentLanguage = language} = {}) {
   const findings = [];
+  for (const location of document.unconfirmedTableRegions ?? []) findings.push(issue(language,'unconfirmed_table_structure',
+    location,'Source table geometry is uncertain. The region is presented in source reading order.',{severity:'warning'}));
   if(document.readerOmittedPages?.length)findings.push(issue(language,'reader_root_incomplete','document','The host reading root omits page containers.',{pages:document.readerOmittedPages}));
   for(const page of document.pagination?.pages||[]){
-    if(page.nestedSpacing?.length && (page.cover || page.padding?.some(v=>v>.5)))findings.push(issue(language,'page_spacing_ownership_conflict','page '+page.number,'Generated page padding overlaps author container spacing; automatic installation is blocked.',{containers:page.nestedSpacing}));
+    if(!responsiveOnly && page.nestedSpacing?.length && (page.cover || page.padding?.some(v=>v>.5)))findings.push(issue(language,'page_spacing_ownership_conflict','page '+page.number,'Generated page padding overlaps author container spacing; automatic installation is blocked.',{containers:page.nestedSpacing}));
   }
   if(document.pagination){
     const p=document.pagination;
-    if(language==='en'&&p.anchors>1&&!p.pages.length)findings.push(issue(language,'missing_page_containers','document','Page anchors exist but cover, title and subsequent pages still form continuous HTML. Use source-bound pagination.'));
-    if(language==='en')for(const id of p.misplacedAnchors)findings.push(issue(language,'misplaced_page_anchor',id,'Page anchor is outside its corresponding page container.'));
+    if(!responsiveOnly&&language==='en'&&p.anchors>1&&!p.pages.length)findings.push(issue(language,'missing_page_containers','document','Page anchors exist but cover, title and subsequent pages still form continuous HTML. Use source-bound pagination.'));
+    if(!responsiveOnly&&language==='en')for(const id of p.misplacedAnchors)findings.push(issue(language,'misplaced_page_anchor',id,'Page anchor is outside its corresponding page container.'));
     for(let i=1;i<p.pages.length;i++)if(p.pages[i].top<p.pages[i-1].bottom)findings.push(issue(language,'overlapping_pages','page '+p.pages[i].number,'Source page containers overlap.'));
   }
   if(document.readerPage){
     const {actual,expected}=document.readerPage;
     if(Math.abs(actual.width-expected.width)>.1||Math.abs(actual.left-expected.left)>.1||actual.padding.some((value,i)=>Math.abs(parseFloat(value)-parseFloat(expected.padding[i]))>.1))findings.push(issue(language,'reader_page_geometry_override','article.reader-html-content','Book styles override the host reader page width, centering or padding.',{width:document.width,actual,expected}));
   }
-  if (document.language.toLowerCase() !== language.toLowerCase()) findings.push(issue(language, 'language_tag', 'html', document.language, { repair: { kind: 'language_tag', language } }));
+  if (document.language.toLowerCase() !== documentLanguage.toLowerCase()) findings.push(issue(language, 'language_tag', 'html', document.language,
+    { repair: { kind: 'language_tag', language: documentLanguage } }));
   for (const id of document.duplicates) findings.push(issue(language, 'duplicate_id', id, 'Anchor is not unique; automatic renaming could break references.'));
   for (const href of document.brokenLinks) findings.push(issue(language, 'broken_anchor', href, 'Contents/reference destination does not exist.'));
   if (document.scrollWidth > document.width + 2) findings.push(issue(language, 'horizontal_overflow', 'document', `Content width ${document.scrollWidth}, viewport ${document.width}.`, { overflowing: document.overflowing, scrollWidth: document.scrollWidth, viewportWidth: document.width }));
@@ -165,10 +172,15 @@ export function checkDisplay(document, language) {
     if(key&&runningCounts.get(key)>=3&&/^(p|h[1-6])$/.test(r.tag))findings.push(issue(language,'running_matter_visible',r.selector,'Repeated source running header/footer is visible as book content and must not drive contents or typography mapping.',{repair:{kind:'remove_running_matter',selector:r.selector,text:r.text,id:r.id}}));
   }
   const placed = document.records.filter(r=>r.text && r.tag!=='table' && r.bounds && !r.hidden).sort((a,b)=>a.bounds.top-b.bounds.top);
+  const overlap = (a,b) => Math.min(a.right,b.right)-Math.max(a.left,b.left)>2
+    && Math.min(a.bottom,b.bottom)-Math.max(a.top,b.top)>2;
   for(let i=0;i<placed.length;i++) for(let j=i+1;j<placed.length && placed[j].bounds.top < placed[i].bounds.bottom-2;j++) {
     const a=placed[i],b=placed[j];
     if(a.ancestors?.includes(b.nodeIndex)||b.ancestors?.includes(a.nodeIndex))continue;
-    if(Math.min(a.bounds.right,b.bounds.right)-Math.max(a.bounds.left,b.bounds.left)>2) findings.push(issue(language,'overlapping_blocks',a.selector+' / '+b.selector,'Text block boxes overlap; inspect positioned content.',{width:document.width}));
+    if(overlap(a.bounds,b.bounds) && (!a.textBounds || !b.textBounds
+        || a.textBounds.some(left=>b.textBounds.some(right=>overlap(left,right))))) {
+      findings.push(issue(language,'overlapping_blocks',a.selector+' / '+b.selector,'Visible text regions overlap.',{width:document.width}));
+    }
   }
   for (const f of document.fontFaces) if (f.status === 'error') findings.push(issue(language, 'font_load_failed', f.family, 'Declared font did not load.'));
   return findings;

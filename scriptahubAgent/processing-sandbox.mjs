@@ -1,6 +1,7 @@
 import path from 'node:path';
 
 const commands = Object.freeze({
+  'book-pdf':['export','moderation-render'],
   'comprehensive-summary':['doctor','batch-contract','submit-batch','prepare','status','build','validate'],
   doc2pdf:['doctor','convert','validate'], html2doc:['doctor','convert','validate'],
   'humanise-html':['doctor','prepare','status','build','validate','repair'],

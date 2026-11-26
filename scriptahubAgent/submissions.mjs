@@ -72,7 +72,15 @@ export async function saveSubmission({ body, contentType, user, dataDir, store, 
   if (meta.kind === 'fork' && (uploads.length || meta.targetBookId || !meta.values.titles?.trim() || !meta.values.prompt?.trim() || !meta.values.sourceEdition)) {
     throw new Error('A derived book requires a source edition, a new title and instructions.');
   }
-  if (meta.kind === 'manuscript' && !uploads.length) throw new Error('A manuscript is required');
+  if (meta.kind === 'manuscript') {
+    if (!uploads.length) throw new Error('A manuscript is required');
+    const fields = new Set(['title','titles','readerLayout','readerTypography','coverMode','coverStyle','coverPalette','coverComposition','coverDescription']);
+    if (Object.keys(meta.values).some(key => !fields.has(key)) ||
+      (meta.values.readerLayout !== undefined && !['source','reflow'].includes(meta.values.readerLayout)) ||
+      (meta.values.readerTypography !== undefined && !['source','readable'].includes(meta.values.readerTypography))) {
+      throw new Error('A manuscript accepts only title, presentation and cover settings.');
+    }
+  }
   if (meta.kind === 'book-proposal' && (uploads.length || !(meta.values.description?.trim() || meta.values.prompt?.trim()))) {
     throw new Error('A book proposal without a manuscript requires a description or editorial instructions');
   }
@@ -101,10 +109,11 @@ export async function saveSubmission({ body, contentType, user, dataDir, store, 
     return store.submit(existing,policy);
   };
   if (await fs.stat(directory).then(() => true, error => error.code === 'ENOENT' ? false : Promise.reject(error))) return existingReceipt();
+  const cost = meta.kind === 'fork' ? policy?.forkCost : meta.kind === 'book-proposal' ? policy?.promptBookCost : undefined;
+  if (cost !== undefined && (meta.confirmedCost ?? 0) !== cost) {
+    throw Object.assign(new Error('The points cost has changed. Review it before continuing.'), {status:409});
+  }
   if (meta.kind === 'fork') {
-    if (meta.confirmedCost !== (policy?.forkCost || 0)) {
-      throw Object.assign(new Error('The points cost has changed. Review it before continuing.'), {status:409});
-    }
     if (!forkSource) throw Object.assign(new Error('Source catalogue is unavailable.'), {status:503});
     const pinned = await forkSource(meta.bookId, meta.language, meta.values.sourceEdition);
     source = pinned.source;

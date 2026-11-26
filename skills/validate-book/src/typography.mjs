@@ -167,7 +167,22 @@ function locateSourceText(text, lines, occurrence=null) {
   if(occurrence==null){
     const start=source.indexOf(text);
     if(start<0)return {status:'missing'};
-    if(source.indexOf(text,start+1)>=0)return {status:'ambiguous',start,lines};
+    if(source.indexOf(text,start+1)>=0){
+      let offset=0;
+      const spans=lines.map(line=>{
+        const begin=offset;
+        offset+=line.joined.length;
+        return {line,begin,end:offset};
+      });
+      const signature=position=>JSON.stringify(spans.filter(span=>span.begin<position+text.length&&span.end>position)
+        .map(({line,begin,end})=>[Math.min(position+text.length,end)-Math.max(position,begin),
+          line.font.sizePt,line.font.family,line.font.color,line.bold,line.boldText]));
+      const first=signature(start);
+      for(let next=source.indexOf(text,start+1);next>=0;next=source.indexOf(text,next+1)){
+        if(signature(next)!==first)return {status:'ambiguous',start,lines};
+      }
+      return {status:'equivalent',start,lines};
+    }
     return {status:'unique',start,lines};
   }
   let start=-1;
@@ -228,8 +243,9 @@ export function compareTypography(profile, document, language='en', {sourceFontM
       findings.push(issue(language,'source_typography_unmapped',r.selector,'An English paragraph has no unique source-text match, so its font size and family are not certified. Text overlap does not establish a typography mapping.',{page:r.page}));
       continue;
     }
-    if(language==='en'&&located.status==='ambiguous'){findings.push(issue(language,'source_typography_ambiguous',r.selector,'A repeated source passage has no unique local mapping for paragraph font-size or family correction.',{page:r.page}));continue;}
-    if(located.status!=='unique')continue;
+    if(language==='en'&&located.status==='ambiguous'){findings.push(issue(language,'source_typography_ambiguous',r.selector,'The repeated passage has more than one possible source font. Its typography was left unchanged.',{page:r.page,severity:'warning'}));continue;}
+    const equivalent=located.status==='equivalent';
+    if(located.status!=='unique'&&!equivalent)continue;
     const end=start+text.length;
     let offset=0;const sizes=[],matchedLines=[];
     for(const line of matchedSource){const length=line.joined.length;if(offset<end&&offset+length>start){matchedLines.push(line);for(let i=0;i<Math.min(length,100);i++)sizes.push(line.font.sizePt);}offset+=length;}
@@ -252,7 +268,7 @@ export function compareTypography(profile, document, language='en', {sourceFontM
     const boldCoverage=matchedChars?boldChars/matchedChars:0;
     const mapping={selector:r.selector,tag:r.tag,page:matchedLines[0].page,fontSizePt:sourcePt,expectedCssPx:expected,actualCssPx:actual,sourceTopPt:matchedLines[0].top,sourceLastTopPt:matchedLines.at(-1).top,sourceBlockLeadingPt,sourceLeadingPt:/^h[1-6]$/.test(r.tag)?sourceBlockLeadingPt:null,sourceFamilies,sourceColors:[...new Set(matchedLines.map(l=>l.font.color).filter(Boolean))],sourceBold:boldCoverage>=.6||sourceWeights.every(weight=>weight===700),sourceBoldCoverage:boldCoverage,sourceStyle:sourceStyles.length===1?sourceStyles[0]:'normal'};const last=matchedLines.at(-1),next=sourceLines.find(l=>l.page===last.page&&l.top>last.top+1&&l.font.sizePt===sourcePt);
     const previous=mappings.at(-1);
-    if(/^h[1-6]$/.test(r.tag)&&previous?.page===mapping.page&&mapping.sourceTopPt>previous.sourceLastTopPt){
+    if(!equivalent&&!previous?.equivalentSource&&/^h[1-6]$/.test(r.tag)&&previous?.page===mapping.page&&mapping.sourceTopPt>previous.sourceLastTopPt){
       const previousRecord=document.records.find(record=>record.selector===previous.selector);
       const interveningTable=document.records.some(record=>record.tag==='table'&&Number(record.page)===mapping.page&&record.nodeIndex>previousRecord?.nodeIndex&&record.nodeIndex<r.nodeIndex);
       const sourceTable=(profile.tableFragments||[]).filter(table=>table.page===mapping.page&&Number.isFinite(table.bottomPt)&&table.bottomPt<=mapping.sourceTopPt).sort((a,b)=>b.bottomPt-a.bottomPt)[0];
@@ -270,12 +286,17 @@ export function compareTypography(profile, document, language='en', {sourceFontM
     const maxTop=matchedLines.length?Math.max(...matchedLines.map(line=>line.top)):last.top;
     const stacked=profile.leadingPt?matchedLines.filter(line=>line.top===maxTop).length-1:0;
     const effectiveLastTop=maxTop+Math.max(0,stacked)*(profile.leadingPt||0);
-    if(r.tag==='p'&&next&&profile.leadingPt&&next.top-effectiveLastTop<profile.leadingPt*2)mapping.paragraphGapCssPx=Math.max(0,pointsToCssPixels(next.top-effectiveLastTop)-profile.leadingCssPx);
+    if(!equivalent&&r.tag==='p'&&next&&profile.leadingPt&&next.top-effectiveLastTop<profile.leadingPt*2)mapping.paragraphGapCssPx=Math.max(0,pointsToCssPixels(next.top-effectiveLastTop)-profile.leadingCssPx);
     if(mapping.paragraphGapCssPx<1)mapping.paragraphGapCssPx=0;
     const pageLines=profile.pages.find(p=>p.page===matchedLines[0].page)?.lines||[];
     const bodyColumn=pageLines.filter(line=>line.font?.sizePt===profile.bodyPt).reduce((max,line)=>Math.max(max,Number(line.width)||0),0);
     const nonLast=matchedLines.slice(0,-1).map(line=>Number(line.width)||0);
-    if(bodyColumn>0&&nonLast.length)mapping.sourceAlign=nonLast.every(w=>w>=bodyColumn*.9)?'justify':'left';
+    if(!equivalent&&bodyColumn>0&&nonLast.length)mapping.sourceAlign=nonLast.every(w=>w>=bodyColumn*.9)?'justify':'left';
+    if(equivalent){
+      mapping.equivalentSource=true;
+      mapping.sourceLeadingPt=null;
+      mapping.sourceBlockLeadingPt=null;
+    }
     mappings.push(mapping);
     if(Math.abs(actual-expected)>Math.max(1,expected*.08))findings.push(issue(language,'absolute_font_size_difference',r.selector,'Computed default font size differs from the PDF font size in physical units.',{...mapping,repair:{kind:'presentation',selector:r.selector,properties:{'font-size':`${sourcePt/profile.bodyPt}em`}}}));
     if(mapping.sourceLeadingPt&&Math.abs(parseFloat(r.style.lineHeight)/actual-mapping.sourceLeadingPt/sourcePt)>.08)findings.push(issue(language,'heading_line_leading_difference',r.selector,'Heading line spacing differs from the PDF baseline increments.',{...mapping,repair:{kind:'presentation',selector:r.selector,properties:{'line-height':String(mapping.sourceLeadingPt/sourcePt)}}}));

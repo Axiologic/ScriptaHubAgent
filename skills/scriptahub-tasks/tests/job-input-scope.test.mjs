@@ -46,11 +46,21 @@ test('preparation scopes include only explicit job/output, and validation needs 
   const reordered=await f.scope({skill:'short-description',args:['prepare','--output=tasks/a/editorial/description.html','--job-dir','tasks/a/editorial-jobs/description','tasks/a/sources/book.html']});
   assert.deepEqual(reordered.files,scope.files);
   assert.deepEqual(reordered.trees,scope.trees);
+  const summary=await f.scope({skill:'comprehensive-summary',args:['prepare','tasks/a/sources/book.html',
+    '--minutes','10','--max-duration','--job-dir','tasks/a/editorial-jobs/summary','--output','tasks/a/editorial/summary.html']});
+  assert.deepEqual(summary.files,['editorial/summary.html','sources/book.html','sources/figure.svg']);
+  assert.deepEqual(summary.trees,['editorial-jobs/summary']);
   const validation=await f.scope({skill:'translate-html',args:['validate','tasks/a/sources/book.html','--html','tasks/a/translations/ro/full.html','--to','ro']});
   assert.equal(validation.allows('translations/ro/full.html'),true);
   assert.equal(validation.allows('translation-jobs/ro/full/job.json'),false);
   await assert.rejects(f.scope({skill:'short-description',args:['prepare','tasks/a/sources/book.html']}),/--job-dir/);
   await assert.rejects(f.scope({skill:'translate-html',args:['prepare','tasks/a/sources/book.html','--job-dir','tasks/a/translation-jobs/ro','--output','tasks/a/translations/ro/full.html']}),/one job/);
+});
+test('PDF export includes responsive images using srcset and keeps other assets outside its scope',async t=>{
+  const f=await fixture(t);
+  await f.write('sources/book.html','<main><picture><source srcset="wide.webp 2x, detail.svg 3x"><img srcset="data:image/png;base64,AAAA 1x, even.png 2x" src="figure.svg"></picture></main>');
+  const scope=await f.scope({skill:'book-pdf',args:['export','tasks/a/sources/book.html','--output','tasks/a/ro/book.pdf','--language','ro']});
+  assert.deepEqual(scope.files,['ro/book.pdf','sources/book.html','sources/detail.svg','sources/even.png','sources/figure.svg','sources/wide.webp']);
 });
 for(const skill of ['comprehensive-summary','marketing-summary','short-description','relevant-keywords','translate-html']) {
   test(`${skill} batch contracts and admission keep the same isolated job boundary`,async t=>{

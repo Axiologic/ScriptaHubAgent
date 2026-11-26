@@ -1,4 +1,4 @@
-import {ProcessingInputCache,inputCacheBytes} from './processing-input-cache.mjs';
+import {INPUT_CACHE_CHANGED,ProcessingInputCache,inputCacheBytes} from './processing-input-cache.mjs';
 import crypto from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
@@ -54,12 +54,30 @@ function inventory(root) {
   visit(''); files.sort((a,b)=>a.path<b.path?-1:a.path>b.path?1:0); return {files,total};
 }
 function usedBytes(root) {
-  let total=0; const visit=directory=>{for(const item of fs.readdirSync(directory,{withFileTypes:true})) {
-    const filename=path.join(directory,item.name),st=fs.lstatSync(filename);
-    if(st.isDirectory()&&!st.isSymbolicLink())visit(filename);
-    else if(st.isFile()&&st.nlink===1) total+=st.size;
-    else throw new Error('Unsupported workspace entry');
-  }}; visit(root); return total;
+  let total = 0;
+  const visit = (directory, entries) => {
+    for (const item of entries) {
+      const filename = path.join(directory, item.name);
+      // A live worker may rename or remove an entry after it was listed.
+      const stat = fs.lstatSync(filename, {throwIfNoEntry:false});
+      if (!stat) continue;
+      if (stat.isDirectory()) {
+        let children;
+        try { children = fs.readdirSync(filename, {withFileTypes:true}); }
+        catch (error) {
+          if (error.code === 'ENOENT') continue;
+          throw error;
+        }
+        visit(filename, children);
+      } else if (stat.isFile() && stat.nlink === 1) {
+        total += stat.size;
+      } else {
+        throw new Error('Unsupported workspace entry');
+      }
+    }
+  };
+  visit(root, fs.readdirSync(root, {withFileTypes:true}));
+  return total;
 }
 // Measure retained logical sizes without following links. Counting every hardlink
 // is conservative; unsupported entries fail startup rather than hiding usage.
@@ -142,7 +160,7 @@ export class ProcessingService {
     }
     // This supervisor owns the store now and has no children yet, so no earlier snapshot is in use.
     pruneSnapshots(snapshotRoot);
-    this.cleanupTimer=setInterval(()=>{try{this.expireUploads();this.resumeCleanup();this.cache.prune();}catch{console.error('Processing cleanup retry failed');}},60000);this.cleanupTimer.unref();
+    this.cleanupTimer=setInterval(()=>{try{this.expireUploads();this.resumeCleanup();this.withInputCache(()=>this.cache.prune());}catch{console.error('Processing cleanup retry failed');}},60000);this.cleanupTimer.unref();
     this.uploadMonitor=setInterval(()=>this.cancelStoppedUploads(),250);this.uploadMonitor.unref();
   }
   // Measures a retained job directory. A directory that stays unreadable after repair must not stop other jobs or startup:
@@ -276,20 +294,23 @@ export class ProcessingService {
     this.store.db.prepare('UPDATE task_processing_jobs SET updated_at=? WHERE execution_id=? AND job_id=?').run(time(),input.executionId,input.jobId);
     return {nextOffset};
   }
+  withInputCache(operation) {
+    try {return operation();} catch(error) {if(error.code!==INPUT_CACHE_CHANGED)throw error;}
+  }
   reuseInputs(row) {
     const {entries,total}=this.manifest(row),request=JSON.parse(row.request),root=path.join(this.directory(row),'task');
     this.store.transaction(()=>{
       const current=this.jobs.row(row.executor_agent_id,row.execution_id,row.job_id);
       if(current.state!=='uploading')fail('Job is not accepting uploads',409);
       const other=this.store.db.prepare('SELECT COALESCE(SUM(reserved_bytes),0) AS bytes FROM task_processing_jobs WHERE NOT (execution_id=? AND job_id=?)').get(row.execution_id,row.job_id).bytes;
-      this.cache.prune(Math.max(0,MAX_STORED-other-total-request.manifestSize));
+      this.withInputCache(()=>this.cache.prune(Math.max(0,MAX_STORED-other-total-request.manifestSize)));
       if(other+total+request.manifestSize+inputCacheBytes(this.store.db)>MAX_STORED || this.available(this.root)<FLOOR+total)fail('Processing storage unavailable',503);
       this.store.db.prepare('UPDATE task_processing_jobs SET reserved_bytes=? WHERE execution_id=? AND job_id=?').run(total+request.manifestSize,row.execution_id,row.job_id);
     });
     const available=[];
     entries.forEach((entry,index)=>{
       try {verifyProcessingFile(root,entry);available.push(index);return;}catch(error){if(error.code!=='ENOENT' && error.status!==409)throw error;}
-      if(this.cache.restore(row.executor_agent_id,row.execution_id,root,entry))available.push(index);
+      if(this.withInputCache(()=>this.cache.restore(row.executor_agent_id,row.execution_id,root,entry)))available.push(index);
     });
     return available;
   }
@@ -340,7 +361,10 @@ export class ProcessingService {
         const state=this.tasks.execution(executor,input.executionId).state;
         if(state!=='running')return this.stop(record,'Task stop requested',true);
         if(this.diskUsage()>MAX_STORED||this.available(this.root)<FLOOR) return this.stop(record,'Workspace storage limit exceeded');
-      } catch {this.stop(record,'Workspace monitor failed');}
+      } catch (error) {
+        console.error('Processing workspace monitor failed:', record.row.job_id, error.code || error.message);
+        this.stop(record,'Workspace monitor failed');
+      }
     },100);
     try {this.store.db.prepare("UPDATE task_processing_jobs SET state='running',updated_at=? WHERE execution_id=? AND job_id=? AND state='starting'").run(time(),input.executionId,input.jobId);}
     catch {this.stop(record,'Worker state persistence failed');throw Object.assign(new Error('Processing state unavailable'),{status:503});}
@@ -352,7 +376,8 @@ export class ProcessingService {
     const reserved=new Map(this.store.db.prepare('SELECT execution_id,job_id,reserved_bytes FROM task_processing_jobs').all().map(row=>[path.basename(this.directory(row)),row.reserved_bytes]));
     let total=0; for(const entry of fs.readdirSync(this.root,{withFileTypes:true})) {
       if(entry.name.startsWith('job-')) {if(!entry.isDirectory()||entry.isSymbolicLink()) throw new Error('Invalid retained workspace');const directory=path.join(this.root,entry.name);total+=running.has(entry.name)?usedBytes(directory):this.measureRetained(directory,reserved.get(entry.name)??0);}
-    } this.cache.checkRoot();return total+inputCacheBytes(this.store.db);
+    }
+    return total+inputCacheBytes(this.store.db);
   }
   // Frees the worker slot when the normal terminal record cannot be written; the receipt is marked incomplete.
   fallbackTerminal(row,reason,code,states="('starting','running','stopping')",inventory=[]) {

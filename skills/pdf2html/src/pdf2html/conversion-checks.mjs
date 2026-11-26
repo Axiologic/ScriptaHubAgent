@@ -40,7 +40,10 @@ export async function checkConversionOutput(htmlPath, { expectedPages, expectedT
   if (!contentText($('body')[0]).trim() && !$('body img').length) findings.push(finding('error','empty-output','Conversion produced no document content.'));
   if (expectedPages !== undefined && (sections.length !== expectedPages || sections.some((node,index) => node.attribs.id !== 'page_'+(index+1) || node.attribs['data-source-page'] !== String(index+1)))) findings.push(finding('error','page-assembly','Generated page containers are missing or duplicated.'));
   const tables=$('table').length, contents=$('nav.contents-list').length, images=$('img').length;
-  if (expectedTables !== undefined && tables+contents !== expectedTables) findings.push(finding('error','table-assembly','Serialized table regions were lost during HTML assembly.'));
+  const uncertainTables = $('[data-pdf-table-uncertain]').toArray();
+  if (expectedTables !== undefined && tables+contents+uncertainTables.length !== expectedTables) findings.push(finding('error','table-assembly','Serialized table regions were lost during HTML assembly.'));
+  for (const region of uncertainTables) findings.push(finding('warning','unconfirmed-table-structure',
+    'Table geometry could not be confirmed. The region is presented in source reading order.', {page:$(region).closest('[data-source-page]').attr('data-source-page')}));
   if (expectedPictures !== undefined && images !== expectedPictures) findings.push(finding('error','image-assembly','Serialized image references were lost during HTML assembly.'));
   const browser = await launchBrowser();
   try {

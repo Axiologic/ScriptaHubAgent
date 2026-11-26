@@ -227,7 +227,7 @@ const roundEven = n =>
   n % 1 === 0.5 ? Math.floor(n) + (Math.floor(n) % 2) : Math.round(n);
 export async function prepareJob(
   input,
-  { minutes, wordsPerMinute = 200, language, output, jobDir } = {}
+  { minutes, wordsPerMinute = 200, maxDuration = false, language, output, jobDir } = {}
 ) {
   const source = resolve(input);
   if (!(await exists(source)))
@@ -249,9 +249,13 @@ export async function prepareJob(
   for (const c of chapters) if (c.id === 'front-matter') c.title = ui.front;
   const included = chapters.filter(c => c.included),
     sourceWords = included.reduce((n, c) => n + c.wordCount, 0),
-    targetWords = roundEven(minutes * wordsPerMinute),
-    minimumWords = Math.floor((targetWords * 90) / 100),
-    maximumWords = Math.floor((targetWords * 110 + 99) / 100);
+    requestedWords = roundEven(minutes * wordsPerMinute),
+    durationLimit = Math.floor(minutes * wordsPerMinute),
+    targetWords = maxDuration ? Math.min(durationLimit, Math.floor(sourceWords * 0.6)) : requestedWords,
+    minimumWords = maxDuration ? 1 : Math.floor((targetWords * 90) / 100),
+    maximumWords = maxDuration ? Math.min(durationLimit, sourceWords - 1) : Math.floor((targetWords * 110 + 99) / 100);
+  if (maxDuration && maximumWords < 1)
+    throw Error('No content is available to summarize within the requested limit.');
   if (minimumWords >= sourceWords)
     throw Error(
       `Requested summary lower bound (${minimumWords} words) is not shorter than the content source (${sourceWords} words).`
@@ -270,7 +274,7 @@ export async function prepareJob(
   if (!jobDir) {
     const float = Number.isInteger(minutes) ? `${minutes}.0` : String(minutes);
     const identity = hash(
-      `${source}\0${sourceHash}\0${target}\0${float}\0${wordsPerMinute}`
+      `${source}\0${sourceHash}\0${target}\0${float}\0${wordsPerMinute}${maxDuration ? '\0max-duration' : ''}`
     ).slice(0, 16);
     jobDir = path.join(
       path.dirname(source),
@@ -337,6 +341,7 @@ export async function prepareJob(
     language: lang,
     sourceTitle: title,
     minutes,
+    ...(maxDuration && { maxDuration }),
     wordsPerMinute,
     targetWords,
     minimumWords,

@@ -13,7 +13,7 @@ class Node {
   setCustomValidity(message){this.validationMessage=message;}
   get valueAsNumber(){return Number(this.value);}
 }
-const points={bookReward:10,correctionReward:5,editionCost:10,forkCost:15,rewardValidityDays:180,firstNoticeDays:30,lastNoticeDays:7};
+const points={initialCredits:0,bookReward:10,correctionReward:5,editionCost:10,forkCost:15,promptBookCost:18,rewardValidityDays:180,firstNoticeDays:30,lastNoticeDays:7};
 function setup(t){
   const original=Object.getOwnPropertyDescriptor(globalThis,'document'),events=[];
   Object.defineProperty(globalThis,'document',{configurable:true,value:{documentElement:{lang:'ro'},createElement:tag=>new Node(tag),createElementNS:(namespace,tag)=>Object.assign(new Node(tag),{namespaceURI:namespace}),dispatchEvent:event=>events.push(event.type)}});
@@ -28,19 +28,54 @@ function ui(host){
 }
 const event={preventDefault(){}};
 
-test('administration has one form and Save/Reset; reset restores loaded values without writing',async t=>{
-  const {host}=setup(t);const writes=[];
-  await mountAdministration(host,async(path,body)=>{if(body)writes.push({path,body});return path==='/policy'?{points}:{unitAmountMinor:5,currency:'eur'};});
+
+test('administration shows initial credits and credit rules without payment settings',async t=>{
+  const {host}=setup(t);const requests=[];
+  await mountAdministration(host,async(path,body)=>{requests.push({path,body});return {points};});
   const {field,reset}=ui(host);
   assert.equal(nodes(host).filter(node=>node.tag==='form').length,1);
   assert.deepEqual(nodes(host).filter(node=>node.tag==='button').map(node=>node.textContent),['Reset','Salvează']);
-  field('bookReward').value='99';field('bookReward').oninput();field('creditPrice').value='0.25';field('creditPrice').oninput();field('currency').value='USD';field('currency').onchange();
-  reset.onclick();assert.equal(field('bookReward').value,10);assert.equal(field('creditPrice').value,'0.05');assert.equal(field('currency').value,'EUR');assert.equal(writes.length,0);
+  assert.equal(field('creditPrice'),undefined);
+  assert.equal(field('currency'),undefined);
+  field('initialCredits').value=25;field('initialCredits').oninput();
+  reset.onclick();assert.equal(field('initialCredits').value,0);
+  assert.deepEqual(requests,[{path:'/policy',body:undefined}]);
 });
+
+test('save persists only credit policy and prevents duplicate submissions',async t=>{
+  const {host,events}=setup(t);const writes=[];let complete;
+  await mountAdministration(host,async(path,body)=>{
+    if(!body)return {points};
+    writes.push({path,body});
+    await new Promise(resolve=>{complete=resolve;});
+    return {points:body};
+  });
+  const {field,form,reset,status}=ui(host);field('initialCredits').value=20;
+  const save=form.onsubmit(event);await form.onsubmit(event);
+  assert.equal(reset.disabled,true);
+  assert.deepEqual(writes,[{path:'/policy',body:{...points,initialCredits:20}}]);
+  complete();await save;
+  assert.deepEqual(events,['scriptahub:points-policy']);assert.match(status.textContent,/au fost salvate/);
+  field('initialCredits').value=1;reset.onclick();assert.equal(field('initialCredits').value,20);
+});
+
+test('failed save retains the edited amount for retry',async t=>{
+  const {host}=setup(t);let fail=true;
+  await mountAdministration(host,async(path,body)=>{
+    if(!body)return {points};
+    if(fail)throw Error('Unavailable');
+    return {points:body};
+  });
+  const {field,form,status}=ui(host);field('initialCredits').value=25;
+  await form.onsubmit(event);assert.equal(field('initialCredits').value,25);assert.equal(status.textContent,'Unavailable');
+  fail=false;await form.onsubmit(event);assert.match(status.textContent,/au fost salvate/);
+});
+
+const mountPaidAdministration = (host, api) => mountAdministration(host, api, {creditPurchasesEnabled:true});
 
 test('one Save writes edited rules and pricing and blocks repeated submissions',async t=>{
   const {host,events}=setup(t);const writes=[];let finishPrice;
-  await mountAdministration(host,async(path,body)=>{
+  await mountPaidAdministration(host,async(path,body)=>{
     if(!body)return path==='/policy'?{points}:{unitAmountMinor:5,currency:'eur'};
     writes.push({path,body});if(path==='/offer-settings')await new Promise(resolve=>{finishPrice=resolve;});
     return path==='/policy'?{points:body}:body;
@@ -56,14 +91,14 @@ test('one Save writes edited rules and pricing and blocks repeated submissions',
 
 test('failed price save retains edits and does not write rules',async t=>{
   const {host}=setup(t);const writes=[];
-  await mountAdministration(host,async(path,body)=>{if(!body)return path==='/policy'?{points}:{unitAmountMinor:5,currency:'eur'};writes.push(path);throw Error('Unavailable');});
+  await mountPaidAdministration(host,async(path,body)=>{if(!body)return path==='/policy'?{points}:{unitAmountMinor:5,currency:'eur'};writes.push(path);throw Error('Unavailable');});
   const {field,form,status}=ui(host);field('creditPrice').value='0.10';field('bookReward').value=25;
   await form.onsubmit(event);assert.deepEqual(writes,['/offer-settings']);assert.equal(field('creditPrice').value,'0.10');assert.equal(field('bookReward').value,25);assert.equal(field('creditPrice').disabled,false);assert.equal(status.textContent,'Unavailable');
 });
 
 test('partial save is reported and retry writes only the remaining settings',async t=>{
   const {host}=setup(t);const writes=[];let fail=true;
-  await mountAdministration(host,async(path,body)=>{
+  await mountPaidAdministration(host,async(path,body)=>{
     if(!body)return path==='/policy'?{points}:{unitAmountMinor:5,currency:'eur'};
     writes.push(path);if(path==='/policy'&&fail)throw Error('Unavailable');return path==='/policy'?{points:body}:body;
   });
@@ -74,7 +109,7 @@ test('partial save is reported and retry writes only the remaining settings',asy
 
 test('loading errors keep fields editable and a delayed read preserves typed values',async t=>{
   const {host}=setup(t);let resolvePolicy,rejectPrice;
-  const mount=mountAdministration(host,path=>new Promise((resolve,reject)=>{if(path==='/policy')resolvePolicy=resolve;else rejectPrice=reject;}));
+  const mount=mountPaidAdministration(host,path=>new Promise((resolve,reject)=>{if(path==='/policy')resolvePolicy=resolve;else rejectPrice=reject;}));
   const {field,form,reset,status}=ui(host);field('bookReward').value=55;field('bookReward').oninput();field('creditPrice').value='0.10';field('creditPrice').oninput();
   assert.notEqual(field('creditPrice').disabled,true);resolvePolicy({points});rejectPrice(Error('Unavailable'));await mount;
   assert.equal(field('bookReward').value,55);assert.equal(field('creditPrice').value,'0.10');assert.match(status.textContent,/nu au putut fi încărcate/);

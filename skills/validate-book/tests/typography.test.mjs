@@ -92,16 +92,24 @@ test('heading after a table measures its gap from the source table bottom',()=>{
 });
 test('absolute enlargement fails even with unchanged relative type hierarchy',()=>{const c=compareTypography(profile,doc());assert(c.findings.some(f=>f.category==='absolute_font_size_difference'));assert(c.findings.some(f=>f.category==='line_leading_difference'));assert(c.findings.some(f=>f.category==='paragraph_gap_difference'));});
 test('correct physical typography does not trigger false enlargement',()=>{const d=doc(11*4/3,15.5*4/3);d.records[0].style.marginBottom=0;assert.equal(compareTypography(profile,d).findings.length,0);});
-test('ambiguous repeated source passages cannot authorize font replacement',()=>{const c=compareTypography({...profile,pages:[...pages,...pages]},doc());assert.equal(c.mappings.length,0);assert(c.findings.some(f=>f.category==='source_typography_ambiguous'));});
+test('repeated source passages with identical typography have no positional repairs',()=>{
+ const c=compareTypography({...profile,pages:[...pages,...pages]},doc());
+ assert.equal(c.mappings[0].equivalentSource,true);
+ assert.equal(c.mappings[0].paragraphGapCssPx,undefined);
+ assert(!c.findings.some(f=>f.category==='source_typography_ambiguous'));
+});
 test('calibration is general, preserves control variables, and natural spacing never edits prose',()=>{const d=doc(),c=compareTypography(profile,d),a=typographyActions(profile,d,c,{defaultSizePx:18.56,justifyPolicy:'natural'});assert(a[0].properties['font-size'].includes('--reader-font-size'));assert(a.find(x=>x.selector==='#passage').properties['text-align']==='left');assert(a.every(x=>!('text' in x)&&x.kind==='presentation'));assert.throws(()=>typographyActions(profile,d,c),/default CSS/);});
 test('natural word spacing preserves centered and right-aligned display paragraphs',()=>{for(const textAlign of ['center','right','end']){const d=doc();d.records[0].style.textAlign=textAlign;const actions=typographyActions(profile,d,compareTypography(profile,d),{defaultSizePx:18.56,justifyPolicy:'natural'});assert.equal(actions.find(a=>a.selector==='#passage').properties['text-align'],undefined);}});
 test('route-based reader inflation and marker-based defaults are explicit, unsupported contracts fail',()=>{const routeScaling='const sourceScale = /\\/old\\/book/.test(new URL(state.htmlFrame.src).pathname) ? 1 : 1.24;';assert.equal(frameScale(routeScaling,'/new/book',true),1.24);assert.equal(frameScale(routeScaling,'/old/book',true),1);const current="const sourceScale = state.htmlFrame.contentDocument?.body?.matches('[data-pdf-fidelity], [data-validatebook-root]') ? 1 : 1.24;";assert.equal(frameScale(current,'/any/book',true),1);assert.equal(frameScale(current,'/any/book',false),1.24);assert.throws(()=>frameScale('unknown','/',true),/not recognized/);});
 test('reader CSS cannot style the inside of managed books',()=>{const gate=':not([data-pdf-fidelity]):not([data-validatebook-root])';assert.doesNotThrow(()=>assertReaderStyleIsolation(`.reader-html-content{--standalone-size:var(--reader-font-size);width:1240px;margin:auto}.reader-html-content${gate}{padding:2rem}.reader-html-content${gate} p{margin:0;color:black}.reader-html-content :is(script, style, noscript, [hidden]){display:none!important}`,`body{width:1240px;margin:auto}body${gate}{padding:2rem}body${gate} p{margin:0}`));assert.throws(()=>assertReaderStyleIsolation('.reader-html-content p{margin:1em}','body{}'),/does not exclude managed books/);assert.throws(()=>assertReaderStyleIsolation('.reader-html-content{font-family:serif}','body{}'),/cannot set book typography/);assert.throws(()=>assertReaderStyleIsolation('.reader-html-content{padding:2rem}','body{}'),/page padding/);assert.throws(()=>assertReaderStyleIsolation('.reader-html-content[data-pdf-fidelity="book"] p{color:red}','body{}'),/Book-specific presentation/);assert.throws(()=>assertReaderStyleIsolation('.reader-html-content{}','p{margin:1em}'),/Standalone content selector/);assert.throws(()=>assertReaderStyleIsolation('.reader-html-content{}','body{padding:2rem}'),/managed root cannot add page padding/);});
 test('responsive justification gaps do not create source fidelity errors',()=>{
- const d={language:'en',duplicates:[],brokenLinks:[],scrollWidth:390,width:390,fontFaces:[],records:[{selector:'#p',tag:'p',text,spacing:{gapP90Em:1.2,excessive:true}}]};
- assert.equal(checkDisplay(d,'en').length,0);
+ const d={language:'en',duplicates:[],brokenLinks:[],scrollWidth:390,width:390,fontFaces:[],pagination:{anchors:2,pages:[],misplacedAnchors:[]},records:[{selector:'#p',tag:'p',text,spacing:{gapP90Em:1.2,excessive:true}}]};
+ assert.equal(checkDisplay(d,'en',{responsiveOnly:true}).length,0);
+ assert(checkDisplay(d,'en').some(f=>f.category==='missing_page_containers'));
  d.records[0].clipped=true;
- assert(checkDisplay(d,'en').some(f=>f.category==='clipped_content'));
+ assert(checkDisplay(d,'en',{responsiveOnly:true}).some(f=>f.category==='clipped_content'));
+ d.language='ro';
+ assert(!checkDisplay(d,'en',{responsiveOnly:true,documentLanguage:'ro'}).some(f=>f.category==='language_tag'));
 });
 test('translated prose inherits the English baseline rhythm without text matching or rewriting',()=>{const master=compareTypography(profile,doc());const target=doc();target.records[0].text='Un paragraf tradus care nu coincide lexical cu sursa engleză.';const own=compareTypography(profile,target,'ro');assert.equal(own.mappings.length,0);const actions=typographyActions(profile,target,own,{defaultSizePx:18.56,masterTypography:master});const p=actions.find(a=>a.selector==='#passage');assert.equal(p.properties['margin-bottom'],'0');assert.equal(Number(p.properties['line-height']),profile.leadingCssPx/profile.bodyCssPx);});
 
@@ -113,10 +121,10 @@ test('short dialogue uses the same PDF font-size checks as surrounding prose',()
   assert.equal(compared.mappings.length,3);
   assert.equal(compared.findings.filter(f=>f.category==='absolute_font_size_difference').length,3);
   assert(compared.mappings.every(m=>m.expectedCssPx===44/3));
-  const ambiguous={...source,pages:[{page:1,lines:[...source.pages[0].lines,source.pages[0].lines[0]]}]};
+  const ambiguous={...source,pages:[{page:1,lines:[...source.pages[0].lines,{...source.pages[0].lines[0],font:{sizePt:13}}]}]};
   const repeated=compareTypography(ambiguous,target);
   assert(!repeated.mappings.some(m=>m.selector==='#dialogue0'));
-  assert(repeated.findings.some(f=>f.category==='source_typography_ambiguous'&&f.location==='#dialogue0'));
+  assert.equal(repeated.findings.find(f=>f.category==='source_typography_ambiguous'&&f.location==='#dialogue0')?.severity,'warning');
 });
 
 test('a paragraph that continues across PDF pages still maps as one HTML paragraph',()=>{

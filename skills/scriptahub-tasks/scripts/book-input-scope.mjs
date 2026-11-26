@@ -5,6 +5,24 @@ import {withParent,at,openDir} from './anchored-files.mjs';
 
 const beneath=(name,root)=>name===root||name.startsWith(root+'/');
 const asset=/\.(?:css|woff2?|ttf|otf|eot|png|jpe?g|gif|webp|avif|svg|ico|bmp|mp3|mp4|ogg|wav|webm)$/i;
+export function responsiveImageReferences(text) {
+  const references=[];
+  for(const [,value] of text.matchAll(/\bsrcset\s*=\s*["']([^"']+)["']/gi)) {
+    let remaining=value;
+    while(remaining) {
+      remaining=remaining.replace(/^[\s,]+/,'');
+      const url=remaining.match(/^\S+/)?.[0];
+      if(!url)break;
+      references.push(url.replace(/,+$/,''));
+      remaining=remaining.slice(url.length);
+      if(!url.endsWith(',')) {
+        const separator=remaining.indexOf(',');
+        remaining=separator===-1?'':remaining.slice(separator+1);
+      }
+    }
+  }
+  return references;
+}
 async function read(root,name) {
   return withParent(root,name,async file=>{
     const handle=await fs.open(file,constants.O_RDONLY|constants.O_NOFOLLOW|constants.O_NONBLOCK);
@@ -66,7 +84,7 @@ export async function bookInputScope(root,{args,taskDirectory,virtualCwd,bookId,
     const text=await read(root,name);
     for(const match of text.matchAll(/\b(?:src|poster|data)\s*=\s*["']([^"']+)["']/gi))await resource(match[1],name);
     for(const match of text.matchAll(/<(?:link|image|use)\b[^>]*\bhref\s*=\s*["']([^"']+)["']/gi))await resource(match[1],name);
-    for(const match of text.matchAll(/\b(?:srcset)\s*=\s*["']([^"']+)["']/gi))for(const value of match[1].split(','))await resource(value.trim().split(/\s+/)[0],name);
+    for(const ref of responsiveImageReferences(text))await resource(ref,name);
     for(const match of text.matchAll(/url\(\s*(?:"([^"]+)"|'([^']+)'|([^'"\s)]+))\s*\)|@import\s+["']([^"']+)["']/gi))await resource(match[1]||match[2]||match[3]||match[4],name);
   }
   async function walk(directory,relative) {

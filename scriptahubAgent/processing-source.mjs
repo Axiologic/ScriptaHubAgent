@@ -2,7 +2,7 @@ import crypto from 'node:crypto';
 import fs from 'node:fs';
 import fsp from 'node:fs/promises';
 import path from 'node:path';
-import { isInstalledPath, INSTALL_OVERRIDES } from './deployment/skill-source.mjs';
+import { isInstalledPath, INSTALL_OVERRIDES, dependencyEntry } from './deployment/skill-source.mjs';
 import { dependencyFingerprint } from './deployment/dependency-fingerprint.mjs';
 import { openTree, listDirectory, openDirectory, closeDirectory, readRegularFile } from './anchored-read.mjs';
 
@@ -223,14 +223,14 @@ function imagePath(runtimeRoot,realRoot,relative,type) {
 }
 const sameFiles=(a,b)=>a.size===b.size&&[...a].every(([name,file])=>b.get(name)?.sha256===file.sha256&&b.get(name).exec===file.exec);
 
-// Per-skill digests use the algorithm of the RoboTeam helper: sorted <skill>/ entries plus a declared shared prefix.
+// Per-skill digests use the algorithm of the RoboTeam helper: sorted <skill>/ entries plus each declared source prefix.
 function digests(files,skills) {
   const source=Object.fromEntries([...files].map(([name,file])=>[name,file.sha256])),sourceDigests={};
   for(const skill of skills) {
     let dependencies=[];const descriptor=files.get(skill+'/skill.json');
     if(descriptor) {try {dependencies=JSON.parse(descriptor.bytes.toString('utf8')).sourceDependencies||[];} catch {fail('Invalid skill source dependencies');}}
-    if(!Array.isArray(dependencies)||dependencies.some(prefix=>prefix!=='scriptahub-tasks/shared'))fail('Invalid skill source dependencies');
-    for(const prefix of dependencies)if(!source[prefix+'/batch-io.mjs'])fail('Missing shared skill source receipt');
+    if(!Array.isArray(dependencies)||dependencies.some(prefix=>typeof prefix!=='string'||!dependencyEntry(skill,prefix)))fail('Invalid skill source dependencies');
+    for(const prefix of dependencies)if(!source[prefix+'/'+dependencyEntry(skill,prefix)])fail('Missing shared skill source receipt');
     const entries=sorted(Object.entries(source).filter(([name])=>name.startsWith(skill+'/')||dependencies.some(prefix=>name.startsWith(prefix+'/'))));
     if(!entries.length)fail('ScriptaHub skill source not found: '+skill);
     if(entries.some(([name])=>name.includes('\\')||name.split('/').some(part=>!part||part==='.'||part==='..')))fail('Invalid skill source receipt');

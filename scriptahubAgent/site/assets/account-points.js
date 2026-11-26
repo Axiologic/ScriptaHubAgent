@@ -1,3 +1,4 @@
+import { dashboardText } from './dashboard-copy.js?v=credit-release-1';
 import { newSubmissionId } from './submission-policy.js';
 import { openPaymentDialog } from './payment-dialog.js?v=payment-feedback-7';
 import { stripeCurrencyUnits } from './stripe-currencies.js?v=stripe-units-1';
@@ -15,7 +16,7 @@ export async function pointsApi(suffix = '', body) {
   return response.json();
 }
 
-export async function mountPoints(section, {userId = '', accountId = ''} = {}) {
+export async function mountPoints(section, {userId = '', accountId = '', creditPurchasesEnabled = false} = {}) {
   const status = el('p','',{role:'status'});
   status.dataset.pointsStatus = '';
   const purchaseHelp = t('Choose how many credits you want to buy.','Alege câte credite vrei să cumperi.');
@@ -132,7 +133,7 @@ export async function mountPoints(section, {userId = '', accountId = ''} = {}) {
     }
   }
 
-  if (!userId) {
+  if (!userId && creditPurchasesEnabled) {
     for (const name of ['localStorage','sessionStorage']) {
       try {
         const storage=window[name];
@@ -178,7 +179,7 @@ export async function mountPoints(section, {userId = '', accountId = ''} = {}) {
         : t(`${lot.amount} credits expire on ${date}`,`${lot.amount} credite expiră pe ${date}`);
       balanceDetails.append(el('p',expiry,{className:'account-credit-expiry'}));
     }
-    if (!userId) {
+    if (!userId && creditPurchasesEnabled) {
       offer ||= await pointsApi('/offer').catch(()=>({available:false}));
       if (offer.available) {
         const purchase = el('form','',{className:'account-credit-purchase'});
@@ -261,14 +262,24 @@ export async function mountPoints(section, {userId = '', accountId = ''} = {}) {
         if (payments.size) section.append(purchaseStatus);
       }
     }
+    if (!userId && !creditPurchasesEnabled) {
+      const notice = el('div','',{className:'account-credit-beta'});
+      notice.append(
+        el('h2',t('Need more credits?','Ai nevoie de mai multe credite?')),
+        el('p',dashboardText(document.documentElement.lang,'ScriptaHub is in beta. Contact a platform administrator for additional credits.')),
+      );
+      overview.append(notice);
+    }
     const history = el('ul','');
     const names = {grant:t('Awarded','Acordate'),purchase:t('Purchased','Cumpărate'),reserve:t('Reserved','Rezervate'),
       spend:t('Spent','Cheltuite'),release:t('Released','Eliberate'),refund:t('Refunded','Restituite'),adminAdjustment:t('Adjusted','Ajustate'),expire:t('Expired','Expirate')};
     const reasons = {
       'Approved book proposal': t('Published book reward','Recompensă pentru carte publicată'),
+      'Initial ScriptaHub credits': t('Initial credits','Credite inițiale'),
       'Approved manuscript': t('Published book reward','Recompensă pentru carte publicată'),
       'Approved corrections': t('Corrections included in a published edition','Corecturi incluse într-o ediție publicată'),
       'New book edition': t('New book edition','Ediție nouă a cărții'),
+      'AI book generation': t('AI book generation','Generare carte cu AI'),
       'Derived book': t('Derived book','Carte derivată'),
     };
     for (const entry of ledger.entries) {
@@ -298,17 +309,17 @@ export async function mountPoints(section, {userId = '', accountId = ''} = {}) {
     section.append(status);
   }
 
-  if (!userId) document.addEventListener('scriptahub:points-pricing', () => {
+  if (!userId && creditPurchasesEnabled) document.addEventListener('scriptahub:points-pricing', () => {
     offer = undefined;
     void render().catch(error => { status.textContent = error.message; });
   });
-  if (!userId) window.addEventListener('storage', event => {
+  if (!userId && creditPurchasesEnabled) window.addEventListener('storage', event => {
     if (!event.key?.startsWith(paymentPrefix) || !validSession(event.newValue) || payments.has(event.newValue)) return;
     payments.set(event.newValue,{status:'pending'});
     showPayments();
     schedulePaymentCheck();
   });
   await render().catch(error => { status.textContent = error.message; });
-  await checkPendingPayments();
+  if (creditPurchasesEnabled) await checkPendingPayments();
   return {refresh: render};
 }

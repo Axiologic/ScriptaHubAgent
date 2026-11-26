@@ -64,9 +64,11 @@
 .account-credit-purchase input { width: 100%; }
 .account-credit-unit-price { margin: 0; color: var(--muted); }
 .account-credit-unit-price strong { color: var(--green); font-size: 1.125em; font-weight: 650; font-variant-numeric: tabular-nums; }
+.account-credit-beta { margin-block-start: 16px; padding: 14px 16px; border: 1px solid var(--line); border-radius: var(--control-radius, 8px); }
+.account-credit-beta p { margin: 6px 0 0; color: var(--muted); }
 .account-points [data-points-status] { min-height: 1.5em; color: var(--muted); }
 :is(.account-points, .account-users) h2 { margin-block: 28px 12px; font-size: 1em; font-weight: 650; line-height: 1.4; }
-:is(.account-credit-balance, .account-credit-purchase-header) h2 { margin: 0; }
+:is(.account-credit-balance, .account-credit-purchase-header, .account-credit-beta) h2 { margin: 0; }
 .account-credit-history-title { padding-block-start: 16px; border-block-start: 1px solid var(--line); }
 :is(.account-points, .account-users) ul { list-style: none; padding: 0; margin: 0; }
 :is(.account-points, .account-users) li { overflow-wrap: anywhere; padding: 12px 0; border-bottom: 1px solid var(--line); line-height: 1.6; }

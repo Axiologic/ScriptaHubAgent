@@ -277,6 +277,11 @@
           "default": "1"
         },
         {
+          "name": "SCRIPTA_IS_BETA_VERSION",
+          "required": false,
+          "default": "true"
+        },
+        {
           "name": "SCRIPTA_EXECUTOR_AGENT_IDS",
           "required": false,
           "default": "agent:AchillesIDE/roboTeamAgent"

@@ -63,7 +63,8 @@ export async function measure(browser, file, presentation = null, sourcePages = 
   for(const width of [1440,1024,390]){
     await browser.send('Emulation.setDeviceMetricsOverride',{width,height:1000,deviceScaleFactor:1,mobile:false});
     const layout=await browser.evaluate(`(${inspectLayout.toString()})()`);
-    layouts.push(layout);await recordFonts(layout,width);
+    layouts.push(layout);
+    if (!sourcePages) await recordFonts(layout,width);
   }
   const reference=sourcePages?await measureReferenceLayout(browser,sourcePages):null;
   if(reference)await recordFonts(reference,reference.width);
@@ -74,7 +75,10 @@ export async function measure(browser, file, presentation = null, sourcePages = 
 export function importReaderArticle(settings) {
   const original=document.querySelector('[data-reader-content], article, main, .edition-reading')||document.body;
   const article=document.createElement('article');article.className='reader-html-content';
-  for (const marker of ['data-pdf-fidelity','data-validatebook-root']) {
+  const presentation = document.querySelector('head meta[name="scriptahub-reader-presentation"]')?.content.split(/\s+/) ?? [];
+  if (presentation.includes('reflow')) article.classList.add('reader-manuscript-reflow');
+  if (presentation.includes('readable')) article.classList.add('reader-manuscript-readable');
+  for (const marker of ['data-pdf-fidelity','data-validatebook-root','data-pdf-layout']) {
     if (original.hasAttribute(marker)) article.setAttribute(marker,original.getAttribute(marker));
   }
   const managed=document.querySelector('link[data-validatebook-presentation]');

@@ -9,8 +9,9 @@ import { preserveImages } from './images.mjs';
 import { checkConversionOutput } from './conversion-checks.mjs';
 import { exists, prepareDestination, writeMarker, publish } from './publication.mjs';
 export const qaDestination = destination => join(dirname(destination),'.pdf2html-qa',basename(destination));
-export async function convertPdf(input,destination,{language='und',title,imageScale=2,overwrite=false,keepQaArtifacts=false}={}) {
+export async function convertPdf(input,destination,{language='und',title,imageScale=2,layout='fixed',overwrite=false,keepQaArtifacts=false}={}) {
   if(!Number.isFinite(imageScale) || imageScale<=0) throw new Error('--image-scale must be greater than zero.');
+  if(!['fixed','reflow'].includes(layout)) throw new Error('--layout must be fixed or reflow.');
   const runtime=await requireRuntime();
   const source=await inspectSource(input), profile=source.profile;
   destination=resolve(destination);
@@ -26,7 +27,7 @@ export async function convertPdf(input,destination,{language='und',title,imageSc
     await writeFile(join(staging,'index.html'),serialized.html);
     source.evidence.fonts=await extractFonts(profile.path,source.qpdf,join(staging,'assets/fonts'));
     const documentTitle=title||profile.title||basename(profile.path,extname(profile.path));
-    await enhanceHtml(join(staging,'index.html'),join(staging,'assets/styles.css'),source.evidence,{title:documentTitle,language,content_pages:serialized.content_pages,layout:'fixed'});
+    await enhanceHtml(join(staging,'index.html'),join(staging,'assets/styles.css'),source.evidence,{title:documentTitle,language,content_pages:serialized.content_pages,layout});
     const pictures=serialized.pictures+await preserveImages(source,join(staging,'index.html'),imageScale);
     await writeMarker(staging);
     const report=await checkConversionOutput(join(staging,'index.html'),{expectedPages:profile.pages,expectedTables:serialized.tables,expectedPictures:pictures,keepQaArtifacts,reportDir:join(staging,'qa')});
@@ -36,7 +37,7 @@ export async function convertPdf(input,destination,{language='und',title,imageSc
       await rename(staging,failed);
       const error=new Error(`Technical conversion checks failed. Diagnostic output retained at: ${failed}`); error.diagnosticOutput=failed; throw error;
     }
-    const manifest={generator:'pdf2html-skill',version:'0.1.0',artifact:join(destination,'index.html'),output:destination,source:{name:basename(profile.path),sha256:profile.sha256,pages:profile.pages},options:{language,title:documentTitle,imageScale,ocr:false},document:{tables:serialized.tables,pictures},bookValidated:false,checks:{scope:'conversion-technical',status:report.status,warnings:report.findings.filter(item=>item.severity==='warning').length,metrics:report.metrics},runtime};
+    const manifest={generator:'pdf2html-skill',version:'0.1.0',artifact:join(destination,'index.html'),output:destination,source:{name:basename(profile.path),sha256:profile.sha256,pages:profile.pages},options:{language,title:documentTitle,imageScale,layout,ocr:false},document:{tables:layout==='reflow'?report.metrics.tables:serialized.tables,pictures},bookValidated:false,checks:{scope:'conversion-technical',status:report.status,warnings:report.findings.filter(item=>item.severity==='warning').length,metrics:report.metrics},runtime};
     if(!keepQaArtifacts) await rm(join(staging,'qa'),{recursive:true});
     await publish(staging,destination,async finalPath => {
       const finalReport=await checkConversionOutput(join(finalPath,'index.html'),{expectedPages:profile.pages,expectedTables:serialized.tables,expectedPictures:pictures});

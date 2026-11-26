@@ -6,11 +6,26 @@ import path from 'node:path';
 import test from 'node:test';
 import { DashboardStore } from '../dashboard-store.mjs';
 import { TaskExecution } from '../task-execution.mjs';
-import { advanceCycles } from '../cycle-worker.mjs';
+import { advanceCycles, creditOperation } from '../cycle-worker.mjs';
 
 const author = {id:'user:author',email:'author@example.test'};
 const admin = {id:'user:admin',email:'admin@example.test',roles:['admin'],installationAdministratorId:'user:admin'};
 const executor = 'agent:test/processor';
+
+test('credit operations use ScriptaHub references, reasons and reward expiration', () => {
+  const row = { id: 'request', owner: author.id, kind: 'book-proposal', attempt: 2 };
+  const debit = { userId: 'author', operation: 'debit', referenceId: 'scriptahub:book-proposal:request:2', amount: 8, reason: 'AI book generation' };
+  assert.deepEqual(creditOperation(row, 'debit', 8), debit);
+  assert.deepEqual(creditOperation(row, 'refund', 8), { ...debit, operation: 'refund' });
+  const award = { ...row, kind: 'edit', expires_at: '2099-01-01T00:00:00Z' };
+  assert.deepEqual(creditOperation(award, 'reward', 2), {
+    userId: 'author', operation: 'grant', referenceId: 'scriptahub:reward:request',
+    amount: 2, reason: 'Approved corrections', expiresAt: award.expires_at,
+  });
+  assert.deepEqual(creditOperation(award, 'expiry'), {
+    userId: 'author', operation: 'inspect-expiry', referenceId: 'scriptahub:reward:request',
+  });
+});
 const record = (kind,owner,values,bookId) => {
   const id = crypto.randomUUID();
   return {id,owner:owner.id,createdAt:new Date().toISOString(),files:[],metadata:{kind,values,bookId,submissionId:id}};
@@ -368,4 +383,83 @@ test('a standalone edition request stays out of corrections and preserves its in
   await advanceCycles(store,{apply:async()=>({}),send});
   const next=store.submitEdition(admin,'bk-source',crypto.randomUUID(),8);
   assert.deepEqual(store.editionRequests(next.taskId).map(item=>item.id),[correction.submissionId]);
+});
+
+test('a blocked correction closes its paid edition after the refund and leaves other corrections available',async t=>{
+  const {store,executorApi}=await fixture(t);
+  const blocked=store.submit(record('edit',author,{feedback:'Replace a picture'},'bk-source'));
+  const accepted=store.submit(record('edit',author,{feedback:'Fix the caption'},'bk-source'));
+  for(const item of [blocked,accepted]) store.decide(admin,item.submissionId,'accept');
+  const cycle=store.submitEdition(admin,'bk-source',crypto.randomUUID(),8);
+  const operations=[];
+  const worker={apply:async (_row,operation)=>{operations.push(operation);return {};},
+    send:async()=>({providerMessageId:'mail'})};
+  await advanceCycles(store,worker);
+  const {task}=executorApi.claim(executor,{runId:'moderation-edition',taskType:'edit'});
+  executorApi.prepareModeration=async()=>({finding:{category:'extreme_presentation',changeId:blocked.submissionId}});
+  await executorApi.moderateTask(executor,{executionId:task.executionId});
+  await advanceCycles(store,worker);
+  assert.equal(store.cycles.read(cycle.id).phase,'restoring');
+  assert.equal(store.overview(admin).editionCycles.length,1);
+  await advanceCycles(store,worker);
+  assert.deepEqual(operations,['debit','refund']);
+  assert.equal(store.cycles.read(cycle.id).phase,'rejected');
+  assert.equal(store.overview(admin).editionCycles.length,0);
+  const replacement=store.submitEdition(admin,'bk-source',crypto.randomUUID(),8);
+  assert.deepEqual(store.editionRequests(replacement.taskId).map(change=>change.id),[accepted.submissionId]);
+});
+
+test('prompt generation charges before claim and a failed attempt refunds before retry', async t => {
+  const {store,executorApi}=await fixture(t);
+  const created=store.submit(record('book-proposal',author,{description:'A guide to urban gardening'}),{promptBookCost:8,bookReward:10});
+  assert.equal(created.cycle.phase,'funding');
+  assert.equal(store.cycles.read(created.submissionId).reward,0);
+  const args={runId:'prompt-generation',taskType:'add-book'};
+  assert.equal(executorApi.claim(executor,args).task,null);
+  assert.equal(store.overview(author).books[0].creation.cycle.cost,8);
+  let balance=6;
+  const operations=[];
+  const worker={apply:async (row,operation,amount)=>{
+    operations.push({operation,amount,attempt:row.attempt});
+    if (operation==='debit' && balance<amount) return {insufficient:true,missing:amount-balance};
+    balance+=operation==='refund' ? amount : -amount;
+    return {};
+  },send:async()=>({providerMessageId:'test-mail'})};
+  await advanceCycles(store,worker);
+  assert.equal(store.overview(author).books[0].creation.cycle.missing,2);
+  assert.equal(executorApi.claim(executor,args).task,null);
+  balance+=2;
+  const retry=store.transaction(()=>store.cycles.retry(author,created.cycle.id,created.cycle.attempt));
+  assert.equal(retry.phase,'funding');
+  await advanceCycles(store,worker);
+  const {task}=executorApi.claim(executor,args);
+  assert.equal(task.taskId,retry.taskId);
+  assert.equal(store.overview(author).books[0].creation.state,'running');
+  executorApi.finish(executor,{executionId:task.executionId,state:'failed',error:'Generation did not complete'});
+  await advanceCycles(store,worker);
+  assert.equal(store.overview(author).books[0].creation.error,'Generation did not complete');
+  assert.throws(()=>store.transaction(()=>store.cycles.retry(author,retry.id,retry.attempt)),/once the previous attempt/);
+  await advanceCycles(store,worker);
+  assert.equal(balance,8);
+  assert.deepEqual(operations.map(({operation,attempt})=>[operation,attempt]),[['debit',1],['debit',2],['refund',2]]);
+});
+
+test('manuscript creation is free and rewards its author only after publication', async t => {
+  const {store,executorApi}=await fixture(t);
+  const created=store.submit(record('manuscript',author,{readerTypography:'readable'}),{promptBookCost:8,bookReward:10});
+  const operations=[];
+  const worker={apply:async (row,operation,amount)=>{operations.push([row.kind,operation,amount]);return {};},
+    send:async()=>({providerMessageId:'test-mail'})};
+  assert.equal(created.cycle.cost,0);
+  assert.equal(created.cycle.phase,'active');
+  await advanceCycles(store,worker);
+  assert.deepEqual(operations,[]);
+  const {task}=executorApi.claim(executor,{runId:'manuscript',taskType:'add-book'});
+  store.db.prepare('INSERT INTO task_publications(execution_id,manifest,digest,receipt) VALUES(?,?,?,?)')
+    .run(task.executionId,'{}','test-digest','{"commit":"confirmed"}');
+  executorApi.finish(executor,{executionId:task.executionId,state:'completed',result:'Published'},{publication:true});
+  await advanceCycles(store,worker);
+  await advanceCycles(store,worker);
+  await advanceCycles(store,worker);
+  assert.deepEqual(operations,[['manuscript','reward',10]]);
 });

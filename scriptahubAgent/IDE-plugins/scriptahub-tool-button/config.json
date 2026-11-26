@@ -1,0 +1,22 @@
+{
+  "pluginCategory": "application",
+  "id": "scriptahub",
+  "component": "scriptahub-tool-button",
+  "location": [
+    "file-exp:toolbar"
+  ],
+  "locationOrder": 375,
+  "label": "ScriptaHub",
+  "tooltip": "Open ScriptaHub",
+  "icon": "./icon.svg",
+  "presenter": "ScriptaHubToolButton",
+  "type": "embedded",
+  "autoPin": false,
+  "toolbarModal": {
+    "mode": "iframe",
+    "url": "/base-agent-additional-server/scriptahubAgent/3002/index.html",
+    "agentRef": "ScriptaHubAgent/scriptahubAgent",
+    "fullscreen": true
+  },
+  "dependencies": []
+}

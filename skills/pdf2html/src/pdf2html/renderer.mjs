@@ -4,7 +4,8 @@ import { parseHtml, alignment, text } from './dom.mjs';
 import { normalizePages, markImagePages, readerBridge } from './pages.mjs';
 import { documentGeometry, repairParagraphs } from './paragraphs.mjs';
 import { formatBlocks, alignBlocks, indentParagraphs, displayRhythm, headingRules } from './formatting.mjs';
-import { repairSingleColumnTables, repairContinuedHeaders, tableGeometry } from './tables.mjs';
+import { repairSingleColumnTables, repairContinuedHeaders, preserveUnconfirmedTableText, tableGeometry } from './tables.mjs';
+import { sourceTables } from './source-tables.mjs';
 import { rebuildContents, rebuildPlainContents, normalizeContents } from './contents.mjs';
 import { applyInline, mergeLinks } from './inline.mjs';
 import { buildStyles } from './styles.mjs';
@@ -34,8 +35,12 @@ export function renderHtml(input, evidence, { title, language, content_pages = [
     if (path !== '..' && !path.startsWith('../') && !isAbsolute(path)) $(image).attr('src', path.split('\\').join('/'));
   });
   markImagePages($, main, evidence);
-  if (layout !== 'fixed') readerBridge($, main, evidence.typography.body_size_pt);
+  if (layout !== 'fixed') {
+    $(main).attr({'data-reader-content':'', 'data-pdf-layout':'reflow'});
+    readerBridge($, main, evidence.typography.body_size_pt);
+  }
   const geometry = documentGeometry(evidence);
+  const grids = layout === 'reflow' && $('table').length ? sourceTables(evidence) : [];
   const vocabulary = sourceVocabulary(evidence.pages.map(page => page.source_text ?? page.lines.map(line => line.text).join('\n')));
   for (const page of evidence.pages) {
     const section = $(main).find(`section[data-source-page="${page.page_number}"]`).first()[0];
@@ -45,6 +50,7 @@ export function renderHtml(input, evidence, { title, language, content_pages = [
     repairSingleColumnTables($, section, page);
     rebuildContents($, section, page, evidence.typography.body_size_pt);
     rebuildPlainContents($, section, page);
+    if (layout === 'reflow') preserveUnconfirmedTableText($, section, grids.filter(grid => grid.page === page.page_number));
     recoverSourceLists($, section, sourceLists({pages:[page]}), evidence.typography.body_size_pt);
     repairParagraphs($, section, page, geometry.right);
     restoreSourcePunctuation(section, page, vocabulary);

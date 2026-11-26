@@ -90,6 +90,6 @@ export async function roboTeamDigest(skillsRoot,skill) {
   const source=await roboInventory(path.join(skillsRoot,skill),skill);let dependencies=[];
   try {dependencies=JSON.parse(await fs.readFile(path.join(skillsRoot,skill,'skill.json'),'utf8')).sourceDependencies||[];} catch(error) {if(error.code!=='ENOENT')throw error;}
   const entries=source.map(entry=>[skill+'/'+entry.path,entry.sha256]);
-  for(const prefix of new Set(dependencies))entries.push(...(await roboInventory(path.join(skillsRoot,'scriptahub-tasks/shared'),skill)).map(entry=>[prefix+'/'+entry.path,entry.sha256]));
+  for(const prefix of new Set(dependencies)){const [owner,folder]=prefix.split('/');entries.push(...(await roboInventory(path.join(skillsRoot,owner,folder),owner)).map(entry=>[prefix+'/'+entry.path,entry.sha256]));}
   return sha256(JSON.stringify(Object.fromEntries(entries.sort(([a],[b])=>a<b?-1:a>b?1:0))));
 }

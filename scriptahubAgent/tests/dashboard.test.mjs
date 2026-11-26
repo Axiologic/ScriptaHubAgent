@@ -135,7 +135,7 @@ test('HTTP dashboard connects existing forms to owner and collaborator workflows
   }
   async function submit(actor, kind, targetBookId, submissionId = crypto.randomUUID()) {
     const form = new FormData(); form.set('metadata', JSON.stringify({ submissionId, kind, ...(targetBookId ? { targetBookId } : {}),
-      agreementVersion: '2026-09-10', agreementAccepted: true, values: { titles: 'HTTP book', instructions: 'Add a worked example' } }));
+      agreementVersion: '2026-09-10', agreementAccepted: true, values: { titles: 'HTTP book', ...(kind === 'manuscript' ? {readerLayout:'reflow'} : {instructions:'Add a worked example'}) } }));
     form.append('documents', new Blob(['%PDF-1.7\nexample']), 'example.pdf');
     const response = await fetch(base + '/api/submissions', { method: 'POST', headers: { 'x-test-user': actor }, body: form });
     return { status: response.status, value: await response.json() };

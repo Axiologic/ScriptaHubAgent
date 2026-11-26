@@ -14,6 +14,11 @@ export function isInstalledPath(name) {
     ||name.endsWith('.zip')||/theatrical-audio\/(?:models|runtime\/(?:qwen|kokoro|piper))(?:\/|$)/.test(name)
     ||/theatrical-audio\/runtime\/(?:qwen|kokoro|piper)(?:\.resolved\.txt|\.json)$/.test(name);
 }
+export function dependencyEntry(skill, prefix) {
+  if (prefix==='scriptahub-tasks/shared') return 'batch-io.mjs';
+  if (skill==='book-pdf' && prefix==='validate-book/src') return 'browser.mjs';
+  return null;
+}
 export async function skillSource(root) {
   const result={};
   async function visit(relative='') {
@@ -39,8 +44,11 @@ export async function skillDependencies(root,skills,source) {
     try {descriptor=JSON.parse(await fs.readFile(path.join(root,skill,'skill.json'),'utf8'));}
     catch(error){if(error.code!=='ENOENT')throw error;}
     const dependencies=descriptor.sourceDependencies||[];
-    if(!Array.isArray(dependencies)||dependencies.some(prefix=>prefix!=='scriptahub-tasks/shared'))throw Error('Invalid skill source dependencies: '+skill);
-    for(const prefix of dependencies)if(!source[prefix+'/batch-io.mjs'])throw Error('Missing shared batch module for '+skill);
+    if(!Array.isArray(dependencies)||dependencies.some(prefix=>!dependencyEntry(skill,prefix)))throw Error('Invalid skill source dependencies: '+skill);
+    for(const prefix of dependencies) {
+      const entry=dependencyEntry(skill,prefix);
+      if(!source[prefix+'/'+entry])throw Error(entry==='batch-io.mjs' ? 'Missing shared batch module for '+skill : 'Missing browser source for '+skill);
+    }
     if(dependencies.length)result[skill]=dependencies;
   }
   return result;

@@ -15,6 +15,16 @@
       "prompt": "Follow scriptahub-tasks SKILL.md and the operation reference for execution context, native calls, recovery, handoff, source scope and acceptance.\n\nRead the matching claimed.json and durable handoff supplied by edit-book. Confirm this execution and the service status. Set processingMode using the shared contract and pass it through the single outgoing edge.\n\nIn process mode, retain the complete task.requests snapshot, request/annotation IDs, languages, file indexes, base revisions and configured repositories in <taskDirectory>/run-state/edit.json. Preserve the original approved snapshot across retries. Save its path with step=claim-edit."
     },
     {
+      "id": "moderate-submission",
+      "name": "Moderate request and source materials",
+      "executionType": "terminal",
+      "effort": "high",
+      "skillsets": [
+        "ScriptaHubAgent/scriptahub-tasks"
+      ],
+      "prompt": "Follow scriptahub-tasks SKILL.md and its Content moderation section. In process mode classify every submission review unit with your current RoboTeam model using moderate-content. Proceed only on the service's final passed status. Report the actual reason if the task stops or the selected model cannot inspect required images."
+    },
+    {
       "id": "apply-edit",
       "name": "Apply the approved changes",
       "executionType": "terminal",
@@ -22,7 +32,7 @@
       "skillsets": [
         "ScriptaHubAgent/scriptahub-tasks"
       ],
-      "prompt": "Follow scriptahub-tasks SKILL.md and the operation reference for execution context, native calls, recovery, handoff, source scope and acceptance.\n\nIn process mode, locate the book by ID at its existing configured catalogue and pin the branch and base commit. On retry reuse the pinned baseline and each saved reader whose evidence still matches. Fetch only its metadata, required book resources and immutable baseline readers using those pinned references. Use verified download for request attachments with the service's global indexes.\n\nApply the complete approved request set to one new edition. Resolve each annotation in the specified language and revision using its exact quote, prefix/suffix and reader textContent offsets. Identify annotations by request ID and annotation ID. Apply general revision instructions only where the request authorizes them. Conflicting, stale or ambiguous passages block the edition with a concrete finding.\n\nKeep attribution, existing languages/formats, other book entries, images and previous edition history. Keep unaffected resources and translations as they are; a targeted correction does not request new translations or a separate editorial rewrite. Save step=apply-edit with the destination and changed reader paths. In edit.json record one entry for each affected language with language, baselineHtml, baselineSha256, candidateHtml and changesPath plus changesSha256. Each change record is {annotationId,before,after,prefix,suffix}; use an empty list for presentation-only changes. Retain the approved request/annotation pair alongside the implemented changes."
+      "prompt": "Follow scriptahub-tasks SKILL.md and the operation reference for execution context, native calls, recovery, handoff, source scope and acceptance.\n\nIn process mode, locate the book by ID at its existing configured catalogue and pin the branch and base commit. On retry reuse the pinned baseline and each saved reader whose evidence still matches. Fetch only its metadata, required book resources and immutable baseline readers using those pinned references. Use verified download for request attachments with the service's global indexes.\n\nApply the complete approved request set to one new edition. Resolve each annotation in the specified language and revision using its exact quote, prefix/suffix and reader textContent offsets. Identify annotations by request ID and annotation ID. Apply general revision instructions only where the request authorizes them. Conflicting, stale or ambiguous passages block the edition with a concrete finding.\n\nApply the full Content moderation policy to every sensitive subject in new or rewritten prose. Keep romantic passages non-graphic, using emotion, dialogue and gestures and fading to black before sexual activity. Use restrained language and non-graphic visuals for sensitive subjects. Check revised passages and artwork before saving the candidate. If the requested change itself requires prohibited material, stop with the moderation reason for the requester.\n\nKeep attribution, existing languages/formats, other book entries, images and previous edition history. Keep unaffected resources and translations as they are; a targeted correction does not request new translations or a separate editorial rewrite. Save step=apply-edit with the destination and changed reader paths. In edit.json record one entry for each affected language with language, baselineHtml, baselineSha256, candidateHtml and changesPath plus changesSha256. Each change record is {annotationId,before,after,prefix,suffix}; use an empty list for presentation-only changes. Retain the approved request/annotation pair alongside the implemented changes.\n\nReview each finalized edited reader HTML with the artifact moderation procedure."
     },
     {
       "id": "prepare-edit-package",
@@ -37,29 +47,37 @@
     {
       "id": "validate-edit",
       "name": "Validate the edition publication package",
+      "requiresCompletionEvidence": true,
       "executionType": "terminal",
       "effort": "medium",
       "skillsets": [
         "ScriptaHubAgent/scriptahub-tasks",
         "ScriptaHubAgent/validate-book"
       ],
-      "prompt": "Follow scriptahub-tasks SKILL.md and the operation reference for execution context, native calls, recovery, handoff, source scope and acceptance.\n\nIn process mode, independently audit the exact staged candidate of every language in edit.json. Run native compare-edition BASELINE --candidate CANDIDATE --changes CHANGES --job-dir <taskDirectory>/validation/edit-layout-LANGUAGE. Use the immutable baseline and authorized change report for that language. Report existing layout findings as warnings and block new regressions or missing evidence.\n\nVerify all approved changes are accounted for and the change plan still matches the pinned originals. Call verify-package with finalize=true, editionPlan=edit.json and audits=[{language,report}] for every affected language. Save its returned approval paths with step=validate-edit. The validation stage leaves package bytes untouched."
+      "prompt": "Follow scriptahub-tasks SKILL.md and the operation reference for execution context, native calls, recovery, handoff, source scope and acceptance.\n\nIn process mode, independently audit the exact staged candidate of every language in edit.json. Run native compare-edition BASELINE --candidate CANDIDATE --changes CHANGES --job-dir <taskDirectory>/validation/edit-layout-LANGUAGE. Use the immutable baseline and authorized change report for that language. Report existing layout findings as warnings and block new regressions or missing evidence.\n\nVerify all approved changes are accounted for and the change plan still matches the pinned originals. Call verify-package with finalize=true, editionPlan=edit.json and audits=[{language,report}] for every affected language. Upload the approved inventory with stage-publication and complete the remaining package moderation units. Save the approval paths with step=validate-edit and run complete-phase. The validation stage leaves package bytes untouched."
     },
     {
       "id": "submit-edit",
       "name": "Publish the validated edition",
       "executionType": "terminal",
-      "effort": "low",
+      "effort": "high",
       "skillsets": [
         "ScriptaHubAgent/scriptahub-tasks"
       ],
-      "prompt": "Follow scriptahub-tasks SKILL.md and the operation reference for execution context, native calls, recovery, handoff, source scope and acceptance.\n\nUse the shared publication procedure with the actual service status and the approval saved by validate-edit. Keep the execution identity and exact validated bytes on any retry. Save the actual publication response and receipt paths with step=submit-edit. The parent reconciles this item independently."
+      "prompt": "Follow scriptahub-tasks SKILL.md and the operation reference for execution context, native calls, recovery, handoff, source scope and acceptance.\n\nIn process mode call retry-publication for the staged and moderated package from validate-edit. Confirm the actual service status. Keep the execution identity and exact validated bytes on any retry. Save the actual publication response and receipt paths with step=submit-edit. The parent reconciles this item independently."
     }
   ],
   "edges": [
     {
-      "id": "claim-edit-to-apply-edit",
+      "id": "claim-edit-to-moderate-submission",
       "sourceTaskId": "claim-edit",
+      "targetTaskId": "moderate-submission",
+      "sourcePort": "right",
+      "targetPort": "left"
+    },
+    {
+      "id": "moderate-submission-to-apply-edit",
+      "sourceTaskId": "moderate-submission",
       "targetTaskId": "apply-edit",
       "sourcePort": "right",
       "targetPort": "left"
@@ -92,19 +110,23 @@
       "y": 0
     },
     "apply-edit": {
-      "x": 320,
-      "y": 0
-    },
-    "prepare-edit-package": {
       "x": 640,
       "y": 0
     },
-    "validate-edit": {
+    "prepare-edit-package": {
       "x": 960,
       "y": 0
     },
-    "submit-edit": {
+    "validate-edit": {
       "x": 1280,
+      "y": 0
+    },
+    "submit-edit": {
+      "x": 1600,
+      "y": 0
+    },
+    "moderate-submission": {
+      "x": 320,
       "y": 0
     }
   },

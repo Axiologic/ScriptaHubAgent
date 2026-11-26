@@ -81,7 +81,7 @@
     form.addEventListener('reset',()=>queueMicrotask(update));
     update();return update;
   }
-  async function submitDirect(metadata, files, status, button, coverImage) {
+  async function submitDirect(metadata, files, status, button, coverImage, returnReceipt = false) {
     if (sending.has(button) || button.dataset.submissionComplete === 'true') return false;
     sending.add(button);
     button.disabled = true;
@@ -107,8 +107,12 @@
       }
       button.dataset.submissionComplete = 'true';
       try { if (metadata.values?.annotationDraftKey?.startsWith('scriptahub:suggest:')) sessionStorage.removeItem(metadata.values.annotationDraftKey); } catch { /* A confirmed submission stays successful even if local draft cleanup is unavailable. */ }
-      return true;
+      return returnReceipt ? received : true;
     } catch (error) {
+      if (error.message === 'The points cost has changed. Review it before continuing.' && button.form) {
+        button.form.dataset.refreshContributionCost = 'true';
+        delete button.dataset.submissionId;
+      }
       status.textContent = error.message === 'The points cost has changed. Review it before continuing.'
         ? (lang() === 'ro' ? 'Costul în credite s-a schimbat. Verifică-l înainte să continui.' : 'The credit cost has changed. Review it before continuing.')
         : error.message;
@@ -120,13 +124,13 @@
     if(draft.agreementAccepted!==true)throw new Error('Contribution agreement is required');
     const submissionPolicy=await policy;
     button.dataset.submissionId ||= submissionPolicy.newSubmissionId();
-    const metadata={submissionId:button.dataset.submissionId,kind:contributionKind(draft,files.length),agreementVersion:'2026-09-10',agreementAccepted:true,values:draft.values,language:draft.language ?? lang(),...(bookId(draft)?{bookId:bookId(draft)}:{})};
-    if (metadata.kind === 'fork') {
+    const metadata={submissionId:button.dataset.submissionId,kind:draft.kind || contributionKind(draft,files.length),agreementVersion:'2026-09-10',agreementAccepted:true,values:draft.values,language:draft.language ?? lang(),...(bookId(draft)?{bookId:bookId(draft)}:{})};
+    if (metadata.kind === 'fork' || (metadata.kind === 'book-proposal' && metadata.values.confirmedCost !== undefined)) {
       metadata.values = {...metadata.values};
       metadata.confirmedCost = Number(metadata.values.confirmedCost);
       delete metadata.values.confirmedCost;
     }
-    return submitDirect(metadata,files,status,button,draft.coverImage);
+    return submitDirect(metadata,files,status,button,draft.coverImage,Boolean(draft.kind));
   }
   globalThis.ScriptaContributionBridge = {bindFormValidity,loadDraftFiles,deleteDraftFiles:remove,submitContribution,submitDirect,
     newSubmissionId:async()=>(await policy).newSubmissionId(),

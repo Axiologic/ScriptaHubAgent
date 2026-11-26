@@ -3,14 +3,37 @@ import { callAgent } from './identity.mjs';
 
 const day = 24 * 60 * 60 * 1000;
 const timestamp = () => new Date().toISOString();
-const points = (row, operation, amount) => callAgent('userPersistoAgent','userpersisto_scriptahub_points_apply',{
-  userId: row.owner.replace(/^user:/, ''), operation, requestId: row.id, attempt: row.attempt, amount, kind: row.kind, ...(operation === 'reward' && row.expires_at ? {expiresAt:row.expires_at} : {}),
-});
+const creditReasons = {
+  manuscript: 'Approved manuscript',
+  edit: 'Approved corrections',
+  'book-proposal': 'AI book generation',
+  edition: 'New book edition',
+  fork: 'Derived book',
+};
+
+export function creditOperation(row, operation, amount) {
+  const userId = row.owner.replace(/^user:/, '');
+  const rewardReference = `scriptahub:reward:${row.id}`;
+  if (operation === 'expiry') return { userId, operation: 'inspect-expiry', referenceId: rewardReference };
+  if (operation === 'reward') {
+    return {
+      userId, operation: 'grant', referenceId: rewardReference, amount, reason: creditReasons[row.kind],
+      ...(row.expires_at ? { expiresAt: row.expires_at } : {}),
+    };
+  }
+  return {
+    userId, operation, referenceId: `scriptahub:${row.kind}:${row.id}:${row.attempt}`,
+    amount, reason: creditReasons[row.kind],
+  };
+}
+
+const points = (row, operation, amount) =>
+  callAgent('userPersistoAgent', 'credits_apply', creditOperation(row, operation, amount));
 const sendEmail = ({recipient,subject,message}) => callAgent('emailAgent','email_send_text',{to:recipient,subject,text:message});
 
 export async function advanceCycles(store, { apply = points, send = sendEmail, report = console.error } = {}) {
   const { db, cycles } = store;
-  const pending = db.prepare(`SELECT ac.*,t.state AS task_state FROM approval_cycles ac
+  const pending = db.prepare(`SELECT ac.*,t.state AS task_state,t.error AS task_error,t.moderation_rejected FROM approval_cycles ac
     LEFT JOIN tasks t ON t.id=ac.task_id WHERE ac.phase IN ('funding','rewarding','restoring')
     OR (ac.phase='active' AND t.state IN ('failed','cancelled','completed')) ORDER BY ac.updated_at`).all();
   for (const row of pending) {
@@ -24,7 +47,7 @@ export async function advanceCycles(store, { apply = points, send = sendEmail, r
         if (result.insufficient) {
           store.transaction(() => {
             db.prepare("UPDATE tasks SET state='cancelled',updated_at=? WHERE id=? AND state='queued'").run(timestamp(),row.task_id);
-            const notice = cycles.notify(row,'Request restored',`Your request was restored. You need ${result.missing} more points before trying again.`);
+            const notice = cycles.notify(row,'Request restored',`Your request was restored. You need ${result.missing} more credits before trying again.`);
             transition('retryable','Insufficient points.',result.missing,notice);
           });
         } else transition('active');
@@ -50,8 +73,14 @@ export async function advanceCycles(store, { apply = points, send = sendEmail, r
             db.prepare("UPDATE changes SET state='accepted',decided_at=NULL,decided_by=NULL,decision_note=NULL WHERE id=?").run(row.change_id);
           }
           const restored = row.cost ? ' The debit was reversed. Check your points history for any expirations.' : '';
+          if (row.moderation_rejected) {
+            const notice = cycles.notify(row,'Edition could not be published',
+              row.task_error + restored + ' You can submit a new edition from the remaining accepted corrections.');
+            transition('rejected',row.task_error,null,notice);
+            return;
+          }
           const notice = cycles.notify(row,'Request restored',`Processing ${row.task_state === 'cancelled' ? 'was cancelled' : 'failed'}. Your request was restored.${restored} You can try again from your dashboard.`);
-          transition('retryable',row.task_state === 'cancelled' ? 'Processing was cancelled.' : 'Processing failed.',null,notice);
+          transition('retryable',row.task_error || (row.task_state === 'cancelled' ? 'Processing was cancelled.' : 'Processing failed.'),null,notice);
         });
       } else if (row.task_state === 'completed') {
         store.transaction(() => {

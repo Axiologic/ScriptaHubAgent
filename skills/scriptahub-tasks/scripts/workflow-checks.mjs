@@ -1,3 +1,4 @@
+import {publicationFiles} from './publication-files.mjs';
 import { validateCatalogueKeywords } from './catalogue-keywords.mjs';
 import {withExecutionLock} from './anchored-files.mjs';
 import {guardRemoteBackups} from './remote-skill.mjs';
@@ -26,10 +27,64 @@ export async function insideRun(value, { directory = false } = {}) {
   if (directory ? !stat.isDirectory() : !stat.isFile()) throw new Error('Unexpected artifact type');
   return target;
 }
-async function jsonArtifact(value) {
+async function jsonArtifact(value, limit = 16*1024*1024) {
   const filename = await insideRun(value);
-  if ((await fs.stat(filename)).size > 16*1024*1024) throw new Error('JSON artifact is too large');
+  if ((await fs.stat(filename)).size > limit) throw new Error('JSON artifact is too large');
   return JSON.parse(await fs.readFile(filename,'utf8'));
+}
+
+export async function verifySourceAudit(directory, source, reference, pdf) {
+  const report = reference?.path;
+  const auditDirectory = directory + '/validation/source-layout/' + source.language + '/';
+  if (typeof report !== 'string' || !report.startsWith(auditDirectory) || !report.endsWith('/report.json')
+      || !/^[a-f0-9]{64}$/.test(reference.sha256 ?? '')) {
+    throw Error('Missing source audit for ' + source.language);
+  }
+  const filename = await insideRun(report);
+  const audit = await jsonArtifact(report);
+  if (hash(await fs.readFile(filename)) !== reference.sha256
+      || !['passed', 'passed_with_warnings'].includes(audit.status) || audit.autoCorrect !== false
+      || !Array.isArray(audit.findings) || audit.findings.some(finding => finding.severity === 'error')) {
+    throw Error('Source audit has not passed for ' + source.language);
+  }
+  const html = await insideRun(source.path);
+  const matchesHtml = item => item?.file === html && item.sha256 === source.sha256;
+  if (!pdf) {
+    if (audit.scope !== 'edition_layout_regression' || audit.errorFindings !== 0 || audit.existingFindings !== 0
+        || audit.approvedChanges !== 0 || audit.baseline?.sha256 !== source.sha256 || !matchesHtml(audit.candidate)
+        || !Array.isArray(audit.inputs) || !audit.inputs.some(matchesHtml)) throw Error('Source layout audit does not match ' + source.language);
+    const baseline = path.relative(process.cwd(), audit.baseline.file);
+    if (!baseline.startsWith(directory + '/sources/') || audit.baseline.file === html
+        || hash(await fs.readFile(await insideRun(baseline))) !== source.sha256) {
+      throw Error('Source layout baseline changed for ' + source.language);
+    }
+    return { inputs: audit.inputs, original: html, baseline: audit.baseline.file };
+  }
+  const jobPath = path.posix.join(path.posix.dirname(report), 'job.json');
+  const nativeJob = await jsonArtifact(jobPath);
+  const referencePdf = await insideRun(pdf);
+  const referenceSha256 = hash(await fs.readFile(referencePdf));
+  if (hash(await fs.readFile(await insideRun(jobPath))) !== reference.jobSha256
+      || audit.scope !== 'layout_and_structure' || audit.corrections?.length || !isDeepStrictEqual(nativeJob.result, audit)
+      || audit.documents?.length !== 1 || audit.documents[0].file !== html || !Array.isArray(nativeJob.inputs)
+      || !nativeJob.inputs.some(matchesHtml) || !nativeJob.inputs.some(item => item.file === referencePdf && item.sha256 === referenceSha256)) {
+    throw Error('Source audit does not match the HTML and PDF for ' + source.language);
+  }
+  return { inputs: nativeJob.inputs, original: html, pdf: referencePdf, jobPath };
+}
+
+async function verifyStagedSource(root, names, reader, evidence, language) {
+  if (!names.has(reader)) throw Error('Missing staged reader for ' + language);
+  const candidate = path.join(root, reader);
+  for (const {file, sha256} of evidence.inputs) {
+    if ([evidence.pdf, evidence.baseline, '/opt/scriptahub/runtime/reader/reader.css'].includes(file)) continue;
+    const relative = path.relative(path.dirname(evidence.original), file);
+    const staged = file === evidence.original ? candidate : path.resolve(path.dirname(candidate), relative);
+    const name = path.relative(root, staged).split(path.sep).join('/');
+    if (relative.startsWith('..') || !names.has(name) || hash(await fs.readFile(staged)) !== sha256) {
+      throw Error('Staged reader or its resources changed for ' + language + '; audit this edition in the package');
+    }
+  }
 }
 export async function atomicJson(relative, value) {
   return atomicFile(relative, Buffer.from(JSON.stringify(value,null,2)+'\n'));
@@ -75,13 +130,35 @@ function manuscriptEditions(context, directory) {
   return entries;
 }
 
+const editorialPath = (directory, language, digest) => `${directory}/run-state/editorial/${language}/${digest}.json`;
+const isEditorialReference = entry => entry && (Object.hasOwn(entry, 'path') || Object.hasOwn(entry, 'sha256'));
+
+export async function readManuscriptEditorial(context, directory, language, read = async filename => fs.readFile(await insideRun(filename))) {
+  if (!Object.hasOwn(context.manuscriptEditions ?? {}, language) || !/^[A-Za-z0-9]+(?:-[A-Za-z0-9]+)*$/.test(language)) {
+    throw Error('Editorial evidence requires a pinned manuscript language');
+  }
+  const entry = context.manuscriptEditorial?.[language];
+  if (!isEditorialReference(entry)) return entry;
+  if (!/^[a-f0-9]{64}$/.test(entry.sha256 ?? '') || entry.path !== editorialPath(directory, language, entry.sha256)) {
+    throw Error('Invalid editorial evidence reference for ' + language);
+  }
+  const bytes = await read(entry.path);
+  if (hash(bytes) !== entry.sha256) throw Error('Editorial evidence changed for ' + language);
+  const evidence = JSON.parse(bytes);
+  if (evidence.executionId !== context.executionId || evidence.language !== language
+    || evidence.sourceSha256 !== context.manuscriptEditions[language].sha256) {
+    throw Error('Editorial evidence belongs to a different execution or source: ' + language);
+  }
+  return evidence.editorial;
+}
+
 export async function writeHandoff(input) {
-  const steps = ['claim-edit','apply-edit','prepare-edit-package','validate-edit','submit-edit','resume-book','prepare-manuscript','comprehensive-summary','relevant-keywords','shared-editorial-analysis','marketing-summary','short-description','process-content','translate-resources','review-correct','validate-final','publish-result'];
+  const steps = ['claim-edit','apply-edit','prepare-edit-package','validate-edit','submit-edit','resume-book','prepare-manuscript','comprehensive-summary','relevant-keywords','shared-editorial-analysis','marketing-summary','short-description','process-content','translate-resources','review-correct','export-book-pdf','validate-final','publish-result','book-result'];
   if (!steps.includes(input.step) || !input.context || typeof input.context !== 'object' || Array.isArray(input.context)) throw new Error('Provide the step and a context object');
   for (const key of ['executionId','runId','taskId','bookId']) if (!/^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$/.test(input.context[key] || '')) throw new Error('Invalid handoff identity: '+key);
   const handoffPath = itemArtifact(input.directory,'handoff.json');
   let old = null;
-  try { old = await jsonArtifact(handoffPath); }
+  try { old = await jsonArtifact(handoffPath, Infinity); }
   catch (error) { if (error.code !== 'ENOENT') throw error; }
   for (const key of ['executionId','runId','taskId','bookId']) if (old && old.context[key] !== input.context[key]) throw new Error('Handoff belongs to another execution');
   if (old?.context.editorialSource) {
@@ -99,14 +176,10 @@ export async function writeHandoff(input) {
     if (old.context.editorialResults || input.context.editorialResults) {
       context.editorialResults = {...old.context.editorialResults, ...input.context.editorialResults};
     }
-    if (old.context.manuscriptEditorial || input.context.manuscriptEditorial) {
-      context.manuscriptEditorial = {...old.context.manuscriptEditorial, ...input.context.manuscriptEditorial};
-    }
     input = {...input, context};
   }
-  manuscriptEditions(input.context, input.directory ?? '.');
-  const text = JSON.stringify(input.context);
-  if (Buffer.byteLength(text)>24000) throw new Error('Keep handoff context under 24 KB; reference large inventories and reports by path');
+  const directory = input.directory ?? '.';
+  manuscriptEditions(input.context, directory);
   const rejectSecrets = value => {
     if (!value || typeof value !== 'object') return;
     for (const [key,child] of Object.entries(value)) {
@@ -115,6 +188,32 @@ export async function writeHandoff(input) {
     }
   };
   rejectSecrets(input.context);
+  const updates = input.context.manuscriptEditorial;
+  const previous = old?.context.manuscriptEditorial;
+  const writes = [];
+  if (updates || previous) {
+    const references = Object.create(null);
+    for (const language of new Set([...Object.keys(previous ?? {}), ...Object.keys(updates ?? {})])) {
+      const source = input.context.manuscriptEditions?.[language];
+      if (!source || !Object.hasOwn(input.context.manuscriptEditions, language)) throw Error('Editorial evidence requires a pinned manuscript language');
+      const prior = previous?.[language];
+      const update = updates?.[language];
+      if (isEditorialReference(update) && !isDeepStrictEqual(update, prior)) throw Error('Use the current editorial evidence reference for ' + language);
+      if (isEditorialReference(prior) && (!update || isEditorialReference(update))) {
+        references[language] = prior;
+        continue;
+      }
+      const saved = prior && await readManuscriptEditorial(old.context, directory, language);
+      const editorial = {...saved, ...update, editorialResults: {...saved?.editorialResults, ...update?.editorialResults}};
+      const bytes = Buffer.from(JSON.stringify({executionId: input.context.executionId, language, sourceSha256: source.sha256, editorial}, null, 2) + '\n');
+      const sha256 = hash(bytes);
+      const path = editorialPath(directory, language, sha256);
+      references[language] = {path, sha256};
+      writes.push({path, bytes});
+    }
+    input = {...input, context: {...input.context, manuscriptEditorial: references}};
+  }
+  for (const {path, bytes} of writes) await atomicFile(path, bytes);
   return atomicJson(handoffPath,{step:input.step,context:input.context,updatedAt:new Date().toISOString()});
 }
 export async function preflight(receipt) {
@@ -126,16 +225,16 @@ export async function verifyPackage(input,{hook=async()=>{}}={}) {
   return withExecutionLock(process.cwd(),input.executionId,async base=>{
   await guardRemoteBackups(base,input.executionId);
   await hook('guarded');
-  const root=await insideRun(input.packageRoot,{directory:true}), inventory=await jsonArtifact(input.inventory);
+  const root=await insideRun(input.packageRoot,{directory:true});
+  const inventoryPath=await insideRun(input.inventory);
+  if ((await fs.stat(inventoryPath)).size > 16*1024*1024) throw new Error('JSON artifact is too large');
+  const inventoryBytes=await fs.readFile(inventoryPath);
+  const inventory=JSON.parse(inventoryBytes);
   if(inventory.executionId!==input.executionId || !Array.isArray(inventory.files) || !inventory.files.length)throw new Error('Inventory belongs to another execution or has no files');
-  const names=new Set();let bytes=0;
+  const candidates=new Set();
   for(const entry of inventory.files){
-    if(typeof entry.path!=='string'||/[\\\0]/.test(entry.path)||entry.path.startsWith('/')||entry.path.split('/').some(p=>!p||p==='.'||p==='..'||p.toLowerCase()==='.git')||names.has(entry.path))throw new Error('Unsafe or duplicate inventory path');
-    names.add(entry.path);
-    const file=await insideRun(path.relative(process.cwd(),path.join(root,entry.path)));
-    const value=await fs.readFile(file);
-    if(value.length!==entry.size||hash(value)!==entry.sha256)throw new Error('Inventory differs from package: '+entry.path);
-    bytes+=value.length;
+    if(typeof entry.path!=='string'||/[\\\0]/.test(entry.path)||entry.path.startsWith('/')||entry.path.split('/').some(p=>!p||p==='.'||p==='..'||p.toLowerCase()==='.git')||candidates.has(entry.path))throw new Error('Unsafe or duplicate inventory path');
+    candidates.add(entry.path);
   }
   const runGit=async args=>(await execute('git',['-c','core.hooksPath=/dev/null','-c','credential.helper=',...args],{cwd:root,timeout:30000,maxBuffer:8*1024*1024,env:{PATH:process.env.PATH,HOME:os.homedir(),GIT_TERMINAL_PROMPT:'0',GIT_ALLOW_PROTOCOL:'https',GIT_CONFIG_NOSYSTEM:'1',GIT_CONFIG_GLOBAL:'/dev/null'}})).stdout.trim();
   if(inventory.baseCommit!==null && !/^[a-f0-9]{40}$/.test(inventory.baseCommit || ''))throw new Error('Invalid base commit');
@@ -150,10 +249,19 @@ export async function verifyPackage(input,{hook=async()=>{}}={}) {
     : catalogue.hostname==='raw.githubusercontent.com' ? /^\/([\w.-]+)\/([\w.-]+)\/(.+)$/.exec(catalogue.pathname) : null;
   if(!match||!input.branch||!match[3].startsWith(input.branch+'/')||!/^refs\/heads\/[A-Za-z0-9][A-Za-z0-9._/-]*$/.test('refs/heads/'+input.branch))throw new Error('Catalogue/branch mismatch');
   const collectionPath=match[3].slice(input.branch.length+1);
-  if(path.posix.basename(collectionPath)!=='collection.json'||!names.has(collectionPath))throw new Error('Inventory must contain the catalogue update');
-  const collection=JSON.parse(await fs.readFile(path.join(root,collectionPath),'utf8'));
+  if(path.posix.basename(collectionPath)!=='collection.json'||!candidates.has(collectionPath))throw new Error('Inventory must contain the catalogue update');
+  const read = async name => fs.readFile(await insideRun(path.relative(process.cwd(),path.join(root,name))));
+  const collection=JSON.parse(await read(collectionPath));
   if(![1,2].includes(collection.schemaVersion)||!Array.isArray(collection.books)||collection.bookCount!==collection.books.length||new Set(collection.books.map(b=>b.id)).size!==collection.books.length||!collection.books.some(b=>b.id===input.bookId))throw new Error('Catalogue structure or task identity is invalid');
   validateCatalogueKeywords(collection);
+  const names = await publicationFiles(collectionPath, collection, input.bookId, candidates, read);
+  const files = inventory.files.filter(entry => names.has(entry.path));
+  let bytes = 0;
+  for (const entry of files) {
+    const value = await read(entry.path);
+    if (value.length !== entry.size || hash(value) !== entry.sha256) throw Error('Inventory differs from package: ' + entry.path);
+    bytes += value.length;
+  }
   const checksAudit = input.audit || input.audits || input.finalize;
   let task;
   if (checksAudit || input.checkReadingRoutes) {
@@ -163,7 +271,7 @@ export async function verifyPackage(input,{hook=async()=>{}}={}) {
   const editing = task?.type === 'scriptahub.edit';
   const readers = input.finalize || input.checkReadingRoutes
     ? await editionReaders(root, collectionPath, collection, input.bookId, names,
-      !editing, !editing, editing ? undefined : artworkRequirement(task))
+      !editing, !editing, editing ? undefined : artworkRequirement(task), input.requirePdf === true)
     : null;
   const remote=`https://github.com/${match[1]}/${match[2]}.git`;
   const refs=await runGit(['ls-remote',remote]);
@@ -171,7 +279,8 @@ export async function verifyPackage(input,{hook=async()=>{}}={}) {
   if(!head&&(refs||inventory.baseCommit))throw new Error('The selected destination branch is missing');
   // Keep the validated baseline pinned. ScriptaHub checks whether the current
   // remote tip can accept the package when it actually publishes.
-  const report={ok:true,executionId:input.executionId,bookId:input.bookId,fileCount:names.size,bytes,baseCommit:inventory.baseCommit,checkedAt:new Date().toISOString()};
+  const report={ok:true,executionId:input.executionId,bookId:input.bookId,fileCount:names.size,bytes,baseCommit:inventory.baseCommit,checkedAt:new Date().toISOString(),
+    inventory:{path:input.inventory,sha256:hash(inventoryBytes)},readingRoutesChecked:input.checkReadingRoutes === true,pdfRequired:input.requirePdf === true};
   if (checksAudit) {
     const generated = ['scriptahub.book-proposal', 'scriptahub.fork'].includes(task.type);
     const scope = generated ? 'html_layout_integrity' : editing ? 'edition_layout_regression' : 'layout_and_structure';
@@ -179,7 +288,7 @@ export async function verifyPackage(input,{hook=async()=>{}}={}) {
     if (input.audit && input.audits || !Array.isArray(entries) || !entries.length) throw Error('Provide the independent native audit reports');
     let directEditions = new Map();
     if (readers && task.type === 'scriptahub.manuscript') {
-      const {context} = await jsonArtifact(itemArtifact(input.directory, 'handoff.json'));
+      const {context} = await jsonArtifact(itemArtifact(input.directory, 'handoff.json'), Infinity);
       if (context.executionId !== task.executionId || context.bookId !== task.bookId) {
         throw Error('Manuscript handoff belongs to another task');
       }
@@ -201,6 +310,14 @@ export async function verifyPackage(input,{hook=async()=>{}}={}) {
     if (expected?.length && (entries.length !== expected.length || new Set(entries.map(item => item.language)).size !== entries.length
       || entries.some(item => !expected.includes(item.language)))) throw Error('Independent audits must cover every required edition');
     const candidates = new Set(), reports = [];
+    let sourceContext;
+    if (input.finalize && !editing) {
+      try { sourceContext = (await jsonArtifact(itemArtifact(input.directory, 'handoff.json'), Infinity)).context; }
+      catch (error) { if (error.code !== 'ENOENT' || !generated) throw error; }
+    }
+    if (sourceContext && (sourceContext.executionId !== task.executionId || sourceContext.bookId !== task.bookId)) {
+      throw Error('Source audits belong to another task');
+    }
     let warningFindings = 0, existingFindings = 0, withWarnings = false;
     for (const entry of entries) {
       const reportPath = await insideRun(entry.report);
@@ -209,6 +326,37 @@ export async function verifyPackage(input,{hook=async()=>{}}={}) {
         || audit.findings.some(finding => finding.severity === 'error')) throw Error('Independent book audit has not passed');
       withWarnings ||= audit.status === 'passed_with_warnings';
       warningFindings += audit.findings.length;
+      const language = entry.language ?? input.sourceLanguage;
+      const previous = sourceContext?.sourceAudits?.[language];
+      if (previous?.path === entry.report) {
+        const direct = directEditions.get(language);
+        const source = direct ?? sourceContext.editorialSource;
+        if (source?.language !== language || hash(await fs.readFile(await insideRun(source.path))) !== source.sha256) {
+          throw Error('Original audited HTML changed for ' + language);
+        }
+        const pdf = generated ? null : direct?.referencePdf ?? sourceContext.referencePdf;
+        if (!generated && !pdf) throw Error('Missing pinned PDF for ' + language);
+        if (direct && hash(await fs.readFile(await insideRun(pdf))) !== direct.referencePdfSha256) {
+          throw Error('Pinned manuscript PDF changed for ' + language);
+        }
+        const evidence = await verifySourceAudit(input.directory, source, previous, pdf);
+        const reader = readers.get(language);
+        await verifyStagedSource(root, names, reader, evidence, language);
+        if (generated) {
+          const edition = plan.find(item => item.language === language);
+          const baseline = await insideRun(edition.baselineHtml);
+          const changes = await insideRun(edition.changesPath);
+          if (edition.baselineHtml !== source.path || edition.baselineSha256 !== source.sha256
+              || hash(await fs.readFile(baseline)) !== source.sha256
+              || !isDeepStrictEqual(await jsonArtifact(edition.changesPath), [])
+              || hash(await fs.readFile(changes)) !== edition.changesSha256
+              || await insideRun(edition.candidateHtml) !== path.join(root, reader)) {
+            throw Error('Edition plan differs from the audited source for ' + language);
+          }
+        }
+        reports.push({language, path: entry.report, sha256: previous.sha256});
+        continue;
+      }
       if (generated || editing) {
         if (audit.scope !== 'edition_layout_regression' || audit.autoCorrect !== false || audit.errorFindings !== 0) throw Error('Independent HTML audit has not passed');
         if (generated && audit.existingFindings !== 0) throw Error('Generated HTML must pass all integrity checks; baseline defects cannot be accepted as warnings');
@@ -259,11 +407,12 @@ export async function verifyPackage(input,{hook=async()=>{}}={}) {
     if (input.finalize) {
       if (typeof task.runId !== 'string' || !task.runId) throw Error('Missing claimed run identity');
       const validationRoot = path.posix.join(input.directory || '.', 'validation');
-      const approved = await atomicJson(validationRoot + '/verified-inventory.json', {...inventory, publicationPermitted: true});
+      const approved = await atomicJson(validationRoot + '/verified-inventory.json', {...inventory, files, publicationPermitted: true});
       const validation = await atomicJson(validationRoot + '/final-report.json', {
         executionId: input.executionId, runId: task.runId, bookId: input.bookId, publicationPermitted: true,
         audit: report.audit, reports, inventorySha256: approved.sha256,
         destination: {catalogue: input.catalogue, branch: input.branch, baseCommit: inventory.baseCommit},
+        ...(input.requirePdf === true && {requirePdf:true}),
         ...(input.translationOutcome && {translationOutcome: input.translationOutcome})
       });
       report.approval = {inventory: approved.path, validation: validation.path};
@@ -281,7 +430,7 @@ async function auditedFile(root, names, entry) {
   return name;
 }
 
-export async function editionReaders(root, collectionPath, collection, bookId, names, requireAll, checkReadingRoutes = false, artwork) {
+export async function editionReaders(root, collectionPath, collection, bookId, names, requireAll, checkReadingRoutes = false, artwork, requirePdf = false) {
   const book = collection.books.find(entry => entry.id === bookId);
   const prefix = path.posix.dirname(collectionPath);
   const resource = value => typeof value === 'string' ? path.posix.join(prefix, value) : null;
@@ -301,6 +450,15 @@ export async function editionReaders(root, collectionPath, collection, bookId, n
   for (const [language, edition] of editions) {
     if (!requireAll && !edition?.fullContent) continue;
     const full = resolve(edition?.fullContent);
+    if (requirePdf) {
+      const filename = resources ? resources[edition.pdf] : edition.pdf;
+      const pdf = resolve(edition.pdf);
+      if (!filename?.endsWith('/' + language + '/book.pdf') || !names.has(pdf)) throw Error('Missing download PDF for ' + language);
+      const bytes = await fs.readFile(path.join(root,pdf));
+      if (bytes.subarray(0,5).toString() !== '%PDF-' || (resources && checksums?.[filename] !== hash(bytes))) {
+        throw Error('Invalid download PDF for ' + language);
+      }
+    }
     if (checkReadingRoutes) {
       const short = resolve(edition?.shortContent);
       const landing = resource(edition?.book);

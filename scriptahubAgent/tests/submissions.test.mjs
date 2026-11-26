@@ -1,3 +1,4 @@
+import {defaultPoints} from '../points-policy.mjs';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs/promises';
@@ -67,7 +68,7 @@ test('a description without attachments reaches the Add book executor with its i
   const endpoint = `http://127.0.0.1:${server.address().port}/api/submissions`;
   const send = (values, withFile = false) => {
     const body = new FormData();
-    body.set('metadata', JSON.stringify({ submissionId: crypto.randomUUID(), kind: 'book-proposal', agreementVersion: '2026-09-10', agreementAccepted: true, language: 'ro', values }));
+    body.set('metadata', JSON.stringify({ submissionId: crypto.randomUUID(), kind: 'book-proposal', confirmedCost:defaultPoints.promptBookCost, agreementVersion: '2026-09-10', agreementAccepted: true, language: 'ro', values }));
     if (withFile) body.set('documents', new File(['%PDF-1.7\npage'], 'test.pdf'));
     return fetch(endpoint, { method: 'POST', body });
   };
@@ -93,6 +94,51 @@ test('a description without attachments reaches the Add book executor with its i
   } finally { store.close(); }
 });
 
+test('untitled requests use recognizable dashboard titles without supplying a title to the robot', async t => {
+  const root = await fs.mkdtemp(path.join(os.tmpdir(), 'scripta-draft-title-'));
+  const user = { id:'user:alice', email:'alice@example.test', roles:['admin'] };
+  const server = createSiteServer(root, {dataDir:root, verifyUser:async()=>user});
+  await new Promise(resolve=>server.listen(0,'127.0.0.1',resolve));
+  t.after(async()=>{await new Promise(resolve=>server.close(resolve));await fs.rm(root,{recursive:true,force:true});});
+  const base = `http://127.0.0.1:${server.address().port}`;
+  async function submit(kind, values, filename) {
+    const body = new FormData();
+    body.set('metadata', JSON.stringify({submissionId:crypto.randomUUID(),kind,values,agreementVersion:'2026-09-10',
+      agreementAccepted:true,confirmedCost:defaultPoints.promptBookCost,language:'ro'}));
+    if (filename) body.set('documents',new File(['%PDF-1.7'],filename));
+    const response = await fetch(base+'/api/submissions',{method:'POST',body});
+    assert.equal(response.status,202);
+    return response.json();
+  }
+  const proposal = await submit('book-proposal',{titles:' ',description:'Scrie o carte despre cetățile dacice'});
+  const similar = await submit('book-proposal',{description:'Scrie o carte despre cetățile dacice'});
+  const french = await submit('book-proposal',{description:'J’aimerais un livre sur les forteresses daces, les découvertes archéologiques récentes et leur contexte.'});
+  const manuscript = await submit('manuscript',{},'Punguța_cu_doi_bani.pdf');
+  const explicit = await submit('book-proposal',{titles:'Untitled book',description:'A book about urban gardens'});
+  const store = server.getDashboardStore();
+  assert.equal(store.book(proposal.bookId).title,'Scrie o carte despre cetățile dacice');
+  assert.equal(store.book(similar.bookId).title,'Scrie o carte despre cetățile dacice (2)');
+  assert.equal(store.book(french.bookId).title,'J’aimerais un livre sur les forteresses daces, les découvertes…');
+  assert.equal(store.book(manuscript.bookId).title,'Punguța cu doi bani');
+  assert.equal(store.book(explicit.bookId).title,'Untitled book');
+
+  const executor = 'agent:test/draft-title';
+  const service = new TaskExecution(store,root);
+  service.snapshot(executor,{taskType:'add-book',batchId:'draft-titles'});
+  const {task} = service.claim(executor,{taskType:'add-book',batchId:'draft-titles',taskId:proposal.task.id,runId:'draft-titles'});
+  assert.equal(task.values.titles,' ');
+  assert.equal(task.values.title,undefined);
+
+  store.db.prepare("UPDATE books SET title='Untitled book' WHERE id=?").run(manuscript.bookId);
+  const reopened = new DashboardStore(root);
+  reopened.close();
+  const dashboard = await (await fetch(base+'/api/dashboard')).json();
+  assert.equal(dashboard.books.find(book=>book.id===manuscript.bookId).title,'Punguța cu doi bani');
+  assert.equal(dashboard.tasks.find(item=>item.id===proposal.task.id).title,'Scrie o carte despre cetățile dacice');
+  assert.equal(dashboard.changes.find(item=>item.id===similar.submissionId).title,'Scrie o carte despre cetățile dacice (2)');
+  assert.equal(dashboard.books.find(book=>book.id===explicit.bookId).title,'Untitled book');
+});
+
 test('an uploaded cover stays separate from manuscripts and reaches the executor with verified bytes', async t => {
   const root = await fs.mkdtemp(path.join(os.tmpdir(), 'scripta-cover-'));
   const server = createSiteServer(root, {dataDir:root, verifyUser:async()=>({id:'user:alice',email:'alice@example.test'})});
@@ -102,7 +148,7 @@ test('an uploaded cover stays separate from manuscripts and reaches the executor
   const png=Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+jXioAAAAASUVORK5CYII=','base64');
   const makeBody=(id=crypto.randomUUID(),{kind='book-proposal',mode='upload',image=new File([png],'cover.png'),duplicate=false}={})=>{
     const body=new FormData();
-    body.set('metadata',JSON.stringify({submissionId:id,kind,agreementVersion:'2026-09-10',agreementAccepted:true,language:'ro',values:{description:'O carte despre grădini.',coverMode:mode}}));
+    body.set('metadata',JSON.stringify({submissionId:id,kind,confirmedCost:defaultPoints.promptBookCost,agreementVersion:'2026-09-10',agreementAccepted:true,language:'ro',values:{...(kind==='manuscript' ? {readerTypography:'readable'} : {description:'O carte despre grădini.'}),coverMode:mode}}));
     if(image)body.append('coverImage',image);
     if(duplicate)body.append('coverImage',image);
     if(kind==='manuscript')body.append('documents',new File(['%PDF-1.7\nsource'],'source.pdf'));
@@ -131,4 +177,32 @@ test('an uploaded cover stays separate from manuscripts and reaches the executor
     {image:new File([new Uint8Array(10_000_001)],'cover.png')},
     {kind:'animation'},
   ])assert.equal((await send(makeBody(undefined,options))).status,400);
+});
+
+test('intake enforces the configured prompt cost and limits manuscript changes to presentation', async t => {
+  const root=await fs.mkdtemp(path.join(os.tmpdir(),'scripta-create-modes-'));
+  const user={id:'user:alice',email:'alice@example.test'};
+  const site=createSiteServer(root,{dataDir:root,manageApprovals:true,verifyUser:async()=>user});
+  await new Promise(resolve=>site.listen(0,'127.0.0.1',resolve));
+  t.after(async()=>{await new Promise(resolve=>site.close(resolve));await fs.rm(root,{recursive:true,force:true});});
+  const base=`http://127.0.0.1:${site.address().port}`;
+  const send=(kind,values,confirmedCost)=>{
+    const body=new FormData();
+    body.set('metadata',JSON.stringify({submissionId:crypto.randomUUID(),kind,values,confirmedCost,
+      agreementVersion:'2026-09-10',agreementAccepted:true}));
+    if (kind==='manuscript') body.set('documents',new File(['%PDF-1.7'],'manuscript.pdf'));
+    return fetch(base+'/api/submissions',{method:'POST',body});
+  };
+  assert.equal((await send('manuscript',{prompt:'Rewrite the book'})).status,400);
+  assert.equal((await send('book-proposal',{description:'Write a handbook'},0)).status,409);
+  const source=await send('manuscript',{titles:'Original manuscript',readerLayout:'reflow'});
+  const prompt=await send('book-proposal',{description:'Write a handbook'},defaultPoints.promptBookCost);
+  assert.equal(source.status,202);
+  assert.equal(prompt.status,202);
+  const receipts=await Promise.all([source.json(),prompt.json()]);
+  const {books}=await fetch(base+'/api/dashboard').then(result=>result.json());
+  const rows=receipts.map(receipt=>books.find(book=>book.id===receipt.bookId).creation);
+  assert.deepEqual(rows.map(({kind,state,cycle})=>[kind,state,cycle.phase,cycle.cost]),[
+    ['manuscript','queued','active',0],['book-proposal','queued','funding',defaultPoints.promptBookCost]
+  ]);
 });

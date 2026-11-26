@@ -16,11 +16,11 @@ async function directory(root,relative) {
     if (!(await fs.lstat(current)).isDirectory()) throw new Error('Batch directories must not be symlinks');
   }
 }
-async function readState(filename, limit = 4096) {
-  const handle = await fs.open(filename,constants.O_RDONLY | constants.O_NOFOLLOW);
+async function readState(filename, limit) {
+  const handle = await fs.open(filename,constants.O_RDONLY | constants.O_NOFOLLOW | constants.O_NONBLOCK);
   try {
     const stat = await handle.stat();
-    if (!stat.isFile() || stat.size > limit) throw new Error('Invalid batch state');
+    if (!stat.isFile() || (limit !== undefined && stat.size > limit)) throw new Error('Invalid batch state');
     return JSON.parse(await handle.readFile('utf8'));
   } finally { await handle.close(); }
 }
@@ -30,7 +30,7 @@ async function ensureHandoff(root, result, fresh) {
   const keys = ['executionId','runId','taskId','bookId'];
   if (keys.some(key=>!identifier(task[key]))) throw new Error('Invalid claimed task identity');
   const read = async () => {
-    const saved = await readState(path.join(root,handoffPath),32768);
+    const saved = await readState(path.join(root,handoffPath));
     if (keys.some(key=>saved.context?.[key]!==task[key])) throw new Error('Handoff belongs to another execution');
   };
   try { await read(); return; }
@@ -44,7 +44,6 @@ async function ensureHandoff(root, result, fresh) {
   const context = Object.fromEntries(keys.map(key=>[key,task[key]]));
   Object.assign(context,{task,taskDirectory,claimedPath,processingSettings,
     repositories:task.repositories || [],serviceState:task.state});
-  if (Buffer.byteLength(JSON.stringify(context))>24000) throw new Error('Initial handoff exceeds 24 KB');
   const temporary = path.join(root,handoffPath)+'.'+crypto.randomUUID()+'.tmp';
   try {
     await fs.writeFile(temporary,JSON.stringify({step:'select-task',context,updatedAt:new Date().toISOString()})+'\n',{flag:'wx',mode:0o600});
@@ -76,7 +75,7 @@ export async function runBatchOperation(call,operation,input,{root=process.cwd()
     if (!types.has(input.taskType)) throw new Error('Provide manuscript, book-proposal, add-book or edit taskType');
     fresh = await persist(false);
   }
-  let state = await readState(filename);
+  let state = await readState(filename,4096);
   const upgradingBookBatch = operation === 'batch-start' && state.taskType === 'manuscript' && input.taskType === 'add-book';
   if (!identifier(state.batchId) || !types.has(state.taskType) || input.taskType && input.taskType !== state.taskType && !upgradingBookBatch) throw new Error('Batch identity mismatch');
   if (operation === 'batch-close') return call('scriptahub_task_batch_close',{batchId:state.batchId,...(input.retainActive === true ? {retainActive:true} : {})});
@@ -108,7 +107,7 @@ export async function runBatchOperation(call,operation,input,{root=process.cwd()
   // Active/queued open batches are resumed; closed traversals start a new one.
   if (operation === 'batch-start' && snapshot.closed === true) {
     await persist(true);
-    state = await readState(filename);
+    state = await readState(filename,4096);
     snapshot = await call('scriptahub_task_batch_snapshot',state);
   }
   if (operation === 'batch-start') return snapshot;

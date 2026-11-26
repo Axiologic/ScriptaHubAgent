@@ -3,7 +3,7 @@ import path from 'node:path';
 import {isDeepStrictEqual} from 'node:util';
 import {withExecutionLock} from './anchored-files.mjs';
 import {guardRemoteBackups} from './remote-skill.mjs';
-import {atomicJson, insideRun} from './workflow-checks.mjs';
+import {atomicJson, insideRun, readManuscriptEditorial} from './workflow-checks.mjs';
 import {hash, schemaErrors} from '../shared/batch-io.mjs';
 import {projectAnalysis, sharedAnalysisSchema} from '../shared/editorial-analysis.mjs';
 
@@ -28,7 +28,7 @@ export async function sharedEditorial({executionId, directory, language, action,
       throw Error('Select a pinned manuscript edition for shared editorial work');
     }
     const edition = multilingual ? context.manuscriptEditions[language] : context.editorialSource;
-    const editorial = multilingual ? context.manuscriptEditorial?.[language] : context;
+    const editorial = multilingual ? await readManuscriptEditorial(context, directory, language) : context;
     const languageDirectory = multilingual ? '/' + language : '';
     if (context.executionId !== executionId || !edition?.path) throw Error('Missing matching pinned editorial source');
     const source = path.relative(process.cwd(), path.resolve(edition.path));

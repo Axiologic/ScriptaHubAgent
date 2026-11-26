@@ -11,7 +11,7 @@ import {openRoot,openDir,withParent,executionLock,at} from './anchored-files.mjs
 const digest = value => crypto.createHash('sha256').update(value).digest('hex');
 const id = value => typeof value === 'string' && /^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$/.test(value);
 const validPath = value => typeof value === 'string' && value && !value.startsWith('/') && !/[\\\0]/.test(value) && value.split('/').every(p => p && p !== '.' && p !== '..');
-const localControlPath=name=>['run-state/handoff.json','run-state/claimed.json'].includes(name);
+const localControlPath=name=>['run-state/handoff.json','run-state/claimed.json','run-state/editorial'].includes(name) || name.startsWith('run-state/editorial/');
 const excluded = new Set(['.git','.apikeys','credentials','credential','node_modules']);
 const protectedPath = name => name.split('/').some(part=>excluded.has(part)||part==='.env'||part.startsWith('.env.')) || name === 'run-state/remote-processing' || name.startsWith('run-state/remote-processing/');
 const sourceExcluded = new Set(['node_modules','.cache','.venv','__pycache__','.pytest_cache','target','output','cache','.theatrical-audio','hf-cache','.DS_Store','.idea','.git','.apikeys','audio.config.json']);
@@ -321,11 +321,14 @@ async function runLockedCommand(input,call,{root,base,sourceRoot,stdout,stderr,p
       try {const descriptor=await readJson(skillDir,'skill.json');dependencies=descriptor.sourceDependencies||[];}
       catch(error){if(error.code!=='ENOENT')throw error;}
     }finally{await skillDir.close();}
-    if(!Array.isArray(dependencies)||dependencies.some(prefix=>prefix!=='scriptahub-tasks/shared'))throw Error('Invalid skill source dependencies');
+    if(!Array.isArray(dependencies)||dependencies.some(prefix=>prefix!=='scriptahub-tasks/shared'
+        && !(skill==='book-pdf'&&prefix==='validate-book/src')))throw Error('Invalid skill source dependencies');
     const entries=source.map(e=>[skill+'/'+e.path,e.sha256]);if(!source.length)throw new Error('Selected skill source is empty');
     for(const prefix of new Set(dependencies)) {
-      const owner=await findSkill(sourceRoot,'scriptahub-tasks');let shared;
-      try {shared=await openDir(owner,'shared');const files=await inventory(shared,{source:true,skill});if(!files.some(file=>file.path==='batch-io.mjs'))throw Error('Shared batch module is unavailable');entries.push(...files.map(e=>[prefix+'/'+e.path,e.sha256]));}
+      const [ownerSkill,folder]=prefix.split('/');
+      const required=folder==='src'?'browser.mjs':'batch-io.mjs';
+      const owner=await findSkill(sourceRoot,ownerSkill);let shared;
+      try {shared=await openDir(owner,folder);const files=await inventory(shared,{source:true,skill:ownerSkill});if(!files.some(file=>file.path===required))throw Error('Shared skill source is unavailable: '+prefix);entries.push(...files.map(e=>[prefix+'/'+e.path,e.sha256]));}
       finally {await shared?.close();await owner.close();}
     }
     const sourceMap=Object.fromEntries(entries.sort(([a],[b])=>a<b?-1:a>b?1:0));

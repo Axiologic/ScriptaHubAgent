@@ -9,11 +9,13 @@ export function prepareTaskSchema(store) {
         db.exec(`CREATE TABLE tasks_new (id TEXT PRIMARY KEY, change_id TEXT NOT NULL REFERENCES changes(id),
           kind TEXT NOT NULL, base_revision INTEGER,
           state TEXT NOT NULL CHECK(state IN ('queued','running','stop_requested','cancelled','completed','failed')),
-          created_at TEXT NOT NULL, updated_at TEXT NOT NULL, result TEXT, error TEXT);
-          INSERT INTO tasks_new SELECT t.id,t.change_id,c.kind,NULL,t.state,t.created_at,t.updated_at,t.result,t.error
+          created_at TEXT NOT NULL, updated_at TEXT NOT NULL, result TEXT, error TEXT, moderation_rejected INTEGER NOT NULL DEFAULT 0);
+          INSERT INTO tasks_new(id,change_id,kind,base_revision,state,created_at,updated_at,result,error) SELECT t.id,t.change_id,c.kind,NULL,t.state,t.created_at,t.updated_at,t.result,t.error
             FROM tasks t JOIN changes c ON c.id=t.change_id;
           DROP TABLE tasks;
           ALTER TABLE tasks_new RENAME TO tasks;`);
+      } else if (!columns.some(column => column.name === 'moderation_rejected')) {
+        db.exec('ALTER TABLE tasks ADD COLUMN moderation_rejected INTEGER NOT NULL DEFAULT 0');
       }
       db.exec(`CREATE INDEX IF NOT EXISTS tasks_state ON tasks(state,created_at);
         CREATE TABLE IF NOT EXISTS task_changes (task_id TEXT NOT NULL REFERENCES tasks(id),

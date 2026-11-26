@@ -11,6 +11,17 @@ const safePath = value => typeof value === 'string' && value.split('/').every(pa
 const escape = value => String(value).replace(/[&<>"']/g, char => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'})[char]);
 const summaryMarker = /<meta\b(?=[^>]*\sname\s*=\s*["']summary-generator["'])(?=[^>]*\scontent\s*=\s*["']comprehensivesummary-skill["'])[^>]*>/i;
 
+export function applyManuscriptPresentation(html, values) {
+  const options = [
+    values?.readerLayout === 'reflow' && 'reflow',
+    values?.readerTypography === 'readable' && 'readable'
+  ].filter(Boolean);
+  if (!options.length) return html;
+  const marker = '<meta name="scriptahub-reader-presentation" content="' + options.join(' ') + '">';
+  const content = html.replace(/<meta\b[^>]*\bname\s*=\s*["']scriptahub-reader-presentation["'][^>]*>/gi,'');
+  return /<\/head\s*>/i.test(content) ? content.replace(/<\/head\s*>/i, closing => marker + closing) : marker + content;
+}
+
 export async function prepareReadingRoutes({executionId, directory, collectionPath, editions}) {
   if (!/^tasks\/[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$/.test(directory ?? '') || !safePath(collectionPath)
       || path.posix.basename(collectionPath) !== 'collection.json' || !Object.keys(editions ?? {}).length) throw Error('Provide the task, catalogue path and staged editions');
@@ -48,7 +59,16 @@ export async function prepareReadingRoutes({executionId, directory, collectionPa
       const [full, short] = required;
       const landing = language + '/book.html';
       if (!safePath(full) || !safePath(short) || full === short || full === landing || short === landing) throw Error('Stage the reader and summary at distinct HTML paths for ' + language);
-      const fullBytes = await read(bookRoot + '/' + full);
+      const readerFile = bookRoot + '/' + full;
+      let fullBytes = await read(readerFile);
+      if (claim.type === 'scriptahub.manuscript') {
+        const original = fullBytes.toString('utf8');
+        const presented = applyManuscriptPresentation(original,claim.values);
+        if (presented !== original) {
+          fullBytes = Buffer.from(presented);
+          await atomicFile(readerFile,fullBytes);
+        }
+      }
       const shortBytes = await read(bookRoot + '/' + short);
       if (!fullBytes.length || !summaryMarker.test(shortBytes.toString('utf8'))) throw Error('Stage the comprehensive summary and full reader for ' + language);
       const {shortDescription, aboutBook} = input;
@@ -57,6 +77,14 @@ export async function prepareReadingRoutes({executionId, directory, collectionPa
       const reader = language + '/full_content.html', summary = language + '/comprehensive-summary.html';
       const routes = {book:landing, fullContent:reader, shortContent:summary};
       const aliases = [[reader, full, fullBytes], [summary, short, shortBytes]];
+      if (input.pdf !== undefined) {
+        const filename = language + '/book.pdf';
+        if (input.pdf !== filename) throw Error('Stage the download PDF at ' + filename);
+        const pdf = await read(bookRoot + '/' + filename);
+        if (pdf.subarray(0,5).toString() !== '%PDF-') throw Error('Invalid download PDF for ' + language);
+        routes.pdf = filename;
+        aliases.push([filename, filename, pdf]);
+      }
       const pictures = {};
       if (artwork.required || input.cover !== undefined || input.thumbnail !== undefined) {
         for (const [role, filename] of Object.entries({cover:input.cover, thumbnail:input.thumbnail ?? input.cover})) {
@@ -87,11 +115,32 @@ export async function prepareReadingRoutes({executionId, directory, collectionPa
         }
       } else {
         const title = metadata.title?.[language] || book.title?.[language] || book.id;
-        landings.push([bookRoot + '/' + landing, landingHtml(language, title, shortDescription, aboutBook)]);
+        landings.push([bookRoot + '/' + landing, landingHtml(language, title, shortDescription, aboutBook, Boolean(routes.pdf))]);
       }
       chosen[language] = {fullContent:bookRoot + '/' + full, shortContent:bookRoot + '/' + short};
     }
     for (const [filename, html] of landings) await atomicFile(filename, html);
+    if (!modern) {
+      const filename = bookRoot + '/editions.json';
+      const history = await readJson(filename).catch(error => {
+        if (error.code !== 'ENOENT') throw error;
+        return null;
+      });
+      if (!history) {
+        const currentEdition = metadata.currentEdition || book.currentEdition || 'edition-1';
+        const readers = Object.fromEntries(languages.map(language => {
+          const {fullContent, shortContent} = metadata.editions[language];
+          return [language, {fullContent, shortContent}];
+        }));
+        const pdf = Object.fromEntries(languages.filter(language => metadata.editions[language].pdf)
+          .map(language => [language, metadata.editions[language].pdf]));
+        await atomicJson(filename, {schemaVersion:1, bookId:book.id, currentEdition, editions:[{
+          id:currentEdition, number:1, publishedAt:new Date().toISOString().slice(0, 10),
+          readers, pdf, covers:metadata.coverUrl ?? {}, contributors:[]
+        }]});
+        metadata.currentEdition = book.currentEdition = currentEdition;
+      }
+    }
     const saved = await atomicJson(file, document);
     if (modern) book.sha256 = saved.sha256;
     await atomicJson(catalogue, collection);
@@ -99,6 +148,7 @@ export async function prepareReadingRoutes({executionId, directory, collectionPa
   });
 }
 
-function landingHtml(language, title, description, aboutBook) {
-  return `<!doctype html><html lang="${escape(language)}"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>${escape(title)}</title></head><body><main><h1>${escape(title)}</h1><p>${escape(description)}</p><nav><a href="full_content.html">Read Online</a> · <a href="comprehensive-summary.html">Read in 10 Min</a></nav>${aboutBook.map(text => '<p>' + escape(text) + '</p>').join('')}</main></body></html>\n`;
+function landingHtml(language, title, description, aboutBook, hasPdf) {
+  const download = hasPdf ? ' · <a href="book.pdf" download>Download PDF</a>' : '';
+  return `<!doctype html><html lang="${escape(language)}"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>${escape(title)}</title></head><body><main><h1>${escape(title)}</h1><p>${escape(description)}</p><nav><a href="full_content.html">Read Online</a> · <a href="comprehensive-summary.html">Read in 10 Min</a>${download}</nav>${aboutBook.map(text => '<p>' + escape(text) + '</p>').join('')}</main></body></html>\n`;
 }

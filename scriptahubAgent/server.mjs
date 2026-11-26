@@ -15,6 +15,7 @@ import { startCycleWorker } from './cycle-worker.mjs';
 import { defaultPoints, loadPointsPolicy } from './points-policy.mjs';
 import { DashboardStore } from './dashboard-store.mjs';
 import { handleDashboard } from './dashboard-http.mjs';
+import { callAgent } from './identity.mjs';
 import { TaskExecution, startStopWorker } from './task-execution.mjs';
 import { TaskPublication } from './task-publication.mjs';
 
@@ -156,7 +157,8 @@ async function loadForkSource(catalogue, routes, bookId, language, editionId) {
     title:typeof book.title === 'string' ? book.title : book.title?.[code] || book.title?.en || bookId,license:'CC-BY-4.0'} };
 }
 
-export function createSiteServer(siteRoot, { dataDir: submissionDataDir = dataDir, verifyUser = verifyRouterUser, liveSiteRoot = null, manageApprovals = false } = {}) {
+export function createSiteServer(siteRoot, { dataDir: submissionDataDir = dataDir, verifyUser = verifyRouterUser,
+  liveSiteRoot = null, manageApprovals = false, isBetaVersion = true, applyCredits = args => callAgent('userPersistoAgent', 'credits_apply', args) } = {}) {
   let currentSiteRoot = siteRoot;
   let canonicalRoot = fs.realpathSync(siteRoot);
   let bookRoutes = remoteRoutes(siteRoot);
@@ -167,6 +169,34 @@ export function createSiteServer(siteRoot, { dataDir: submissionDataDir = dataDi
   const catalogue = () => {
     try { return JSON.parse(fs.readFileSync(path.join(currentSiteRoot, 'collection.json'), 'utf8')).books || []; }
     catch (error) { if (error.code === 'ENOENT') return []; throw error; }
+  };
+  const pendingGrants = new Map();
+  const rememberMember = async (user, policy, {waitForCredits = false} = {}) => {
+    const store = getStore();
+    store.remember(user, catalogue(), policy.initialCredits);
+    const amount = store.pendingInitialCredits(user.id);
+    if (!amount) return;
+    let grant = pendingGrants.get(user.id);
+    if (!grant) {
+      grant = Promise.resolve().then(async () => {
+        try {
+          await applyCredits({
+            userId: user.id.slice(5), operation: 'grant', referenceId: 'scriptahub:initial-credits',
+            reason: 'Initial ScriptaHub credits', amount,
+          });
+          store.confirmInitialCredits(user.id);
+          return true;
+        } catch {
+          return false;
+        } finally {
+          pendingGrants.delete(user.id);
+        }
+      });
+      pendingGrants.set(user.id, grant);
+    }
+    if (waitForCredits && !await grant) {
+      throw Object.assign(new Error('Initial credits are temporarily unavailable. Try again.'), {status:503});
+    }
   };
   const server = http.createServer(async (req, res) => {
     try {
@@ -184,15 +214,16 @@ export function createSiteServer(siteRoot, { dataDir: submissionDataDir = dataDi
       if (pathname === base) pathname = '/';
       else if (pathname.startsWith(`${base}/`)) pathname = pathname.slice(base.length);
       if (pathname.startsWith('/api/dashboard')) {
-        await handleDashboard({ req, res, url, pathname, verifyUser, getStore, catalogue, pointsPolicy, dataDir: submissionDataDir, publicMount });
+        await handleDashboard({ req, res, url, pathname, verifyUser, getStore, catalogue, pointsPolicy, dataDir: submissionDataDir, rememberMember, isBetaVersion, publicMount });
         return;
       }
       if (pathname === '/api/submissions' && req.method === 'POST') {
         const body = await readBody(req);
         const user = await verifyUser(req, url, body);
         if (!user) { res.writeHead(401); res.end(); return; }
-        getStore().remember(user, catalogue());
-        const received = await saveSubmission({ body, contentType: req.headers['content-type'], user, dataDir: submissionDataDir, store: getStore(), policy: await pointsPolicy(),
+        const policy = await pointsPolicy();
+        await rememberMember(user, policy, {waitForCredits:true});
+        const received = await saveSubmission({ body, contentType: req.headers['content-type'], user, dataDir: submissionDataDir, store: getStore(), policy,
           forkSource: (bookId, language, edition) => loadForkSource(catalogue(),bookRoutes,bookId,language,edition) });
         const payload = JSON.stringify(received);
         res.writeHead(202, { 'content-type': 'application/json', 'content-length': Buffer.byteLength(payload), 'cache-control': 'no-store' });
@@ -213,7 +244,7 @@ export function createSiteServer(siteRoot, { dataDir: submissionDataDir = dataDi
       if (pathname === '/api/session') {
         const user = await verifyUser(req, url, Buffer.alloc(0));
         if (!user) { res.writeHead(401); res.end(); return; }
-        getStore().remember(user, catalogue());
+        await rememberMember(user, await pointsPolicy());
         const payload = JSON.stringify({ user: { id: user.id, email: user.email, displayName: user.displayName || '' }, canManageUsers: user.roles?.includes('admin') === true });
         res.writeHead(200, { 'content-type': 'application/json', 'cache-control': 'private, no-store' });
         res.end(payload);
@@ -271,7 +302,12 @@ export async function main({ onShutdown = async () => {} } = {}) {
   catch (error) {
     site = (await buildSnapshot({ dataDir, config: { schemaVersion: 1, repositories: [] } })).site;
   }
-  const server = createSiteServer(site, { dataDir, manageApprovals: true, liveSiteRoot: process.env.SCRIPTA_DEV_LIVE === '1' ? path.join(import.meta.dirname, 'site') : null });
+  const server = createSiteServer(site, {
+    dataDir,
+    manageApprovals: true,
+    isBetaVersion: process.env.SCRIPTA_IS_BETA_VERSION !== 'false',
+    liveSiteRoot: process.env.SCRIPTA_DEV_LIVE === '1' ? path.join(import.meta.dirname, 'site') : null,
+  });
   server.listen(port, '0.0.0.0', () => console.log(`ScriptaHub on ${port}`));
   const stopNotifications = startNotificationWorker({ dataDir });
   const stopCycles = startCycleWorker(server.getDashboardStore,()=>loadPointsPolicy(dataDir));

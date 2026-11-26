@@ -208,6 +208,119 @@
       }
     },
     {
+      "name": "scriptahub_task_moderate",
+      "title": "Moderate the claimed book request",
+      "description": "Prepare review units and record the assigned RoboTeam model verdict for each unit. Verdicts are scoped to the claimed execution and exact uploaded package.",
+      "command": "node",
+      "args": [
+        "tools/task-tool.mjs"
+      ],
+      "cwd": "/code",
+      "timeoutMs": 600000,
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "executionId": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128
+          },
+          "stage": {
+            "type": "string",
+            "enum": [
+              "submission",
+              "package",
+              "artifact"
+            ]
+          },
+          "action": {
+            "type": "string",
+            "enum": [
+              "status",
+              "next",
+              "image",
+              "record",
+              "prepare",
+              "upload",
+              "discard"
+            ]
+          },
+          "replaceIncomplete": {
+            "type": "boolean"
+          },
+          "artifactId": {
+            "type": "string",
+            "pattern": "^[a-f0-9]{64}$"
+          },
+          "file": {
+            "type": "string"
+          },
+          "files": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "path": {
+                  "type": "string"
+                },
+                "sha256": {
+                  "type": "string",
+                  "pattern": "^[a-f0-9]{64}$"
+                },
+                "size": {
+                  "type": "integer",
+                  "minimum": 0
+                }
+              },
+              "required": [
+                "path",
+                "sha256",
+                "size"
+              ],
+              "additionalProperties": false
+            }
+          },
+          "data": {
+            "type": "string",
+            "maxLength": 87384
+          },
+          "position": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "digest": {
+            "type": "string",
+            "pattern": "^[a-f0-9]{64}$"
+          },
+          "verdict": {
+            "type": "string",
+            "enum": [
+              "passed",
+              "blocked"
+            ]
+          },
+          "category": {
+            "type": "string",
+            "maxLength": 40
+          },
+          "offset": {
+            "type": "integer",
+            "minimum": 0
+          }
+        },
+        "required": [
+          "executionId"
+        ],
+        "additionalProperties": false
+      },
+      "tags": [
+        "internal"
+      ],
+      "env": {
+        "TOOL_NAME": "scriptahub_task_moderate"
+      }
+    },
+    {
       "name": "scriptahub_task_document_read",
       "title": "Read a verified source document chunk",
       "description": "Read a verified source document chunk. Restricted to configured executor service identities; no browser account or private storage access is required.",

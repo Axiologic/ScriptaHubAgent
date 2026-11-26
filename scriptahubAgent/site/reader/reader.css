@@ -218,3 +218,17 @@ button { cursor: pointer; }
 
 /* The synchronous head/bootstrap styles cover the reader before its deferred JS. */
 :root[data-theme="dark"],:root[data-theme="dark-orange"]{color-scheme:dark;--reader-bg:#080a0c;--reader-ui-ink:#f5f5f5}
+
+.reader-html-content.reader-manuscript-reflow { overflow-wrap: anywhere; }
+.reader-manuscript-reflow table { width: 100%; table-layout: fixed; }
+.reader-manuscript-reflow table :is(td, th) { white-space: normal; overflow-wrap: anywhere; }
+.reader-manuscript-reflow :is(img, svg, video) { max-width: 100%; height: auto; }
+@media (max-width: 640px) {
+  .reader-html-content[data-pdf-layout="reflow"] { overflow-wrap: anywhere; }
+  .reader-html-content[data-pdf-layout="reflow"] .source-page:not(.source-page-full-image) { aspect-ratio: auto; }
+  .reader-html-content[data-pdf-layout="reflow"] .table-scroll { min-width: 0; max-width: 100%; overflow-x: auto; }
+  .reader-html-content[data-pdf-layout="reflow"] table { max-width: 100%; }
+  .reader-html-content[data-pdf-layout="reflow"] table :is(td, th) { overflow-wrap: anywhere; }
+}
+.reader-html-content.reader-manuscript-readable { width: min(calc(100% - 32px), 64ch); line-height: 1.85; }
+.reader-manuscript-readable p { margin-bottom: 1em; text-align: start; text-indent: 0; }

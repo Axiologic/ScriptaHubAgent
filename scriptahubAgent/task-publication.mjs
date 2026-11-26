@@ -47,6 +47,10 @@ export class TaskPublication extends PublicationTransfer {
     if (action === 'authorize' && (!row.tree_id || row.tree_id !== requestedTree)) return this.service.status(executor, {executionId});
     const candidateCommit = action === 'authorize' ? verifyCommitObject(commitObject,row.tree_id,row.commit_base) : null;
     const manifest = JSON.parse(row.manifest);
+    if (action !== 'confirm' && (!row.commit_id || row.push_state === 'prepared')
+      && (!this.service.moderationPassed(executionId,'submission') || !this.service.moderationPassed(executionId,'package',row.digest))) {
+      fail('Complete robot moderation of the submitted request and exact uploaded package before publication',409);
+    }
     const target = publicationTarget(manifest.catalogue, manifest.branch);
     const authorized = config.repositories.includes(manifest.catalogue);
     if (!authorized && row.retry_at === null && !row.commit_id) fail('Publication destination is no longer authorized', 403);

@@ -22,7 +22,7 @@ export async function expandInputs(inputs,invocationDir) {
   if(!result.length) throw new Error(`No PDF files were found. Put book.pdf in ${invocationDir} or pass PDF paths.`);
   return [...new Set(result)];
 }
-export async function convertMany(inputs,{invocationDir=process.cwd(),defaultLanguage,title,imageScale=2,overwrite=false,keepQaArtifacts=false}={}) {
+export async function convertMany(inputs,{invocationDir=process.cwd(),defaultLanguage,title,imageScale=2,layout,overwrite=false,keepQaArtifacts=false}={}) {
   const pdfs=await expandInputs(inputs,invocationDir),destinations=pdfs.map(dirname);
   if(title && pdfs.length>1) throw new Error('--title can be used only when converting one PDF.');
   if(new Set(destinations).size!==destinations.length) throw new Error('Multiple PDFs cannot write index.html into the same folder. Place each edition in its own folder.');
@@ -32,7 +32,7 @@ export async function convertMany(inputs,{invocationDir=process.cwd(),defaultLan
     const destination=dirname(pdf),temporary=await mkdtemp(join(dirname(destination),`.${basename(destination)}.pdf2html-stage-`)),staged=join(temporary,'book');
     let retained=false;
     try {
-      const result=await convertPdf(pdf,staged,{language:inferLanguage(pdf,defaultLanguage),title,imageScale,keepQaArtifacts});
+      const result=await convertPdf(pdf,staged,{language:inferLanguage(pdf,defaultLanguage),title,imageScale,layout,keepQaArtifacts});
       await installBook(staged,destination,overwrite,async finalPath => {
         const report=await checkExistingConversion(join(finalPath,'index.html'));
         if(report.status==='failed') {

@@ -6,7 +6,9 @@ import {sharedEditorial} from './shared-editorial.mjs';
 import {prepareReadingRoutes} from './prepare-reading-routes.mjs';
 import {publishFromRobot} from './robot-publication.mjs';
 import {runRemoteSkill,runRemoteSequence,releaseIncompleteRemote,discardTranslationJob,guardRemoteBackups} from './remote-skill.mjs';
-import {preflight,writeHandoff,verifyPackage,requirePreflight} from './workflow-checks.mjs';
+import {localRenderingFiles} from './publication-files.mjs';
+import {insideRun,preflight,writeHandoff,verifyPackage,requirePreflight} from './workflow-checks.mjs';
+import {completeCreateBookPhase} from './create-book-completion.mjs';
 import { constants } from 'node:fs';
 import path from 'node:path';
 import crypto from 'node:crypto';
@@ -109,7 +111,7 @@ export async function downloadDocument(call, input) {
 }
 
 // Transfer validated bytes, never a server-side filesystem path or Git credential.
-export async function publishPackage(call, input, {hook=async()=>{}}={}) {
+export async function publishPackage(call, input, {hook=async()=>{},stageOnly=false}={}) {
     return withExecutionLock(process.cwd(),input.executionId,async base=>{
     await guardRemoteBackups(base,input.executionId);
     await hook('guarded');
@@ -164,8 +166,96 @@ export async function publishPackage(call, input, {hook=async()=>{}}={}) {
             }
         } finally { await handle.close(); }
     }
-    return publishFromRobot(call,input.executionId);
+    return stageOnly ? {status:'staged'} : publishFromRobot(call,input.executionId);
     });
+}
+
+async function uploadModerationArtifact(call, {executionId, taskDirectory, file}) {
+    if (!/^tasks\/[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$/.test(taskDirectory || '')
+        || typeof file !== 'string' || !file.startsWith(taskDirectory + '/')) throw new Error('Use an artifact inside this task');
+    return withExecutionLock(process.cwd(),executionId,async () => {
+        const names = new Set([file]);
+        const files = new Map();
+        let total = 0;
+        for (const name of names) {
+            if (!name.startsWith(taskDirectory + '/') || name.split('/').some(part => !part || part.startsWith('.'))) {
+                throw new Error('Invalid moderation artifact path');
+            }
+            const filename = await insideRun(name).catch(error => {
+                if (name !== file && error.code === 'ENOENT') return null;
+                throw error;
+            });
+            if (!filename) continue;
+            const {size} = await fs.stat(filename);
+            total += size;
+            if (files.size >= 500 || size > 50000000 || total > 512000000) throw new Error('Moderation artifact inventory is too large');
+            const bytes = await fs.readFile(filename);
+            if (bytes.length !== size) throw new Error('Moderation artifact changed during preparation');
+            files.set(name,bytes);
+            if (/\.(?:html?|xhtml|css|svg)$/i.test(name)) {
+                for (const dependency of localRenderingFiles(name,bytes.toString('utf8'))) {
+                    if (dependency.startsWith(taskDirectory + '/')) names.add(dependency);
+                }
+            }
+        }
+        const tool = 'scriptahub_task_moderate';
+        const payload = {executionId,stage:'artifact'};
+        const inventory = [...files].map(([name,bytes]) => ({
+            path:name,sha256:crypto.createHash('sha256').update(bytes).digest('hex'),size:bytes.length
+        }));
+        const prepared = await call(tool,{...payload,action:'prepare',file,files:inventory,replaceIncomplete:true});
+        if (prepared.status === 'passed' || ['failed','cancelled','completed','stop_requested'].includes(prepared.state)) return prepared;
+        const {artifactId} = prepared;
+        if (!/^[a-f0-9]{64}$/.test(artifactId || '')) throw new Error('Invalid moderation artifact receipt');
+        for (const [name,bytes] of files) {
+            for (let offset=0;offset<bytes.length;) {
+                const chunk = {...payload,action:'upload',artifactId,file:name,offset};
+                const block = bytes.subarray(offset,offset+uploadBlockSize(tool,chunk,bytes.length-offset));
+                const response = await call(tool,{...chunk,data:block.toString('base64')});
+                offset += block.length;
+                if (response.nextOffset !== offset) throw new Error('Invalid moderation upload acknowledgement');
+            }
+        }
+        return {artifactId,...await call(tool,{...payload,action:'next',artifactId})};
+    });
+}
+
+export async function moderateContent(call,input) {
+    const {executionId,stage,action,position,digest,verdict,category,taskDirectory,artifactId} = input;
+    if (stage === 'artifact' && action === 'prepare') return uploadModerationArtifact(call,input);
+    const payload = {executionId,stage,action,position,digest,verdict,category,artifactId};
+    if (action !== 'image') return call('scriptahub_task_moderate',payload);
+    if (!/^tasks\/[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$/.test(taskDirectory || '')
+      || !Number.isSafeInteger(position) || position<0 || !/^[a-f0-9]{64}$/.test(digest || '')
+      || !['submission','package','artifact'].includes(stage)
+      || (stage === 'artifact' && !/^[a-f0-9]{64}$/.test(artifactId || ''))) throw new Error('Invalid review image destination');
+    const directory = taskDirectory + '/moderation/' + stage;
+    let current = await fs.realpath(process.cwd());
+    for (const part of directory.split('/')) {
+        current = path.join(current,part);
+        await fs.mkdir(current,{mode:0o700}).catch(error=>{if(error.code!=='EEXIST')throw error;});
+        if (!(await fs.lstat(current)).isDirectory()) throw new Error('Invalid review image directory');
+    }
+    const image = directory + '/' + position + '-' + digest + '.png';
+    const temp = image + '.' + crypto.randomUUID();
+    let offset = 0;
+    const file = await fs.open(temp,'wx',0o600);
+    try {
+        try {
+            let size;
+            do {
+                const chunk = await call('scriptahub_task_moderate',{...payload,offset});
+                const bytes = Buffer.from(chunk.data || '', 'base64');
+                size ??= chunk.size;
+                if (!bytes.length || chunk.size !== size || !Number.isSafeInteger(size)
+                  || chunk.nextOffset !== offset+bytes.length || chunk.nextOffset>size) throw new Error('Invalid moderation image chunk');
+                await file.writeFile(bytes);
+                offset = chunk.nextOffset;
+            } while (offset < size);
+        } finally { await file.close(); }
+        await fs.rename(temp,image);
+        return {image};
+    } finally { await fs.rm(temp,{force:true}); }
 }
 
 export async function retryPublication(call,input,{root=process.cwd(),stderr=process.stderr}={}) {
@@ -181,12 +271,12 @@ async function main() {
   let client;
   try {
     const operation = process.argv[2];
-    if (process.argv.length !== 3 || (!operations[operation] && !['batch-start', 'batch-status', 'batch-next', 'batch-close', 'batch-defer', 'exec', 'exec-sequence', 'release-incomplete', 'discard-translation-job', 'download', 'choose', 'publish', 'retry-publication', 'preflight', 'handoff', 'verify-package', 'prepare-reading-routes', 'shared-editorial'].includes(operation))) throw new Error('Use batch-start, batch-status, batch-next, batch-close, batch-defer, exec, exec-sequence, preflight, claim, status, download, choose, handoff, shared-editorial, prepare-reading-routes, verify-package, publish, retry-publication or finish');
+    if (process.argv.length !== 3 || (!operations[operation] && !['batch-start', 'batch-status', 'batch-next', 'batch-close', 'batch-defer', 'exec', 'exec-sequence', 'release-incomplete', 'discard-translation-job', 'download', 'choose', 'moderate-content', 'stage-publication', 'publish', 'retry-publication', 'preflight', 'handoff', 'verify-package', 'prepare-reading-routes', 'shared-editorial', 'complete-phase'].includes(operation))) throw new Error('Use batch-start, batch-status, batch-next, batch-close, batch-defer, exec, exec-sequence, preflight, claim, status, moderate-content, download, choose, handoff, shared-editorial, prepare-reading-routes, verify-package, complete-phase, stage-publication, publish, retry-publication or finish');
     const chunks = [];
     let size = 0;
     for await (const chunk of process.stdin) {
         size += chunk.length;
-        if (size > 65536) throw new Error('Task input is too large');
+        if (operation !== 'handoff' && size > 65536) throw new Error('Task input is too large');
         chunks.push(chunk);
     }
     const input = JSON.parse(Buffer.concat(chunks).toString('utf8'));
@@ -209,7 +299,7 @@ async function main() {
     }
     if (operation === 'claim' || operation === 'batch-next') await requirePreflight();
     client = await loadClient();
-    const call = async (tool, args) => unwrap(await client.callTool(tool, args, { timeoutMs: tool === 'scriptahub_task_publish' ? 600000 : 90000 }));
+    const call = async (tool, args) => unwrap(await client.callTool(tool, args, { timeoutMs: ['scriptahub_task_publish','scriptahub_task_moderate'].includes(tool) ? 600000 : 90000 }));
     if (operation === 'claim' || operation === 'batch-next') await preflight(await call('scriptahub_skills_preflight',{}));
     if (operation === 'exec') { process.exitCode = await runRemoteSkill(input,call); return; }
     if (operation === 'exec-sequence') { process.exitCode = await runRemoteSequence(input,call); return; }
@@ -217,7 +307,10 @@ async function main() {
     if (operation === 'release-incomplete') { const exitCode = await releaseIncompleteRemote(input,call); process.stdout.write(JSON.stringify({released:true,executionId:input.executionId,originalExitCode:exitCode})+'\n'); return; }
     if (operation === 'preflight') { const receipt = await call('scriptahub_skills_preflight',{}); await preflight(receipt); process.stdout.write(JSON.stringify(receipt)+'\n'); return; }
     const result = operation.startsWith('batch-') ? await runBatchOperation(call,operation,input)
+      : operation === 'complete-phase' ? await completeCreateBookPhase(input,call)
       : operation === 'download' ? await downloadDocument(call,input)
+      : operation === 'moderate-content' ? await moderateContent(call,input)
+      : operation === 'stage-publication' ? await publishPackage(call,input,{stageOnly:true})
       : operation === 'publish' ? await publishPackage(call,input)
       : operation === 'retry-publication' ? await retryPublication(call,input)
       : await call(operations[operation],input);
