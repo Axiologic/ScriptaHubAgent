@@ -230,10 +230,17 @@ export class TaskExecution {
       const accepted = new Set(task.files.map(file => portableVisualKey(file.originalName,file.sha256)).filter(Boolean));
       return manifest.files.map(({path:name,sha256,size}) => {
         const bytes = transfer.bytes(row.id,{path:name,sha256,size});
-        if (name !== catalogue) return {path:name,bytes,sha256,alreadyReviewed:accepted.has(portableVisualKey(name,sha256))};
+        if (name !== catalogue) {
+          const key = portableVisualKey(name,sha256);
+          const alreadyReviewed = Boolean(key && (
+            accepted.has(key) || this.moderationPassed(row.id,artifactFileReview(name,sha256))
+          ));
+          return {path:name,bytes,sha256,alreadyReviewed};
+        }
         const book = JSON.parse(bytes).books?.find(book => book.id === task.bookId);
         if (!book) fail('The publication catalogue does not contain the current book');
-        return {path:name,bytes:Buffer.from(JSON.stringify(book))};
+        const projection = Buffer.from(JSON.stringify(book));
+        return {path:name,bytes:projection,sha256:crypto.createHash('sha256').update(projection).digest('hex')};
       });
     }
     const files = [];
@@ -252,14 +259,18 @@ export class TaskExecution {
   async moderateTask(executor,{executionId,stage='submission',action='next',position,digest,verdict,category,offset=0,...artifact} = {}) {
     const preview = stage === 'artifact';
     if (!['submission','package','artifact'].includes(stage)
-      || !['status','next','image','record',...(preview ? ['prepare','upload'] : [])].includes(action)) fail('Invalid moderation operation');
+      || !['status','next','image','record',...(preview ? ['prepare','upload','discard'] : [])].includes(action)) fail('Invalid moderation operation');
     const row = this.execution(executor,executionId);
     if (row.state !== 'running' || row.finished_at) return this.status(executor,{executionId});
     const db = this.store.db;
     if (preview) {
       if (!this.moderationPassed(executionId,'submission')) fail('Complete submission moderation first',409);
-      if (action === 'prepare' || action === 'upload') {
-        return this.store.transaction(() => moderationArtifact(db, executionId, action, {...artifact,offset}, policyVersion));
+      if (['prepare','upload','discard'].includes(action)) {
+        return this.store.transaction(() => {
+          const current = this.execution(executor,executionId);
+          if (current.state !== 'running' || current.finished_at) return this.status(executor,{executionId});
+          return moderationArtifact(db,executionId,action,{...artifact,offset},policyVersion);
+        });
       }
       if (action === 'status' && artifact.artifactId === undefined) {
         if (artifact.file !== undefined) {
@@ -268,7 +279,8 @@ export class TaskExecution {
         }
         const active = db.prepare('SELECT digest FROM task_moderation_artifacts WHERE execution_id=?').get(executionId);
         const {count} = db.prepare('SELECT count(*) AS count FROM task_moderation_verdicts WHERE execution_id=? AND policy_version=?').get(executionId,policyVersion);
-        return active ? {status:'pending',artifactId:active.digest,completedUnits:count} : {status:'idle'};
+        return active ? {status:'pending',artifactId:active.digest,completedUnits:count}
+          : {status:'idle',...(count && {completedUnits:count})};
       }
       if (!/^[a-f0-9]{64}$/.test(artifact.artifactId || '')) fail('Invalid moderation artifact identity');
       stage = 'artifact:' + artifact.artifactId;
@@ -283,7 +295,10 @@ export class TaskExecution {
     const scope = 'execution_id=? AND stage=? AND package_digest=? AND policy_version=?';
     if (this.moderationPassed(executionId,stage,packageDigest)) {
       const inventorySha256 = action === 'status' && publication && JSON.parse(publication.manifest).validation.inventorySha256;
-      return {status:'passed',...(inventorySha256 && {inventorySha256})};
+      const completedUnits = action === 'status' && publication
+        && db.prepare('SELECT count(*) AS count FROM task_moderation_verdicts WHERE execution_id=? AND policy_version=?')
+          .get(executionId,policyVersion).count;
+      return {status:'passed',...(inventorySha256 && {inventorySha256}),...(completedUnits && {completedUnits})};
     }
     if (action === 'status') {
       const {next} = db.prepare(`SELECT min(position) AS next FROM task_moderation_units

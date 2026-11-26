@@ -44,7 +44,8 @@ test('final edition validation needs a moderation verdict for its exact inventor
   const completionId = 'a02eb494-65fc-490d-be4a-f4795971938f';
   const task = {taskId:'one', executionId:'execution-one', runId:'run-one', bookId:'book-one'};
   await atomicJson(directory + '/run-state/claimed.json', {task});
-  await writeHandoff({directory, step, context:{...task, processingMode:'process'}});
+  const context = {...task, processingMode:'process'};
+  await writeHandoff({directory, step:'prepare-edit-package', context});
   const inventory = await atomicJson(directory + '/validation/verified-inventory.json', {});
   await atomicJson(directory + '/validation/final-report.json', {
     ...task, publicationPermitted:true, audit:{errorFindings:0}, inventorySha256:inventory.sha256
@@ -52,6 +53,10 @@ test('final edition validation needs a moderation verdict for its exact inventor
   let status = {status:'pending',completedUnits:3};
   const check = () => completeCreateBookPhase({directory, step, completionId},
     tool => tool === 'scriptahub_task_moderate' ? status : {...task,state:'running'});
+  await assert.rejects(check, /Save the completed validate-edit handoff/);
+  const progress = JSON.parse(await fs.readFile('.workflow-completion/'+completionId+'.progress.json'));
+  assert.equal(progress.completedUnits,3);
+  await writeHandoff({directory, step, context});
   await assert.rejects(check, /matching moderation verdict/);
   status = {status:'passed',inventorySha256:'a'.repeat(64)};
   await assert.rejects(check, /matching moderation verdict/);

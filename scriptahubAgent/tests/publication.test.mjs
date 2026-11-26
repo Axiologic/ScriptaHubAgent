@@ -730,7 +730,7 @@ for (const change of ['unchanged','changed bytes','changed render']) {
       position:first.position,digest:first.digest,verdict:'passed'}),{status:'passed'});
     assert.deepEqual(await f.service.moderateTask(agent,{...artifact,action:'prepare',file,files:inventory}),
       {artifactId,status:'passed'});
-    assert.deepEqual(await f.service.moderateTask(agent,{...artifact,action:'status'}),{status:'idle'});
+    assert.deepEqual(await f.service.moderateTask(agent,{...artifact,action:'status'}),{status:'idle',completedUnits:1});
     assert.deepEqual(await f.service.moderateTask(agent,{...artifact,action:'status',file,digest:sha256(bytes)}),{status:'passed'});
     assert.deepEqual(await f.service.moderateTask(agent,{...artifact,action:'status',file,digest:'0'.repeat(64)}),{status:'pending'});
     if (change === 'changed render') renderedText = 'Rendered with different dependencies';
@@ -745,10 +745,64 @@ for (const change of ['unchanged','changed bytes','changed render']) {
     }
     assert.equal(reviewed.includes(finalFile),change !== 'unchanged');
     assert.ok(reviewed.includes('collection.json'));
-    assert.deepEqual(await f.service.moderateTask(agent,{...publication,action:'status'}),
-      {status:'passed',inventorySha256:f.input.validation.inventorySha256});
+    const verdict = await f.service.moderateTask(agent,{...publication,action:'status'});
+    assert.equal(verdict.status,'passed');
+    assert.equal(verdict.inventorySha256,f.input.validation.inventorySha256);
+    assert.ok(verdict.completedUnits >= 1);
   });
 }
+
+test('restart a partial upload for the same artifact and discard a stale draft by exact identity',async t=>{
+  const f = await fixture(t,{kind:'book-proposal',approvePackage:false});
+  const req = {executionId:f.task.executionId,stage:'artifact'};
+  const file = 'sources/book.html';
+  const prepare = (value, filename=file) => f.service.moderateTask(agent,{...req,action:'prepare',
+    replaceIncomplete:true,file:filename,files:[{path:filename,sha256:sha256(value),size:Buffer.byteLength(value)}]});
+  const upload = (artifactId,value) => f.service.moderateTask(agent,{...req,artifactId,action:'upload',file,offset:0,data:Buffer.from(value).toString('base64')});
+  const original = await prepare('first');
+  await upload(original.artifactId,'fi');
+  await assert.rejects(prepare('second','sources/other.html'),/active artifact review/);
+  const replacement = await prepare('second');
+  assert.notEqual(replacement.artifactId,original.artifactId);
+  await assert.rejects(upload(original.artifactId,'first'),/does not match/);
+  await upload(replacement.artifactId,'second');
+  await assert.rejects(prepare('third'),/active artifact review/);
+  const discard = artifactId => f.service.moderateTask(agent,{...req,artifactId,action:'discard'});
+  await assert.rejects(discard(original.artifactId),/does not match/);
+  assert.equal((await discard(replacement.artifactId)).status,'discarded');
+  assert.equal((await discard(replacement.artifactId)).status,'discarded');
+  assert.ok((await prepare('third')).artifactId);
+});
+
+test('package rendering skips an independently moderated PDF with identical bytes',async t=>{
+  const f = await fixture(t,{kind:'book-proposal',approvePackage:false});
+  const {prepareReviewUnits} = await import('../content-moderation.mjs');
+  const rendered = [];
+  f.service.prepareModeration = (context,files) => prepareReviewUnits(context,files,{
+    prepare:async (root,_task,file,output) => {
+      rendered.push(file);
+      const folder = path.join(root,output);
+      await fs.mkdir(folder,{recursive:true});
+      await fs.writeFile(path.join(folder,'page.png'),'image');
+      await fs.writeFile(path.join(folder,'units.json'),JSON.stringify([{image:'page.png',text:'Readable page'}]));
+      return true;
+    }
+  });
+  const file = 'sources/download.pdf';
+  const bytes = Buffer.from('%PDF-1.7\n');
+  const args = {executionId:f.task.executionId,stage:'artifact'};
+  const {artifactId} = await f.service.moderateTask(agent,{...args,action:'prepare',file,
+    files:[{path:file,size:bytes.length,sha256:sha256(bytes)}]});
+  await f.service.moderateTask(agent,{...args,artifactId,action:'upload',file,offset:0,data:bytes.toString('base64')});
+  const unit = await f.service.moderateTask(agent,{...args,artifactId,action:'next'});
+  await f.service.moderateTask(agent,{...args,artifactId,action:'record',position:unit.position,digest:unit.digest,verdict:'passed'});
+  const publishedPdf = 'books/test/' + f.task.bookId + '/en/book.pdf';
+  f.files.set(publishedPdf,bytes);
+  f.input.files.push({path:publishedPdf,size:bytes.length,sha256:sha256(bytes)});
+  f.upload();
+  await f.service.moderateTask(agent,{executionId:args.executionId,stage:'package'});
+  assert.deepEqual(rendered.filter(name=>name.endsWith('.pdf')),['inputs/'+file]);
+});
 
 test('the robot can publish after recording all submission and package verdicts',async t=>{
   const f=await fixture(t,{kind:'book-proposal',approvePackage:false});

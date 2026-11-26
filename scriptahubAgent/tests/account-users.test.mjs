@@ -149,7 +149,7 @@ test('outside beta the original pricing, checkout and reconciliation are availab
 test('initial ScriptaHub credits lock the original amount and use a stable grant until confirmed',async t=>{
   const dataDir=await fs.mkdtemp(path.join(os.tmpdir(),'scripta-initial-credits-'));
   const calls=[], posted=new Map();
-  let loseFirstResponse=true;
+  let grantUnavailable=true;
   const verifyUser=async req=>{
     const name=req.headers['x-test-user'];
     return name ? {id:'user:'+name,email:name+'@example.test'} : null;
@@ -159,7 +159,7 @@ test('initial ScriptaHub credits lock the original amount and use a stable grant
     const key=args.userId+':'+args.referenceId;
     if(posted.has(key)) assert.deepEqual(posted.get(key),args);
     else posted.set(key,args);
-    if(loseFirstResponse){loseFirstResponse=false;throw Error('Response lost');}
+    if (grantUnavailable) throw Error('Response lost');
     return {ok:true};
   };
   const server=createSiteServer(dataDir,{dataDir,manageApprovals:true,verifyUser,applyCredits});
@@ -173,11 +173,15 @@ test('initial ScriptaHub credits lock the original amount and use a stable grant
   assert.equal((await get('existing')).status,200);
   assert.equal(calls.length,0);
 
-  assert.equal((await get('reader')).status,503);
+  assert.equal((await get('reader')).status,200);
+  assert.equal((await get('reader','/api/dashboard')).status,200);
+  assert.equal(server.getDashboardStore().pendingInitialCredits('user:reader'),12);
+  grantUnavailable=false;
   await savePointsPolicy(dataDir,{initialCredits:17});
   const responses=await Promise.all([get('reader'),get('reader','/api/dashboard')]);
   assert.deepEqual(responses.map(response=>response.status),[200,200]);
   assert.equal((await get('reader')).status,200);
+  assert.equal(server.getDashboardStore().pendingInitialCredits('user:reader'),undefined);
   assert.ok(calls.length>=2);
   assert.deepEqual(calls[0],{userId:'reader',amount:12,operation:'grant',referenceId:'scriptahub:initial-credits',reason:'Initial ScriptaHub credits'});
   assert.ok(calls.every(call=>call.amount===12));

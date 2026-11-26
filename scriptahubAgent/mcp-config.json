@@ -241,8 +241,12 @@
               "image",
               "record",
               "prepare",
-              "upload"
+              "upload",
+              "discard"
             ]
+          },
+          "replaceIncomplete": {
+            "type": "boolean"
           },
           "artifactId": {
             "type": "string",

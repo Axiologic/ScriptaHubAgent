@@ -44,7 +44,7 @@ export function approvedArtifactFile(db, executionId, artifactId) {
 
 export function moderationArtifact(db, executionId, action, input, policyVersion) {
   if (action === 'prepare') {
-    const row = db.prepare('SELECT digest FROM task_moderation_artifacts WHERE execution_id=?').get(executionId);
+    const row = db.prepare('SELECT digest,manifest FROM task_moderation_artifacts WHERE execution_id=?').get(executionId);
     const {file, files} = input;
     packagePath(file);
     if (!Array.isArray(files) || !files.length || files.length > 500) fail('Invalid moderation artifact inventory');
@@ -63,9 +63,30 @@ export function moderationArtifact(db, executionId, action, input, policyVersion
     const artifactId = sha256(manifest);
     if (db.prepare(`SELECT 1 FROM task_moderation WHERE execution_id=? AND stage=? AND policy_version=?`)
       .get(executionId,'artifact:'+artifactId,policyVersion)) return {artifactId,status:'passed'};
-    if (row && row.digest !== artifactId) fail('Finish the active artifact review first',409);
-    if (!row) db.prepare('INSERT INTO task_moderation_artifacts VALUES(?,?,?)').run(executionId,artifactId,manifest);
+    if (row && row.digest !== artifactId) {
+      const previous = JSON.parse(row.manifest);
+      const {size} = db.prepare('SELECT COALESCE(SUM(length(data)),0) AS size FROM task_moderation_artifact_chunks WHERE execution_id=?')
+        .get(executionId);
+      const incomplete = size < previous.files.reduce((total,entry) => total+entry.size,0);
+      if (input.replaceIncomplete !== true || previous.file !== file || !incomplete) {
+        fail('Finish the active artifact review first or discard that draft',409);
+      }
+      clearModerationArtifact(db,executionId);
+    }
+    if (row?.digest !== artifactId) {
+      db.prepare('INSERT INTO task_moderation_artifacts VALUES(?,?,?)').run(executionId,artifactId,manifest);
+    }
     return {artifactId};
+  }
+  if (action === 'discard') {
+    if (!/^[a-f0-9]{64}$/.test(input.artifactId || '')) fail('Invalid moderation artifact identity');
+    const current = db.prepare('SELECT digest FROM task_moderation_artifacts WHERE execution_id=?').get(executionId);
+    if (current) {
+      activeModerationArtifact(db,executionId,input.artifactId);
+      db.prepare('DELETE FROM task_moderation_units WHERE execution_id=? AND stage=?').run(executionId,'artifact:'+input.artifactId);
+      clearModerationArtifact(db,executionId);
+    }
+    return {status:'discarded',artifactId:input.artifactId};
   }
   const {file,files} = activeModerationArtifact(db,executionId,input.artifactId);
   if (action === 'upload') {

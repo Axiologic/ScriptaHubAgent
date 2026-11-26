@@ -51,6 +51,8 @@ export async function completeCreateBookPhase({directory, step, completionId}, c
     : processingMode === 'publication-recovery' ? status.publicationPending === true
     : processingMode === 'cancel' && state === 'stop_requested' && !status.publicationPending;
   const finishing = step === 'publish-result' || step === 'book-result';
+  const finalValidation = step === 'validate-final' || step === 'validate-edit';
+  let packageModeration;
 
   const savePackageHandoff = step === 'review-correct' && processingMode === 'process' && task.type === 'scriptahub.manuscript'
     && ['process-content', 'translate-resources'].includes(savedStep);
@@ -67,6 +69,10 @@ export async function completeCreateBookPhase({directory, step, completionId}, c
     requireEvidence(modeMatches, 'The saved processing mode does not match the current service state: ' + state);
     if (step === 'resume-book') requireEvidence(savedStep === step, 'Save the service state and processing mode in the handoff');
     else if (processingMode === 'process') {
+      if (finalValidation) {
+        packageModeration = await call('scriptahub_task_moderate',{executionId,stage:'package',action:'status'});
+        await saveModerationProgress(packageModeration);
+      }
       if (artifactPhases.has(step)) {
         const moderation = await call('scriptahub_task_moderate',{executionId,stage:'artifact',action:'status'});
         await saveModerationProgress(moderation);
@@ -97,7 +103,7 @@ export async function completeCreateBookPhase({directory, step, completionId}, c
   });
 
   async function saveModerationProgress(result) {
-    if (result.status !== 'pending' || !Number.isSafeInteger(result.completedUnits) || result.completedUnits < 1) return;
+    if (!Number.isSafeInteger(result.completedUnits) || result.completedUnits < 1) return;
     await atomicJson(`.workflow-completion/${completionId}.progress.json`, {
       step, completionId, completedUnits:result.completedUnits
     });
@@ -229,9 +235,7 @@ export async function completeCreateBookPhase({directory, step, completionId}, c
       && report.publicationPermitted === true && report.audit?.errorFindings === 0 && /^[a-f0-9]{64}$/.test(report.inventorySha256),
     'Missing final publication approval');
     await artifact(directory + '/validation/verified-inventory.json', 'approved inventory', report.inventorySha256);
-    const moderation = await call('scriptahub_task_moderate',{executionId,stage:'package',action:'status'});
-    await saveModerationProgress(moderation);
-    requireEvidence(moderation.status === 'passed' && moderation.inventorySha256 === report.inventorySha256,
+    requireEvidence(packageModeration.status === 'passed' && packageModeration.inventorySha256 === report.inventorySha256,
       'The frozen publication inventory must have a matching moderation verdict');
   }
 }

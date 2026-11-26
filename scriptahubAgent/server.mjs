@@ -170,20 +170,33 @@ export function createSiteServer(siteRoot, { dataDir: submissionDataDir = dataDi
     try { return JSON.parse(fs.readFileSync(path.join(currentSiteRoot, 'collection.json'), 'utf8')).books || []; }
     catch (error) { if (error.code === 'ENOENT') return []; throw error; }
   };
-  const rememberMember = async (user, policy) => {
+  const pendingGrants = new Map();
+  const rememberMember = async (user, policy, {waitForCredits = false} = {}) => {
     const store = getStore();
     store.remember(user, catalogue(), policy.initialCredits);
     const amount = store.pendingInitialCredits(user.id);
     if (!amount) return;
-    try {
-      await applyCredits({
-        userId: user.id.slice(5), operation: 'grant', referenceId: 'scriptahub:initial-credits',
-        reason: 'Initial ScriptaHub credits', amount,
+    let grant = pendingGrants.get(user.id);
+    if (!grant) {
+      grant = Promise.resolve().then(async () => {
+        try {
+          await applyCredits({
+            userId: user.id.slice(5), operation: 'grant', referenceId: 'scriptahub:initial-credits',
+            reason: 'Initial ScriptaHub credits', amount,
+          });
+          store.confirmInitialCredits(user.id);
+          return true;
+        } catch {
+          return false;
+        } finally {
+          pendingGrants.delete(user.id);
+        }
       });
-    } catch {
+      pendingGrants.set(user.id, grant);
+    }
+    if (waitForCredits && !await grant) {
       throw Object.assign(new Error('Initial credits are temporarily unavailable. Try again.'), {status:503});
     }
-    store.confirmInitialCredits(user.id);
   };
   const server = http.createServer(async (req, res) => {
     try {
@@ -209,7 +222,7 @@ export function createSiteServer(siteRoot, { dataDir: submissionDataDir = dataDi
         const user = await verifyUser(req, url, body);
         if (!user) { res.writeHead(401); res.end(); return; }
         const policy = await pointsPolicy();
-        await rememberMember(user, policy);
+        await rememberMember(user, policy, {waitForCredits:true});
         const received = await saveSubmission({ body, contentType: req.headers['content-type'], user, dataDir: submissionDataDir, store: getStore(), policy,
           forkSource: (bookId, language, edition) => loadForkSource(catalogue(),bookRoutes,bookId,language,edition) });
         const payload = JSON.stringify(received);

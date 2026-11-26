@@ -133,7 +133,7 @@ The personal Credits tab shows the balance and ledger and explains how to reques
 
 Administration → Settings contains the initial allocation, contribution rewards, processing costs, and expiration settings in one form with Save and Reset. Reset restores the last saved values locally.
 
-The initial allocation uses the amount set when a verified user is first registered by ScriptaHub. A pending grant retains that amount and the same UserPersisto operation reference until confirmation. Initial credits and manual awards do not expire.
+The initial allocation uses the amount set when a verified user is first registered by ScriptaHub. A pending grant retains that amount and the same UserPersisto operation reference until confirmation. Session and dashboard reads stay available while the grant is retried. Initial credits and manual awards do not expire.
 
 #### Deployments that enable purchases
 

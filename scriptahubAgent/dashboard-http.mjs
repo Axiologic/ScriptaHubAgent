@@ -23,7 +23,8 @@ export async function handleDashboard({ req, res, url, pathname, verifyUser, get
     res.writeHead(404, {'cache-control':'no-store'}); res.end(); return;
   }
   const policy = await pointsPolicy();
-  await rememberMember(user, policy);
+  const usesCredits = req.method === 'POST' && ['/api/dashboard/editions','/api/dashboard/retry'].includes(pathname);
+  await rememberMember(user, policy, {waitForCredits:usesCredits});
   const store = getStore();
   if (pathname === '/api/dashboard/points' || pathname.startsWith('/api/dashboard/points/')) {
     if (!user.userAgentCall) throw Object.assign(new Error('Points service is unavailable.'), {status:503});

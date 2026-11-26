@@ -203,7 +203,7 @@ async function uploadModerationArtifact(call, {executionId, taskDirectory, file}
         const inventory = [...files].map(([name,bytes]) => ({
             path:name,sha256:crypto.createHash('sha256').update(bytes).digest('hex'),size:bytes.length
         }));
-        const prepared = await call(tool,{...payload,action:'prepare',file,files:inventory});
+        const prepared = await call(tool,{...payload,action:'prepare',file,files:inventory,replaceIncomplete:true});
         if (prepared.status === 'passed' || ['failed','cancelled','completed','stop_requested'].includes(prepared.state)) return prepared;
         const {artifactId} = prepared;
         if (!/^[a-f0-9]{64}$/.test(artifactId || '')) throw new Error('Invalid moderation artifact receipt');
