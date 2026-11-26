@@ -13,7 +13,12 @@ test('user administration is admin-only, paginated and independent of personal p
     const name=req.headers['x-test-user'];if(!name)return null;
     return {id:'user:'+name,email:name+'@example.test',roles:name==='admin'?['admin']:['user'],userAgentCall:async(tool,args)=>{
       calls.push({actor:name,tool,args});
-      if(tool==='userpersisto_user_list')return {users:[{id:'reader',email:'reader@example.test',displayName:'Reader',roles:['user']}],totalCount:40};
+      if (tool === 'userpersisto_user_list') {
+        if (args.search === 'rejected') throw Object.assign(new Error('Private backend reference abc123'),{statusCode:400});
+        if (args.search === 'delegation denied') throw new Error('delegation tool not allowed for internal reference abc123');
+        if (args.search === 'timeout') throw Object.assign(new Error('Private timeout reference abc123'),{code:'PLOINKY_AGENT_MCP_TIMEOUT'});
+        return {users:[{id:'reader',email:'reader@example.test',displayName:'Reader',roles:['user']}],totalCount:40};
+      }
       if(tool==='userpersisto_credits_balance')return {balance:args.userId==='admin'?100:20,reservedBalance:0};
       if(tool==='userpersisto_credits_ledger')return {entries:[],totalCount:0};
       if(tool==='userpersisto_credits_grant')return {ok:true};
@@ -35,7 +40,16 @@ test('user administration is admin-only, paginated and independent of personal p
   const users=await get('admin','/api/dashboard/points/users?search=Reader&start=25');assert.equal(users.status,200);
   assert.equal((await users.json()).users[0].displayName,'Reader');
   assert.deepEqual(calls.at(-1).args,{search:'Reader',start:25,pageSize:25});
-  assert.equal((await get('admin','/api/dashboard/points/users?start=-1')).status,400);
+  for (const [query,status,code] of [
+    ['start=-1',400,'users_page_invalid'],
+    ['search=rejected',502,'account_service_rejected'],
+    ['search=delegation+denied',403,'account_service_access'],
+    ['search=timeout',504,'account_service_timeout'],
+  ]) {
+    const response = await get('admin','/api/dashboard/points/users?'+query);
+    assert.equal(response.status,status);
+    assert.deepEqual(await response.json(),{code});
+  }
   assert.equal((await (await get('admin','/api/dashboard/points')).json()).balance.balance,100);
   assert.equal((await (await get('admin','/api/dashboard/points?userId=reader')).json()).balance.balance,20);
   assert.equal((await (await get('admin','/api/dashboard/points')).json()).balance.balance,100);
@@ -47,7 +61,7 @@ test('user administration is admin-only, paginated and independent of personal p
   const policyUrl='/api/dashboard/points/policy';
   assert.equal((await get('reader',policyUrl)).status,403);
   const policy=(await (await get('admin',policyUrl)).json()).points;
-  assert.deepEqual(policy,{initialCredits:0,bookReward:10,correctionReward:2,editionCost:5,forkCost:8,promptBookCost:8,rewardValidityDays:180,firstNoticeDays:30,lastNoticeDays:7});
+  assert.deepEqual(policy,{initialCredits:0,bookReward:10,correctionReward:2,editionCost:5,forkCost:8,promptBookCost:8,animationCost:5,rewardValidityDays:180,firstNoticeDays:30,lastNoticeDays:7});
   const savePolicy=(actor,points)=>fetch(base+policyUrl,{method:'POST',headers:{'x-test-user':actor,'content-type':'application/json'},body:JSON.stringify(points)});
   assert.equal((await savePolicy('reader',policy)).status,403);
   const updated={...policy,bookReward:20,correctionReward:5,editionCost:10,forkCost:15,promptBookCost:20,rewardValidityDays:90,firstNoticeDays:14,lastNoticeDays:3};
@@ -58,7 +72,7 @@ test('user administration is admin-only, paginated and independent of personal p
   assert.equal((await savePolicy('admin',{...updated,bookReward:-1})).status,400);
   assert.deepEqual((await (await get('admin',policyUrl)).json()).points,updated);
 
-  const disabled={initialCredits:0,bookReward:0,correctionReward:0,editionCost:0,forkCost:0,promptBookCost:0,rewardValidityDays:0,firstNoticeDays:0,lastNoticeDays:0};
+  const disabled={initialCredits:0,bookReward:0,correctionReward:0,editionCost:0,forkCost:0,promptBookCost:0,animationCost:0,rewardValidityDays:0,firstNoticeDays:0,lastNoticeDays:0};
   assert.equal((await savePolicy('admin',disabled)).status,200);
   assert.deepEqual((await (await get('admin',policyUrl)).json()).points,disabled,'saved zero values override defaults');
   assert.deepEqual(JSON.parse(await fs.readFile(path.join(dataDir,'points.json'),'utf8')),disabled);

@@ -101,7 +101,7 @@
       if (received.cycle) {
         const link = document.createElement('a');
         const language = lang();
-        link.href = new URL('account/dashboard.html?lang=' + encodeURIComponent(language),root);
+        link.href = new URL('account/dashboard.html?' + new URLSearchParams({lang:language,...(metadata.kind === 'animation' && {tab:'changes'})}),root);
         link.textContent = language === 'ro' ? 'Vezi starea cererii' : 'View request status';
         status.append(' · ',link);
       }
@@ -125,7 +125,7 @@
     const submissionPolicy=await policy;
     button.dataset.submissionId ||= submissionPolicy.newSubmissionId();
     const metadata={submissionId:button.dataset.submissionId,kind:draft.kind || contributionKind(draft,files.length),agreementVersion:'2026-09-10',agreementAccepted:true,values:draft.values,language:draft.language ?? lang(),...(bookId(draft)?{bookId:bookId(draft)}:{})};
-    if (metadata.kind === 'fork' || (metadata.kind === 'book-proposal' && metadata.values.confirmedCost !== undefined)) {
+    if (['fork','animation'].includes(metadata.kind) || (metadata.kind === 'book-proposal' && metadata.values.confirmedCost !== undefined)) {
       metadata.values = {...metadata.values};
       metadata.confirmedCost = Number(metadata.values.confirmedCost);
       delete metadata.values.confirmedCost;

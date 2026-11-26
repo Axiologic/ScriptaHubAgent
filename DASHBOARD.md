@@ -95,6 +95,8 @@ Deploy the updated Router, UserPersisto and ScriptaHub together. ScriptaHub decl
 
 The workflow robot decides when a validated edition is ready to publish. ScriptaHub verifies the package, configured content repository, pinned remote baseline and edition history. The robot commits and pushes, then ScriptaHub confirms the commit and updates collection.json. No human publication approval is required. New books and forks use a configured repository selected by the flow; revised editions retain their existing repository.
 
+Animation suggestions, including improvements to existing animations, use the cost in Administration → Settings. The requester sees the amount before submitting. The credit cycle confirms the debit before review, supports retry after an insufficient balance, and refunds a rejected suggestion. The requester can follow its status in Changes.
+
 An authenticated user with access to a book can explicitly request a paid new edition, independently of correction approval. The requester pays the configured cost; accepting corrections never debits the book owner. Without pending corrections, the task snapshots an explicit revision request. Such a synthetic request does not earn a correction reward. Generation/publication failures retain the blocking restoration/refund/notification cycle before retry is enabled. Initial book retries queue directly.
 
 

@@ -7,7 +7,7 @@ import {prepareReadingRoutes} from './prepare-reading-routes.mjs';
 import {publishFromRobot} from './robot-publication.mjs';
 import {runRemoteSkill,runRemoteSequence,releaseIncompleteRemote,discardTranslationJob,guardRemoteBackups} from './remote-skill.mjs';
 import {localRenderingFiles} from './publication-files.mjs';
-import {insideRun,preflight,writeHandoff,verifyPackage,requirePreflight} from './workflow-checks.mjs';
+import {insideRun,preflight,preparedPackage,writeHandoff,verifyPackage,requirePreflight} from './workflow-checks.mjs';
 import {completeCreateBookPhase} from './create-book-completion.mjs';
 import { constants } from 'node:fs';
 import path from 'node:path';
@@ -136,11 +136,17 @@ export async function publishPackage(call, input, {hook=async()=>{},stageOnly=fa
     const inventory = JSON.parse(inventoryBytes);
     const validation = JSON.parse(await readEvidence(input.validation));
     if (inventory.executionId !== input.executionId || inventory.publicationPermitted !== true || !Array.isArray(inventory.files)) throw new Error('Inventory does not approve this execution');
-    if (validation.inventorySha256 && validation.inventorySha256 !== crypto.createHash('sha256').update(inventoryBytes).digest('hex')) {
+    if (validation.inventorySha256 !== crypto.createHash('sha256').update(inventoryBytes).digest('hex')) {
         throw new Error('Approved inventory differs from the final validation');
     }
     if (validation.destination && (validation.destination.catalogue !== input.catalogue || validation.destination.branch !== input.branch
         || validation.destination.baseCommit !== inventory.baseCommit)) throw new Error('Publication destination differs from the final validation');
+    const directory = path.posix.dirname(path.posix.dirname(input.validation));
+    const prepared = await preparedPackage(directory,input.executionId,validation.bookId);
+    if (prepared.approval?.validation !== input.validation || prepared.approval?.inventory !== input.inventory
+        || prepared.packageRoot !== input.packageRoot || prepared.inventory.sha256 !== validation.draftInventorySha256) {
+        throw new Error('Final approval does not match the current prepared package');
+    }
     const root = await localPath(input.packageRoot);
     const files = inventory.files.map(({path: file,sha256,size}) => ({path:file,sha256,size}));
     for (const entry of files) {
@@ -282,7 +288,10 @@ async function main() {
     const input = JSON.parse(Buffer.concat(chunks).toString('utf8'));
     if (!input || typeof input !== 'object' || Array.isArray(input)) throw new Error('Provide a JSON object');
     if (['handoff','verify-package'].includes(operation)) {
-        const result = operation === 'handoff' ? await writeHandoff(input) : await verifyPackage(input);
+        if (operation === 'verify-package' && !input.directory) throw Error('Provide the task directory for publication verification');
+        const result = operation === 'verify-package' ? await verifyPackage(input)
+            : input.catalogue === undefined ? await writeHandoff(input)
+            : await withExecutionLock(process.cwd(),input.context?.executionId,() => writeHandoff(input));
         process.stdout.write(JSON.stringify(result) + '\n'); return;
     }
     if (operation === 'shared-editorial') {

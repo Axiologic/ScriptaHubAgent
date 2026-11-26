@@ -69,9 +69,11 @@ export async function publicationFiles(collectionPath, collection, bookId, candi
   }
 
   const directory = book.directory;
-  if (directory && (!cleanPath(directory) || !directory.startsWith('books/'))) throw Error('Invalid book directory');
-  const bookRoot = directory && relative(directory) + '/';
-  const inBook = name => !bookRoot || name.startsWith(bookRoot);
+  if (!cleanPath(directory) || !directory.startsWith('books/') || !directory.endsWith('/' + bookId)) {
+    throw Error('Book directory does not match the claimed task');
+  }
+  const bookRoot = relative(directory) + '/';
+  const inBook = name => name.startsWith(bookRoot);
   function addReferences(base, ...fields) {
     for (const value of values(fields)) {
       if (!cleanPath(value)) continue;
@@ -79,14 +81,20 @@ export async function publicationFiles(collectionPath, collection, bookId, candi
       if (inBook(name)) add(name);
     }
   }
-  addReferences(prefix, book.editions, book.coverUrl, book.thumbnailUrl, book.animation?.page, book.animation?.shf);
-  if (bookRoot) {
-    const manifest = await metadata(bookRoot + 'manifest.json');
-    const history = await metadata(bookRoot + 'editions.json');
-    addReferences(bookRoot, manifest.editions, manifest.coverUrl, manifest.thumbnailUrl, manifest.animation?.page, manifest.animation?.shf);
-    for (const edition of history.editions ?? []) {
-      addReferences(bookRoot, edition.readers, edition.files, edition.covers, edition.pdf, edition.source?.filename);
+  const manifest = await metadata(bookRoot + 'manifest.json');
+  const history = await metadata(bookRoot + 'editions.json');
+  if (manifest?.id !== bookId) throw Error('Book manifest identity mismatch');
+  if (history?.bookId !== bookId || !Array.isArray(history.editions)) throw Error('Invalid edition history');
+  for (const edition of Object.values(book.editions ?? {})) {
+    if (!edition || typeof edition !== 'object' || Array.isArray(edition)) throw Error('Invalid edition resource');
+    for (const value of Object.values(edition)) {
+      if (!cleanPath(value) || !inBook(relative(value)) || !add(relative(value))) throw Error('Missing or unrelated edition resource');
     }
+  }
+  addReferences(prefix, book.coverUrl, book.thumbnailUrl, book.animation?.page, book.animation?.shf);
+  addReferences(bookRoot, manifest.editions, manifest.coverUrl, manifest.thumbnailUrl, manifest.animation?.page, manifest.animation?.shf);
+  for (const edition of history.editions) {
+    addReferences(bookRoot, edition.readers, edition.files, edition.covers, edition.pdf, edition.source?.filename);
   }
 
   // The Set iterator also visits newly discovered stylesheets and other dependencies.

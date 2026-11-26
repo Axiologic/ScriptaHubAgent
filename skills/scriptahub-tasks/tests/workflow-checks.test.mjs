@@ -18,7 +18,17 @@ async function inRun(callback) {
   try { process.chdir(root); await callback(root); }
   finally { process.chdir(previous); await fs.rm(root, {recursive:true, force:true}); }
 }
-const context = {executionId:'execution-one', runId:'run-one', taskId:'task-one', bookId:'book-one'};
+const context = {executionId:'execution-one', runId:'run-one', taskId:'task-one', bookId:'bk-bookone'};
+const catalogueUrl = 'https://github.com/example/books/blob/main/collection.json';
+async function saveDestination(directory, schemaVersion, baseCommit) {
+  const file = directory + '/run-state/handoff.json';
+  const handoff = JSON.parse(await fs.readFile(file,'utf8').catch(error => {
+    if (error.code !== 'ENOENT') throw error;
+    return JSON.stringify({context});
+  }));
+  handoff.context.destination = {catalogue:catalogueUrl, branch:'main', contentRoot:'', schemaVersion, baseCommit};
+  await fs.writeFile(file,JSON.stringify(handoff));
+}
 test('manuscript reader preferences preserve the original body and are idempotent', () => {
   const original = '<html><head><title>Source</title></head><body><main>Original text</main></body></html>';
   const values = {readerLayout:'reflow',readerTypography:'readable'};
@@ -30,8 +40,47 @@ test('manuscript reader preferences preserve the original body and are idempoten
 });
 const emptyKeywords = Object.fromEntries(['en','fr','de','es','pt','it','ro','pl'].map(code => [code, []]));
 
+test('publication pins the schema from the exact catalogue commit and rejects a replacement', async () => inRun(async root => {
+  const directory = 'tasks/task-one', branch = 'release/books', baseCommit = 'a'.repeat(40);
+  const catalogue = 'https://github.com/example/books/blob/release/books/library/collection.json';
+  const previousPath = process.env.PATH;
+  await fs.mkdir(directory + '/run-state',{recursive:true});
+  await fs.writeFile(directory + '/run-state/claimed.json',JSON.stringify({
+    task:{...context, type:'scriptahub.book-proposal', repositories:[catalogue,catalogueUrl]}
+  }));
+  await fs.mkdir('bin');
+  await fs.writeFile('bin/git', `#!${process.execPath}
+if (process.argv.includes('ls-remote')) process.stdout.write('${'b'.repeat(40)}\\trefs/heads/release\\n${baseCommit}\\trefs/heads/${branch}\\n');
+else if (!process.argv.includes('check-ref-format')) process.exitCode = 1;
+`,{mode:0o700});
+  process.env.PATH = path.join(root,'bin') + path.delimiter + previousPath;
+  try {
+    const input = {step:'process-content',directory,catalogue,context};
+    const fetchCatalogue = async url => {
+      assert.equal(url,'https://raw.githubusercontent.com/example/books/' + baseCommit + '/library/collection.json');
+      return Response.json({schemaVersion:1,books:[]});
+    };
+    await assert.rejects(writeHandoff({...input,context:{...context,destination:{schemaVersion:2}}}), /cannot be set or changed/);
+    const pinned = await writeHandoff(input,{fetchCatalogue});
+    assert.deepEqual(pinned.destination,{catalogue,branch,baseCommit,contentRoot:'library',schemaVersion:1});
+    await assert.rejects(writeHandoff({...input,catalogue:catalogueUrl}), /already pinned/);
+    await writeHandoff({...input,step:'review-correct',catalogue:undefined});
+    assert.deepEqual(JSON.parse(await fs.readFile(pinned.path)).context.destination,pinned.destination);
+    const staged = JSON.stringify({schemaVersion:2,bookCount:1,books:[{id:context.bookId}]});
+    await fs.mkdir('package/library',{recursive:true});
+    await fs.writeFile('package/library/collection.json',staged);
+    await fs.writeFile('inventory.json',JSON.stringify({executionId:context.executionId,baseCommit,files:[{
+      path:'library/collection.json',size:Buffer.byteLength(staged),sha256:crypto.createHash('sha256').update(staged).digest('hex')
+    }]}));
+    if (process.platform === 'linux') {
+      await assert.rejects(verifyPackage({...context,directory,catalogue,branch,packageRoot:'package',inventory:'inventory.json'}),
+        /package schema differs/);
+    }
+  } finally { process.env.PATH = previousPath; }
+}));
+
 for (const schemaVersion of [1, 2]) test('preparation writes the reading routes for schema ' + schemaVersion, {skip:process.platform!=='linux'}, async () => inRun(async () => {
-  const directory = 'tasks/task-one', bookDir = 'books/example';
+  const directory = 'tasks/task-one', bookDir = schemaVersion === 1 ? 'books/example/' + context.bookId : 'books/example';
   const pkg = directory + '/package', book = pkg + '/' + bookDir;
   const metadataPath = book + (schemaVersion === 1 ? '/manifest.json' : '/book.json');
   const metadata = {id:context.bookId, title:{en:'Example'}, editions:{en:{book:'en/book.html',fullContent:'en/book.html'}}};
@@ -44,6 +93,7 @@ for (const schemaVersion of [1, 2]) test('preparation writes the reading routes 
     task:{...context,type:'scriptahub.book-proposal',values:{coverMode:'generate'}}
   }));
   await fs.writeFile(pkg+'/collection.json',JSON.stringify({schemaVersion,books:[entry]}));
+  await saveDestination(directory,3 - schemaVersion,null);
   await fs.writeFile(metadataPath,JSON.stringify(schemaVersion===1?metadata:{metadata,resources:{}}));
   await fs.writeFile(book+'/'+full,'<main>Full text</main>');
   await fs.writeFile(book+'/'+short,'<meta name="summary-generator" content="comprehensivesummary-skill">');
@@ -52,6 +102,8 @@ for (const schemaVersion of [1, 2]) test('preparation writes the reading routes 
   await fs.writeFile(book+'/'+cover,artwork);
   const input = {directory,executionId:context.executionId,collectionPath:'collection.json',
     editions:{en:{fullContent:full,comprehensiveSummary:short,shortDescription:'Short description',aboutBook:['Presentation']}}};
+  await assert.rejects(prepareReadingRoutes(input), /selected catalogue schema/);
+  await saveDestination(directory,schemaVersion,null);
   await assert.rejects(prepareReadingRoutes(input), /Provide a staged cover image for en/);
   input.editions.en.cover = cover;
   const pdf = 'en/book.pdf';
@@ -76,6 +128,9 @@ for (const schemaVersion of [1, 2]) test('preparation writes the reading routes 
     assert.equal(catalogue.books[0].thumbnailUrl.en,bookDir+'/'+cover);
     assert.match(await fs.readFile(book+'/en/book.html','utf8'),/href="comprehensive-summary.html"/);
   } else {
+    assert.equal(saved.legacyDirectory,bookDir+'/'+context.bookId);
+    assert.equal(saved.contentDirectory,bookDir);
+    assert.equal(saved.history.editions[0].readers.en.fullContent,'en/full_content.html');
     assert.equal(saved.resources['en/full_content.html'],bookDir+'/'+full);
     assert.equal(saved.resources[cover],bookDir+'/'+cover);
     assert.equal(saved.resources[pdf],bookDir+'/'+pdf);
@@ -117,6 +172,14 @@ for (const schemaVersion of [1, 2]) test('preparation writes the reading routes 
     catalogue:'https://github.com/example/books/blob/main/collection.json',branch:'main'};
   await assert.rejects(verifyPackage({...verification,checkReadingRoutes:true}),/thumbnail mapping for en/);
   await assert.rejects(verifyPackage({...verification,finalize:true}),/thumbnail mapping for en/);
+  if (schemaVersion === 2) {
+    delete saved.legacyDirectory;
+    const changed = Buffer.from(JSON.stringify(saved));
+    await fs.writeFile(metadataPath,changed);
+    catalogue.books[0].sha256 = crypto.createHash('sha256').update(changed).digest('hex');
+    await fs.writeFile(pkg+'/collection.json',JSON.stringify(catalogue));
+    await assert.rejects(verifyPackage({...verification,finalize:true}),/Missing book.json legacyDirectory/);
+  }
 }));
 
 test('artifact review uploads the exact reader and its rendering assets', {skip:process.platform !== 'linux'}, async () => inRun(async () => {
@@ -236,17 +299,23 @@ test('claim requires a fresh successful preflight, including a valid timestamp',
 }));
 
 test('batch verification refuses different bytes, execution identity and unsafe inventory paths before remote access', async () => inRun(async () => {
-  await fs.mkdir('package');
-  const bytes = Buffer.from('book'); await fs.writeFile('package/book.html', bytes);
-  const entry = {path:'book.html', size:bytes.length, sha256:crypto.createHash('sha256').update(bytes).digest('hex')};
+  const directory = 'books/current/' + context.bookId;
+  await fs.mkdir('package/' + directory,{recursive:true});
+  const stage = async (file, bytes) => {
+    await fs.writeFile('package/' + file,bytes);
+    return {path:file,size:Buffer.byteLength(bytes),sha256:crypto.createHash('sha256').update(bytes).digest('hex')};
+  };
+  const entry = await stage(directory + '/book.html','book');
+  const manifest = await stage(directory + '/manifest.json',JSON.stringify({id:context.bookId}));
+  const history = await stage(directory + '/editions.json',JSON.stringify({bookId:context.bookId,editions:[]}));
   const collection = Buffer.from(JSON.stringify(combineCollections([{
-    id:context.bookId, editions:{en:{fullContent:'book.html'}}, keywordIds:[], keywords:emptyKeywords
+    id:context.bookId, directory, editions:{en:{fullContent:entry.path}}, keywordIds:[], keywords:emptyKeywords
   }])));
-  await fs.writeFile('package/collection.json', collection);
-  const catalogueEntry = {path:'collection.json', size:collection.length, sha256:crypto.createHash('sha256').update(collection).digest('hex')};
-  const inventory = {executionId:context.executionId, baseCommit:null, files:[entry, catalogueEntry]};
+  const catalogueEntry = await stage('collection.json',collection);
+  const metadata = [catalogueEntry,manifest,history];
+  const inventory = {executionId:context.executionId, baseCommit:null, files:[entry,...metadata]};
   const input = {...context, packageRoot:'package', inventory:'inventory.json', catalogue:'https://github.com/example/books/blob/main/collection.json', branch:'main'};
-  for (const [change, pattern] of [[{executionId:'another'}, /another execution/], [{files:[{...entry,sha256:'0'.repeat(64)},catalogueEntry]}, /differs/], [{files:[{...entry,path:'../book.html'}]}, /Unsafe/], [{files:[entry,entry]}, /duplicate/]]) {
+  for (const [change, pattern] of [[{executionId:'another'}, /another execution/], [{files:[{...entry,sha256:'0'.repeat(64)},...metadata]}, /differs/], [{files:[{...entry,path:'../book.html'}]}, /Unsafe/], [{files:[entry,entry]}, /duplicate/]]) {
     await fs.writeFile('inventory.json', JSON.stringify({...inventory,...change}));
     await assert.rejects(verifyPackage(input), pattern);
   }
@@ -328,6 +397,7 @@ test('generated HTML is accepted without PDF only after a strict native reader/l
  try{
   const sha='b'.repeat(40), directory='books/current/'+context.bookId, reader=directory+'/book.html';await fs.mkdir('package/'+directory,{recursive:true});await fs.mkdir('bin');await fs.mkdir('tasks/a/run-state',{recursive:true});
   await fs.writeFile('tasks/a/run-state/claimed.json',JSON.stringify({task:{type:'scriptahub.book-proposal',executionId:context.executionId,bookId:context.bookId}}));
+  await saveDestination('tasks/a',1,sha);
   await fs.writeFile('package/'+reader,'<!doctype html><html lang="ro"><body><main><p>Cartea generată.</p></main></body></html>');
   await fs.writeFile('package/collection.json',JSON.stringify(combineCollections([{id:context.bookId,directory,editions:{ro:{fullContent:reader}},keywordIds:[],keywords:emptyKeywords}])));
   await fs.writeFile('package/'+directory+'/manifest.json',JSON.stringify({id:context.bookId}));
@@ -351,16 +421,18 @@ test('final edit approval requires every affected reader and binds the exact inv
   const save = (file, value) => fs.writeFile(file, JSON.stringify(value));
   const digest = bytes => crypto.createHash('sha256').update(bytes).digest('hex');
   const editions = [], audits = [], files = [], readers = {};
+  const bookDirectory = 'books/current/' + context.bookId;
   try {
     await fs.mkdir(directory + '/run-state', {recursive: true});
-    await fs.mkdir('package');
+    await fs.mkdir('package/' + bookDirectory,{recursive:true});
     await fs.mkdir('bin');
     await fs.writeFile('bin/git', `#!${process.execPath}\nprocess.stdout.write('${commit}\\trefs/heads/main\\n');\n`, {mode: 0o700});
     process.env.PATH = path.join(root, 'bin') + path.delimiter + previousPath;
     const requests = [{language: 'en'}, {language: 'ro'}];
     await save(directory + '/run-state/claimed.json', {task: {...context, type: 'scriptahub.edit', requests}});
+    await saveDestination(directory,1,commit);
     for (const {language} of requests) {
-      const file = language + '.html', candidateHtml = 'package/' + file, baselineHtml = language + '-original.html', changesPath = language + '-changes.json';
+      const file = bookDirectory + '/' + language + '.html', candidateHtml = 'package/' + file, baselineHtml = language + '-original.html', changesPath = language + '-changes.json';
       const candidate = '<main>Revised ' + language + '</main>', baseline = '<main>Original ' + language + '</main>';
       await fs.writeFile(candidateHtml, candidate);
       await fs.writeFile(baselineHtml, baseline);
@@ -376,15 +448,32 @@ test('final edit approval requires every affected reader and binds the exact inv
       editions.push({language, baselineHtml, baselineSha256, candidateHtml, changesPath, changesSha256});
       audits.push({language, report});
     }
-    const collection = JSON.stringify(combineCollections([{id:context.bookId, editions:readers, keywordIds:[], keywords:emptyKeywords}]));
-    await fs.writeFile('package/collection.json', collection);
-    files.push({path:'collection.json', size:Buffer.byteLength(collection), sha256:digest(collection)});
-    await fs.writeFile('package/.pdf2html-skill', 'working marker');
-    files.push({path:'.pdf2html-skill', size:14, sha256:digest('working marker')});
-    await save('inventory.json', {executionId:context.executionId, baseCommit:commit, files});
-    await save('edition-plan.json', {editions});
+    const stage = async (file, content) => {
+      await fs.writeFile('package/' + file,content);
+      files.push({path:file,size:Buffer.byteLength(content),sha256:digest(content)});
+    };
     const input = {...context, directory, packageRoot:'package', inventory:'inventory.json', editionPlan:'edition-plan.json',
       catalogue:'https://github.com/example/books/blob/main/collection.json', branch:'main', finalize:true};
+    const book = {id:context.bookId, editions:readers, keywordIds:[], keywords:emptyKeywords};
+    const writeCollection = async () => {
+      const collection = JSON.stringify(combineCollections([book]));
+      await stage('collection.json',collection);
+      await save('inventory.json',{executionId:context.executionId,baseCommit:commit,files});
+    };
+    await writeCollection();
+    await assert.rejects(verifyPackage(input),/Book directory does not match/);
+    files.pop();
+    book.directory = bookDirectory;
+    await writeCollection();
+    await assert.rejects(verifyPackage(input),/Missing package metadata: .*manifest.json/);
+    await stage(bookDirectory+'/manifest.json',JSON.stringify({id:context.bookId}));
+    await save('inventory.json',{executionId:context.executionId,baseCommit:commit,files});
+    await assert.rejects(verifyPackage(input),/Missing package metadata: .*editions.json/);
+    await stage(bookDirectory+'/editions.json',JSON.stringify({bookId:context.bookId,editions:[]}));
+    await stage('.pdf2html-skill','working marker');
+    await save('inventory.json',{executionId:context.executionId,baseCommit:commit,files});
+    await save('edition-plan.json',{editions});
+    await verifyPackage({...input,finalize:false});
     await assert.rejects(verifyPackage({...input, audits:audits.slice(0, 1)}), /cover every required edition/);
     await save('edition-plan.json', {editions:editions.slice(0, 1)});
     await assert.rejects(verifyPackage({...input, audits:audits.slice(0, 1)}), /omits a language/);
@@ -392,7 +481,8 @@ test('final edit approval requires every affected reader and binds the exact inv
     const approved = await verifyPackage({...input, audits});
     assert.equal(approved.audit.scope, 'edition_layout_regression');
     const verified = JSON.parse(await fs.readFile(approved.approval.inventory));
-    assert.deepEqual(verified.files.map(entry => entry.path), ['en.html', 'ro.html', 'collection.json']);
+    assert.deepEqual(verified.files.map(entry => entry.path), [bookDirectory+'/en.html',bookDirectory+'/ro.html','collection.json',
+      bookDirectory+'/manifest.json',bookDirectory+'/editions.json']);
     const validation = JSON.parse(await fs.readFile(approved.approval.validation));
     assert.deepEqual(validation.reports.map(report => report.language), ['en', 'ro']);
     assert.equal(validation.inventorySha256, digest(await fs.readFile(approved.approval.inventory)));
@@ -456,6 +546,7 @@ test('each published manuscript edition requires its own pinned PDF and reader a
   const previousPath = process.env.PATH;
   const directory = 'tasks/task-one';
   const packageRoot = directory + '/package';
+  const bookDirectory = 'books/current/' + context.bookId;
   const save = (file, value) => fs.writeFile(file, JSON.stringify(value));
   const digest = value => crypto.createHash('sha256').update(value).digest('hex');
   const editions = {};
@@ -474,18 +565,18 @@ test('each published manuscript edition requires its own pinned PDF and reader a
     for (const language of ['en', 'ro']) {
       const sourceDir = directory + '/sources/' + language;
       const validationDir = directory + '/validation/' + language;
-      const reader = language + '.html';
+      const reader = bookDirectory + '/' + language + '.html';
       const html = '<link rel="stylesheet" href="' + language + '.css"><main>' + language + '</main>';
       const pdf = 'PDF fixture ' + language;
       const source = sourceDir + '/source.html';
       const referencePdf = sourceDir + '/source.pdf';
       await fs.mkdir(sourceDir, {recursive: true});
       await fs.mkdir(validationDir, {recursive: true});
-      await fs.mkdir(packageRoot, {recursive: true});
+      await fs.mkdir(packageRoot + '/' + bookDirectory, {recursive: true});
       await fs.writeFile(source, html);
       await fs.writeFile(referencePdf, pdf);
-      const book = language + '-book.html';
-      const shortContent = language + '-summary.html';
+      const book = bookDirectory + '/' + language + '-book.html';
+      const shortContent = bookDirectory + '/' + language + '-summary.html';
       await stage(reader, html);
       await stage(book, '<main>Book</main>');
       await stage(shortContent, '<meta name="summary-generator" content="comprehensivesummary-skill">');
@@ -508,7 +599,7 @@ test('each published manuscript edition requires its own pinned PDF and reader a
       const style = 'p { color: green }';
       const styleFile = sourceDir + '/' + language + '.css';
       await fs.writeFile(styleFile, style);
-      await stage(language + '.css', style);
+      await stage(bookDirectory + '/' + language + '.css', style);
       await save(earlyReport, earlyResult);
       await save(job, {result:earlyResult, inputs:[
         {file:sourceDocument, sha256:digest(html)}, {file:path.join(root, referencePdf), sha256:digest(pdf)},
@@ -521,16 +612,20 @@ test('each published manuscript edition requires its own pinned PDF and reader a
       ...context, editorialSource:{language, path:source, sha256}, manuscriptEditions, sourceAudits
     }});
     await save(directory + '/run-state/claimed.json', {task:{...context, type:'scriptahub.manuscript'}});
+    await saveDestination(directory,1,null);
     await assert.rejects(writeHandoff({step:'review-correct', directory, context:{
       ...context, manuscriptEditions:{...manuscriptEditions, ro:{...manuscriptEditions.ro, referencePdfSha256:'0'.repeat(64)}}
     }}), /Manuscript editions are pinned/);
     const aboutBook = {en:['English edition'], ro:['Ediție în română']};
-    const collection = JSON.stringify(combineCollections([{id:context.bookId, editions, aboutBook, keywordIds:[], keywords:emptyKeywords}]));
+    const collection = JSON.stringify(combineCollections([{id:context.bookId,directory:bookDirectory,editions,aboutBook,keywordIds:[],keywords:emptyKeywords}]));
     await stage('collection.json', collection);
+    await stage(bookDirectory+'/manifest.json',JSON.stringify({id:context.bookId}));
+    await stage(bookDirectory+'/editions.json',JSON.stringify({bookId:context.bookId,editions:[]}));
     const inventory = directory + '/inventory.json';
     await save(inventory, {executionId:context.executionId, baseCommit:null, files});
     const input = {...context, directory, packageRoot, inventory, finalize:true,
       catalogue:'https://github.com/example/books/blob/main/collection.json', branch:'main'};
+    await verifyPackage({...input,finalize:false});
     await assert.rejects(verifyPackage({...input, audits:[audits[0]]}), /cover every required edition/);
     await assert.rejects(verifyPackage({...input, audits:[audits[0], {...audits[1], report:audits[0].report}]}),
       /does not cover the published source edition: ro/);
@@ -538,9 +633,11 @@ test('each published manuscript edition requires its own pinned PDF and reader a
     const earlyAudits = Object.entries(sourceAudits).map(([language, reference]) => ({language, report:reference.path}));
     assert.ok((await verifyPackage({...input, audits:earlyAudits})).approval);
     const changedStyle = 'p { color: orange }';
-    await fs.writeFile(packageRoot + '/ro.css', changedStyle);
-    Object.assign(files.find(file => file.path === 'ro.css'), {size:Buffer.byteLength(changedStyle), sha256:digest(changedStyle)});
+    await fs.writeFile(packageRoot + '/' + bookDirectory + '/ro.css', changedStyle);
+    Object.assign(files.find(file => file.path === bookDirectory + '/ro.css'), {size:Buffer.byteLength(changedStyle), sha256:digest(changedStyle)});
     await save(inventory, {executionId:context.executionId, baseCommit:null, files});
+    await assert.rejects(verifyPackage({...input,audits:earlyAudits}),/draft inventory changed/);
+    await verifyPackage({...input,finalize:false});
     await assert.rejects(verifyPackage({...input, audits:earlyAudits}), /resources changed for ro/);
     assert.ok((await verifyPackage({...input, audits:[earlyAudits[0], audits[1]]})).approval);
     await fs.appendFile(manuscriptEditions.ro.referencePdf, 'changed');

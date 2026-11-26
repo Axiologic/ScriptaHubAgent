@@ -12,7 +12,12 @@ export async function pointsApi(suffix = '', body) {
   const url = new URL('api/dashboard/points' + suffix,root);
   const response = await fetch(url,{cache:'no-store',credentials:'same-origin',
     ...(body ? {method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify(body)} : {})});
-  if (!response.ok) throw new Error(t('Credits service unavailable. Try again.','Serviciul de credite nu este disponibil. Încearcă din nou.'));
+  if (!response.ok) {
+    const details = await response.json().catch(() => null);
+    throw Object.assign(new Error(t('Credits service unavailable. Try again.','Serviciul de credite nu este disponibil. Încearcă din nou.')), {
+      status:response.status, code:details?.code,
+    });
+  }
   return response.json();
 }
 

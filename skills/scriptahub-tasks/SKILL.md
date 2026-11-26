@@ -55,7 +55,7 @@ Book proposals publish semantic HTML and a PDF exported from the staged full rea
 
 Each job and publication package contains only the current book, its declared/referenced assets and, for a fork, its pinned source. Read catalogue metadata for destination selection and baseline preservation. Fetch only this book's resources. Use a sparse package and preserve other catalogue entries. Native arguments address a specific book directory. The helper enforces the same boundary on input snapshots and returned files.
 
-Choose among configured matching repositories with choose and save the result. Resolve the actual branch/content root through the configured catalogue and Git references. Preserve its numeric schema and resource mappings. Only a verified empty repository may initialize a schema 2 catalogue.
+Choose among configured matching repositories with choose. Pass the selected catalogue URL to handoff in the destination selection phase. Use its returned destination throughout package preparation and validation. It identifies the catalogue, branch, content root, commit and schema. Only a verified empty repository initializes schema 2.
 
 ## Native calls and recovery
 

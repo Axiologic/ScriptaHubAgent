@@ -147,7 +147,10 @@ export function checkPublicationPackage(manifest, target, bytes, oldCollection, 
     allowed = name => name.startsWith(full);
   } else {
     const metadataPath = target.root + packagePath(book.path);
-    const document = validateContentBook(parse(metadataPath));
+    const metadata = parse(metadataPath);
+    let document;
+    try { document = validateContentBook(metadata); }
+    catch (error) { fail(error.message); }
     requireForkSource(document.provenance?.fork);
     if (editing) {
       preserveEditionHistory(previousDocument,document,manifest.bookId);

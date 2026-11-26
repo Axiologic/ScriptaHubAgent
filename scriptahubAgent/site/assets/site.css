@@ -1300,7 +1300,7 @@ body[data-book-workflow] .workflow-context h2 { font-size: 1.05rem; line-height:
   background: linear-gradient(145deg, rgb(27 32 34 / .46), rgb(27 32 34 / .56));
 }
 
-:root .book-actions [data-animation-link]::before { content: "▶"; }
+
 
 .intro-slide .text-show-word { font-weight: 600; }
 .book-copy .lead.text-show { text-align: left; }
@@ -1515,6 +1515,7 @@ shf-player {
 /* Reading is primary; contribution and edition tools form a quiet right rail. */
 .book-side-actions{position:relative;z-index:2;display:flex;flex-direction:column;gap:8px;align-self:center;margin:0;padding:0;background:transparent}
 .book-side-actions .button{width:100%;height:34px;min-height:34px;margin:0;padding:7px 10px;white-space:nowrap;line-height:1.2;font-size:.75rem;border-radius:4px}
+.book-side-actions [data-animation-link]::before{content:"▶";margin-right:7px}
 .book-side-actions [data-fork-link]::before{content:"⑂";margin-right:7px}
 .book-side-actions [data-book-feedback]::before{content:"✎";margin-right:7px}
 .book-side-actions [data-book-editions]::before{content:"◷";margin-right:7px}

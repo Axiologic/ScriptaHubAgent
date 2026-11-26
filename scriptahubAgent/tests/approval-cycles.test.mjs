@@ -43,8 +43,54 @@ async function fixture(t) {
   const first = open();
   first.store.remember(admin,[{id:'bk-source',title:'Original book'}]);
   first.store.remember(author);
-  return {...first,open};
+  return {...first,open,dir};
 }
+
+test('animation suggestions are charged once before review and refunded on rejection',async t=>{
+  const {store,dir} = await fixture(t);
+  const policy = {animationCost:5};
+  const oldKey = process.env.SCRIPTA_RECORD_KEY;
+  process.env.SCRIPTA_RECORD_KEY = 'a-test-record-key-for-animation-suggestions';
+  t.after(()=>{
+    if (oldKey === undefined) delete process.env.SCRIPTA_RECORD_KEY;
+    else process.env.SCRIPTA_RECORD_KEY = oldKey;
+  });
+  const {saveSubmission} = await import('../submissions.mjs');
+  const intake = async confirmedCost => {
+    const submission = record('animation',author,{feedback:'Use a map'},'bk-source');
+    const form = new FormData();
+    form.set('metadata',JSON.stringify({...submission.metadata,confirmedCost,agreementAccepted:true,agreementVersion:'2026-09-10'}));
+    const request = new Request('http://localhost/upload',{method:'POST',body:form});
+    return saveSubmission({body:Buffer.from(await request.arrayBuffer()),contentType:request.headers.get('content-type'),
+      user:author,dataDir:dir,store,policy});
+  };
+  await assert.rejects(intake(4),error=>error.status===409 && /cost has changed/.test(error.message));
+  const suggestion = await intake(5);
+  assert.equal((await intake(5)).submissionId,suggestion.submissionId);
+  assert.equal(suggestion.cycle.phase,'funding');
+  assert.equal(suggestion.cycle.cost,5);
+  assert.throws(()=>store.decide(admin,suggestion.submissionId,'accept'),/payment must be confirmed/);
+  const operations=[];
+  const tick = () => advanceCycles(store,{
+    apply:async (row,operation,amount)=>{
+      operations.push(creditOperation(row,operation,amount));
+      return operations.length === 1 ? {insufficient:true,missing:2} : {};
+    },
+    send:async ()=>({providerMessageId:'sent'}),report:message=>assert.fail(message)
+  });
+  await tick();
+  assert.equal(store.cycles.read(suggestion.submissionId).phase,'retryable');
+  assert.equal(store.cycles.read(suggestion.submissionId).missing,2);
+  store.transaction(()=>store.cycles.retry(author,suggestion.submissionId,1));
+  await tick();
+  assert.equal(store.cycles.read(suggestion.submissionId).phase,'review');
+  store.decide(admin,suggestion.submissionId,'reject');
+  await tick();
+  await tick();
+  assert.equal(store.cycles.read(suggestion.submissionId).phase,'rejected');
+  assert.deepEqual(operations.map(({operation,amount})=>[operation,amount]),[['debit',5],['debit',5],['refund',5]]);
+  assert.equal(operations[1].referenceId,operations[2].referenceId);
+});
 
 test('new books queue immediately without an initial approval; duplicate submissions and retries stay blocked',async t=>{
   const {store,executorApi} = await fixture(t);

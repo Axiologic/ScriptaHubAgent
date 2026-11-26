@@ -661,6 +661,12 @@ test('publishing the source and one translated edition retains the omitted-langu
   assert.ok(mail.some(notice=>notice.subject.includes('incomplete translations') && /en, ro.*es.*could not be validated/.test(notice.message)),'the owner must receive the partial-completion warning even when a reward is pending');
 });
 
+test('the agent and packaged workflow validate the same content-book schema',async ()=>{
+  const service = await fs.readFile(new URL('../content-book-schema.mjs',import.meta.url));
+  const helper = await fs.readFile(new URL('../../skills/scriptahub-tasks/scripts/content-book-schema.mjs',import.meta.url));
+  assert.deepEqual(service,helper);
+});
+
 test('catalogue validation ships with the service independently of the installed skill image', async () => {
   const serviceModule = await fs.readFile(new URL('../catalogue-keywords.mjs',import.meta.url),'utf8');
   const skillModule = await fs.readFile(new URL('../../skills/scriptahub-tasks/scripts/catalogue-keywords.mjs',import.meta.url),'utf8');

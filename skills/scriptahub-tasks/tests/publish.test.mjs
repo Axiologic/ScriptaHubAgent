@@ -5,6 +5,7 @@ import path from 'node:path';
 import os from 'node:os';
 import crypto from 'node:crypto';
 import { publishPackage } from '../scripts/run.mjs';
+import { atomicJson } from '../scripts/workflow-checks.mjs';
 
 test('package submission uses exact inventoried bytes and refuses modification or path escapes', async () => {
   const previous = process.cwd(), root = await fs.mkdtemp(path.join(os.tmpdir(),'scripta-submit-'));
@@ -13,7 +14,11 @@ test('package submission uses exact inventoried bytes and refuses modification o
     const source = crypto.randomBytes(150000);
     await fs.writeFile('package/book.pdf',source);
     const inventory = {executionId:'execution-one',publicationPermitted:true,baseCommit:'a'.repeat(40),files:[{path:'book.pdf',size:source.length,sha256:crypto.createHash('sha256').update(source).digest('hex')}]};
-    await fs.writeFile('inventory.json',JSON.stringify(inventory)); await fs.writeFile('validation.json','{}');
+    const draft = await atomicJson('run-state/draft.json',{files:inventory.files});
+    const approved = await atomicJson('inventory.json',inventory);
+    const validation = await atomicJson('validation.json',{bookId:'book-one',inventorySha256:approved.sha256,draftInventorySha256:draft.sha256});
+    await atomicJson('run-state/package-check.json',{ok:true,executionId:inventory.executionId,bookId:'book-one',packageRoot:'package',
+      inventory:draft,approval:{inventory:approved.path,validation:validation.path}});
     const input = {executionId:'execution-one',catalogue:'https://github.com/example/books/blob/main/collection.json',branch:'main',packageRoot:'package',inventory:'inventory.json',validation:'validation.json'};
     let prepared = false, published = false; const received = [];
     const call = async (tool,args) => {
@@ -31,7 +36,9 @@ test('package submission uses exact inventoried bytes and refuses modification o
     await fs.writeFile('package/book.pdf',Buffer.alloc(source.length));
     await assert.rejects(publishPackage(call,input),/checksum mismatch/);
     await fs.symlink('package','linked');
-    await assert.rejects(publishPackage(call,{...input,packageRoot:'linked'}),/symlinks/);
-    await assert.rejects(publishPackage(call,{...input,packageRoot:'../outside'}),/inside this run/);
+    await assert.rejects(publishPackage(call,{...input,packageRoot:'linked'}),/current prepared package/);
+    await assert.rejects(publishPackage(call,{...input,packageRoot:'../outside'}),/current prepared package/);
+    await atomicJson(draft.path,{files:[]});
+    await assert.rejects(publishPackage(() => assert.fail('unexpected remote call'),input),/draft inventory changed/);
   } finally { process.chdir(previous); await fs.rm(root,{recursive:true,force:true}); }
 });

@@ -13,7 +13,7 @@ class Node {
   setCustomValidity(message){this.validationMessage=message;}
   get valueAsNumber(){return Number(this.value);}
 }
-const points={initialCredits:0,bookReward:10,correctionReward:5,editionCost:10,forkCost:15,promptBookCost:18,rewardValidityDays:180,firstNoticeDays:30,lastNoticeDays:7};
+const points={initialCredits:0,bookReward:10,correctionReward:5,editionCost:10,forkCost:15,promptBookCost:18,animationCost:5,rewardValidityDays:180,firstNoticeDays:30,lastNoticeDays:7};
 function setup(t){
   const original=Object.getOwnPropertyDescriptor(globalThis,'document'),events=[];
   Object.defineProperty(globalThis,'document',{configurable:true,value:{documentElement:{lang:'ro'},createElement:tag=>new Node(tag),createElementNS:(namespace,tag)=>Object.assign(new Node(tag),{namespaceURI:namespace}),dispatchEvent:event=>events.push(event.type)}});
@@ -37,6 +37,7 @@ test('administration shows initial credits and credit rules without payment sett
   assert.deepEqual(nodes(host).filter(node=>node.tag==='button').map(node=>node.textContent),['Reset','Salvează']);
   assert.equal(field('creditPrice'),undefined);
   assert.equal(field('currency'),undefined);
+  assert.equal(field('animationCost').value,5);
   field('initialCredits').value=25;field('initialCredits').oninput();
   reset.onclick();assert.equal(field('initialCredits').value,0);
   assert.deepEqual(requests,[{path:'/policy',body:undefined}]);

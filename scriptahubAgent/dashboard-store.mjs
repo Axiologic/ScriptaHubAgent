@@ -1,3 +1,4 @@
+import { submissionCreditCost } from './points-policy.mjs';
 import { ApprovalCycles, createCycleTables } from './approval-cycles.mjs';
 import { prepareTaskSchema } from './task-schema.mjs';
 import { annotations } from './annotations.mjs';
@@ -176,7 +177,8 @@ export class DashboardStore {
       if (previous) return this.receipt(previous);
       const { metadata: meta } = record;
       const isNewBook = ['manuscript','book-proposal','fork'].includes(meta.kind) && !meta.targetBookId;
-      const managed = this.manageApprovals && (isNewBook || meta.kind === 'edit');
+      const managed = this.manageApprovals && (isNewBook || ['edit','animation'].includes(meta.kind));
+      const cost = submissionCreditCost(meta.kind,policy) ?? 0;
       if (managed) {
         const duplicate = this.cycles.findContribution(record);
         if (duplicate) return this.receipt(this.db.prepare('SELECT * FROM changes WHERE id=?').get(duplicate.change_id));
@@ -194,7 +196,7 @@ export class DashboardStore {
         book = this.book(meta.targetBookId || meta.bookId);
         if (book.origin !== 'catalogue' && book.revision === 0 && book.owner !== record.owner
           && !this.db.prepare('SELECT 1 FROM collaborators WHERE book_id=? AND user_id=?').get(book.id, record.owner)) fail('Book access required', 403);
-        if (book.owner === record.owner) state = 'accepted';
+        if (book.owner === record.owner && !(managed && meta.kind === 'animation' && cost > 0)) state = 'accepted';
       } else if (meta.kind !== 'librarian-feedback') fail('A book is required');
       const change = { id: record.id, book_id: book?.id || null, author: record.owner, kind: meta.kind,
         state, base_revision: book?.revision || 0 };
@@ -203,7 +205,6 @@ export class DashboardStore {
           JSON.stringify({ metadata: meta, files: record.files, ...(record.source ? {source:record.source} : {}), ...(annotations(meta) && state === 'accepted' ? {annotationDecisions:Object.fromEntries(annotations(meta).map(item=>[item.id,'accept']))} : {}) }), record.createdAt,
           state === 'accepted' ? now() : null, state === 'accepted' ? record.owner : null);
       this.event(record.owner, state === 'accepted' ? 'change.accepted' : 'change.proposed', change.book_id, change.id);
-      const cost = meta.kind === 'fork' ? policy.forkCost ?? 0 : meta.kind === 'book-proposal' ? policy.promptBookCost ?? 0 : 0;
       if (managed) this.cycles.addContribution(record,change,{
         cost,
         reward: meta.kind === 'edit' ? policy.correctionReward : meta.kind === 'manuscript' ? policy.bookReward : 0,
@@ -246,12 +247,20 @@ export class DashboardStore {
       const state = decision === 'accept' ? 'accepted' : 'rejected';
       if (change.state === state) return this.receipt(change);
       if (change.state !== 'open') fail('This proposal has already been decided', 409);
+      if (change.kind === 'animation' && cycle && cycle.phase !== 'review') fail('The animation credit payment must be confirmed before review.',409);
       if (decision === 'accept' && change.base_revision !== book.revision) fail('The book has changed. Ask the author to submit an updated proposal.', 409);
       if (items) this.db.prepare('UPDATE changes SET payload=? WHERE id=?').run(JSON.stringify(payload),changeId);
       this.db.prepare('UPDATE changes SET state=?,decided_at=?,decided_by=?,decision_note=? WHERE id=?')
         .run(state, now(), user.id, text(note), changeId);
       this.event(user.id, `change.${state}`, book.id, changeId);
-      if (cycle) {
+      if (cycle && change.kind === 'animation') {
+        const phase = state === 'accepted' ? 'completed' : cycle.cost ? 'restoring' : 'rejected';
+        this.db.prepare('UPDATE approval_cycles SET phase=?,reviewer=?,updated_at=? WHERE id=?')
+          .run(phase,user.id,now(),changeId);
+        if (phase !== 'restoring') this.cycles.notify(cycle,
+          state === 'accepted' ? 'Animation suggestion approved' : 'Animation suggestion declined',
+          state === 'accepted' ? 'Your animation suggestion was approved.' : 'Your animation suggestion was declined.');
+      } else if (cycle) {
         const phase = state === 'rejected' ? 'rejected' : 'awaiting_publication';
         this.db.prepare('UPDATE approval_cycles SET phase=?,reviewer=?,updated_at=? WHERE id=?')
           .run(phase,user.id,now(),changeId);

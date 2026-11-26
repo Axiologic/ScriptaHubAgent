@@ -1,9 +1,10 @@
+import {validateContentBook} from './content-book-schema.mjs';
 import fs from 'node:fs/promises';
 import path from 'node:path';
 import {createHash} from 'node:crypto';
 import {withExecutionLock} from './anchored-files.mjs';
 import {guardRemoteBackups} from './remote-skill.mjs';
-import {atomicFile, atomicJson, insideRun} from './workflow-checks.mjs';
+import {atomicFile, atomicJson, insideRun, publicationDestination} from './workflow-checks.mjs';
 import {artworkFields, artworkPath, artworkRequirement} from './publication-artwork.mjs';
 
 const sha256 = bytes => createHash('sha256').update(bytes).digest('hex');
@@ -35,18 +36,32 @@ export async function prepareReadingRoutes({executionId, directory, collectionPa
     }
     const artwork = artworkRequirement(claim);
     const pkg = directory + '/package';
+    const destination = await publicationDestination(directory,executionId);
+    if (collectionPath !== path.posix.join(destination.contentRoot,'collection.json')) {
+      throw Error('The package differs from the selected publication destination');
+    }
     const catalogue = pkg + '/' + collectionPath;
     const collection = await readJson(catalogue);
     const book = collection.books.find(book => book.id === claim.bookId);
     if (!book || ![1,2].includes(collection.schemaVersion)) throw Error('The catalogue must contain the claimed book');
-    const modern = collection.schemaVersion === 2;
+    if (destination.schemaVersion !== collection.schemaVersion) {
+      throw Error('The package schema differs from the selected catalogue schema');
+    }
+    const modern = destination.schemaVersion === 2;
     const base = path.posix.dirname(catalogue);
+    if (!modern && !book.directory?.endsWith('/' + claim.bookId)) {
+      throw Error('Book directory does not match the claimed task');
+    }
     const metadataPath = modern ? book.path : book.directory + '/manifest.json';
     if (!safePath(metadataPath) || !metadataPath.startsWith('books/')) throw Error('Invalid book metadata path');
     const file = base + '/' + metadataPath;
     const document = await readJson(file);
     const metadata = modern ? document.metadata : document;
-    if (metadata?.id !== book.id) throw Error('Book metadata belongs to another book');
+    if (!metadata || (!modern && metadata.id !== book.id)
+      || (modern && ((metadata.id && metadata.id !== book.id) || (document.id && document.id !== book.id)))) {
+      throw Error('Book metadata belongs to another book');
+    }
+    if (modern) metadata.id = book.id;
     const bookRoot = path.posix.dirname(file);
     const bookRelative = path.posix.relative(base, bookRoot);
     const languages = Object.keys(editions);
@@ -126,6 +141,7 @@ export async function prepareReadingRoutes({executionId, directory, collectionPa
         if (error.code !== 'ENOENT') throw error;
         return null;
       });
+      if (history && (history.bookId !== book.id || !Array.isArray(history.editions))) throw Error('Invalid edition history');
       if (!history) {
         const currentEdition = metadata.currentEdition || book.currentEdition || 'edition-1';
         const readers = Object.fromEntries(languages.map(language => {
@@ -140,6 +156,29 @@ export async function prepareReadingRoutes({executionId, directory, collectionPa
         }]});
         metadata.currentEdition = book.currentEdition = currentEdition;
       }
+    }
+    if (modern) {
+      document.schemaVersion = 2;
+      document.id = claim.bookId;
+      document.contentDirectory = bookRelative;
+      document.legacyDirectory = bookRelative + '/' + claim.bookId;
+      const currentEdition = 'edition-1';
+      const readers = Object.fromEntries(languages.map(language => {
+        const {fullContent, shortContent} = metadata.editions[language];
+        return [language,{fullContent,shortContent}];
+      }));
+      const pdf = Object.fromEntries(languages.filter(language => metadata.editions[language].pdf)
+        .map(language => [language,metadata.editions[language].pdf]));
+      const first = document.history?.editions?.find?.(edition => edition.id === currentEdition);
+      const publishedAt = claim.createdAt?.slice(0,10) || first?.publishedAt;
+      metadata.currentEdition = currentEdition;
+      document.history = {
+        schemaVersion:1,bookId:claim.bookId,currentEdition,editions:[{
+          ...first,id:currentEdition,number:1,...(publishedAt && {publishedAt}),
+          readers,pdf,covers:metadata.coverUrl ?? {},contributors:first?.contributors ?? [],
+        }],
+      };
+      validateContentBook(document);
     }
     const saved = await atomicJson(file, document);
     if (modern) book.sha256 = saved.sha256;

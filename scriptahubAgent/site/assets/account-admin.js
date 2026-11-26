@@ -22,6 +22,7 @@ export async function mountAdministration(host, api = pointsApi, {creditPurchase
       ['editionCost',t('New edition cost','Cost pentru ediție nouă')],
       ['promptBookCost',t('AI book generation cost','Cost pentru generare carte cu AI')],
       ['forkCost',t('Derived book cost','Cost pentru carte derivată')],
+      ['animationCost',t('Animation suggestion cost','Cost pentru sugestie de animație')],
     ]],
     [t('Expiration and notifications','Expirare și notificări'),[
       ['rewardValidityDays',t('Reward validity in days (0: no expiration)','Valabilitatea recompensei în zile (0: fără expirare)')],

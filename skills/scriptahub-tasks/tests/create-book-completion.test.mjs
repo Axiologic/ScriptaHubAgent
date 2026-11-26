@@ -46,10 +46,14 @@ test('final edition validation needs a moderation verdict for its exact inventor
   await atomicJson(directory + '/run-state/claimed.json', {task});
   const context = {...task, processingMode:'process'};
   await writeHandoff({directory, step:'prepare-edit-package', context});
+  const draft = await atomicJson(directory + '/run-state/draft-inventory.json',{files:['original']});
   const inventory = await atomicJson(directory + '/validation/verified-inventory.json', {});
-  await atomicJson(directory + '/validation/final-report.json', {
-    ...task, publicationPermitted:true, audit:{errorFindings:0}, inventorySha256:inventory.sha256
+  const validation = await atomicJson(directory + '/validation/final-report.json', {
+    ...task, publicationPermitted:true, audit:{errorFindings:0}, draftInventorySha256:draft.sha256, inventorySha256:inventory.sha256
   });
+  const prepared = {...task,ok:true,inventory:draft};
+  const checkPath = directory + '/run-state/package-check.json';
+  await atomicJson(checkPath,{...prepared,approval:{inventory:inventory.path,validation:validation.path}});
   let status = {status:'pending',completedUnits:3};
   const check = () => completeCreateBookPhase({directory, step, completionId},
     tool => tool === 'scriptahub_task_moderate' ? status : {...task,state:'running'});
@@ -62,6 +66,10 @@ test('final edition validation needs a moderation verdict for its exact inventor
   await assert.rejects(check, /matching moderation verdict/);
   status.inventorySha256 = inventory.sha256;
   assert.equal((await check()).path,'.workflow-completion/'+completionId+'.json');
+  const replacement = await atomicJson(draft.path,{files:['replacement']});
+  await assert.rejects(check,/draft inventory changed/);
+  await atomicJson(checkPath,{...prepared,inventory:replacement});
+  await assert.rejects(check,/does not match the current prepared package/);
 });
 
 test('multilingual summary requires the accepted output and passing receipt for every source', async t => {

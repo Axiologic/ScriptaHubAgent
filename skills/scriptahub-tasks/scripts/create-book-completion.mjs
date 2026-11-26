@@ -1,7 +1,7 @@
 import fs from 'node:fs/promises';
 import path from 'node:path';
 import { createHash } from 'node:crypto';
-import { atomicJson, insideRun, readManuscriptEditorial, verifySourceAudit, writeHandoff } from './workflow-checks.mjs';
+import { atomicJson, insideRun, preparedPackage, readManuscriptEditorial, verifySourceAudit, writeHandoff } from './workflow-checks.mjs';
 import { sharedEditorial } from './shared-editorial.mjs';
 import { artworkRequirement } from './publication-artwork.mjs';
 
@@ -167,6 +167,7 @@ export async function completeCreateBookPhase({directory, step, completionId}, c
     if (step === 'process-content') {
       const destination = ctx.destination;
       requireEvidence(ctx.repositories?.includes(destination?.catalogue) && destination?.branch
+        && [1,2].includes(destination.schemaVersion) && (destination.baseCommit !== null || destination.schemaVersion === 2)
         && (destination.baseCommit === null || /^[a-f0-9]{40}$/.test(destination.baseCommit)), 'Missing verified publication destination');
       requireEvidence(typeof ctx.translationRequest?.explicit === 'boolean' && Array.isArray(ctx.translationRequest.targets)
         && (ctx.translationRequest.explicit || !ctx.translationRequest.targets.length), 'Missing or inconsistent translation decision');
@@ -230,11 +231,17 @@ export async function completeCreateBookPhase({directory, step, completionId}, c
   }
 
   async function checkFinalApproval() {
-    const report = await json(directory + '/validation/final-report.json', 'final validation');
+    const validation = directory + '/validation/final-report.json';
+    const inventory = directory + '/validation/verified-inventory.json';
+    const report = await json(validation, 'final validation');
     requireEvidence(report.executionId === executionId && report.runId === task.runId && report.bookId === task.bookId
       && report.publicationPermitted === true && report.audit?.errorFindings === 0 && /^[a-f0-9]{64}$/.test(report.inventorySha256),
     'Missing final publication approval');
-    await artifact(directory + '/validation/verified-inventory.json', 'approved inventory', report.inventorySha256);
+    const prepared = await preparedPackage(directory,executionId,task.bookId);
+    requireEvidence(prepared.approval?.validation === validation && prepared.approval?.inventory === inventory
+      && prepared.inventory.sha256 === report.draftInventorySha256, 'Final approval does not match the current prepared package');
+    await artifact(prepared.inventory.path, 'draft inventory', report.draftInventorySha256);
+    await artifact(inventory, 'approved inventory', report.inventorySha256);
     requireEvidence(packageModeration.status === 'passed' && packageModeration.inventorySha256 === report.inventorySha256,
       'The frozen publication inventory must have a matching moderation verdict');
   }

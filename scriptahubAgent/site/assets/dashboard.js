@@ -205,6 +205,7 @@ function changeCard(change) {
   const editorial = ['manuscript','book-proposal'].includes(change.kind) && change.cycle;
   const canReview = change.state === 'open'
     && (data.canManageTasks || change.owner === data.user.id)
+    && (change.kind !== 'animation' || !change.cycle || change.cycle.phase === 'review')
     && (!editorial || (data.canManageTasks && change.cycle.phase === 'review'));
   addCycleState(node,change.cycle,change.author === data.user.id);
   const decisions={...(change.payload.annotationDecisions || {})}, selected=new Set();
@@ -430,8 +431,8 @@ function renderPointsSection(name, target) {
     node.append(element('p', t('Loading dashboard…'), 'dashboard-meta'));
     entry = {node};dashboardSections.set(name,entry);
     const modules = {
-      settings: () => import('./account-admin.js?v=credit-release-1'),
-      users: () => import('./account-users.js?v=credit-release-1'),
+      settings: () => import('./account-admin.js?v=animation-cost-1'),
+      users: () => import('./account-users.js?v=users-errors-1'),
       points: () => import('./account-points.js?v=credit-release-1'),
     };
     const loadModule = modules[name]();

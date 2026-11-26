@@ -6,6 +6,26 @@ import crypto from 'node:crypto';
 import { readBody } from './submissions.mjs';
 import { verifyRecord } from './record-integrity.mjs';
 
+function userAdminError(res, status, code) {
+  res.writeHead(status, {'content-type':'application/json','cache-control':'no-store'});
+  res.end(JSON.stringify({code}));
+}
+
+function userAdminUpstreamError(res, operation, error) {
+  const status = error.data?.statusCode ?? error.data?.status ?? error.status ?? error.statusCode;
+  const code = error.data?.code ?? error.code;
+  let failure;
+  if (status === 429) failure = [429,'try_later'];
+  else if (code === 'PLOINKY_AGENT_MCP_TIMEOUT' || status === 504) failure = [504,'account_service_timeout'];
+  else if ([401,403].includes(status) || ['admin_required','authentication_required','forbidden'].includes(code)
+    || /delegation (?:tool not allowed|expired|target mismatch|source mismatch)/i.test(error.message ?? '')) {
+    failure = [403,'account_service_access'];
+  } else if (status === 400 || code === -32602) failure = [502,'account_service_rejected'];
+  else failure = [503,'account_service_unavailable'];
+  console.error('ScriptaHub user administration:', operation, failure[1], Number.isInteger(status) ? status : '');
+  userAdminError(res,...failure);
+}
+
 export async function handleDashboard({ req, res, url, pathname, verifyUser, getStore, catalogue, pointsPolicy, dataDir, rememberMember, isBetaVersion, publicMount = '' }) {
   const body = req.method === 'POST' ? await readBody(req, 32768) : Buffer.alloc(0);
   const user = await verifyUser(req, url, body);
@@ -52,14 +72,25 @@ export async function handleDashboard({ req, res, url, pathname, verifyUser, get
       });
     } else if (pathname === '/api/dashboard/points/users' && req.method === 'GET' && admin) {
       const start = Number(url.searchParams.get('start') || 0);
-      if (!Number.isSafeInteger(start) || start < 0) throw new Error('Invalid users page.');
-      result = await user.userAgentCall('userpersisto_user_list',{search:(url.searchParams.get('search') || '').slice(0,200),start,pageSize:25});
+      if (!Number.isSafeInteger(start) || start < 0) return userAdminError(res,400,'users_page_invalid');
+      try {
+        result = await user.userAgentCall('userpersisto_user_list',{search:(url.searchParams.get('search') || '').slice(0,200),start,pageSize:25});
+      } catch (error) {
+        return userAdminUpstreamError(res,'list users',error);
+      }
     } else if (pathname === '/api/dashboard/points/grant' && req.method === 'POST' && admin) {
-      const { userId, amount, reason, requestId } = JSON.parse(body.toString());
+      let input;
+      try { input = JSON.parse(body.toString()); }
+      catch { return userAdminError(res,400,'credit_award_invalid'); }
+      const { userId, amount, reason, requestId } = input ?? {};
       if (typeof userId !== 'string' || !Number.isSafeInteger(amount) || amount < 1 || amount > 1000000
         || typeof reason !== 'string' || !reason.trim() || reason.length > 500
-        || typeof requestId !== 'string' || !/^[0-9a-f-]{36}$/i.test(requestId)) throw new Error('Invalid points award.');
-      result = await user.userAgentCall('userpersisto_credits_grant',{userId,amount,reason:reason.trim(),referenceId:'scriptahub:admin:' + requestId});
+        || typeof requestId !== 'string' || !/^[0-9a-f-]{36}$/i.test(requestId)) return userAdminError(res,400,'credit_award_invalid');
+      try {
+        result = await user.userAgentCall('userpersisto_credits_grant',{userId,amount,reason:reason.trim(),referenceId:'scriptahub:admin:' + requestId});
+      } catch (error) {
+        return userAdminUpstreamError(res,'award credits',error);
+      }
     } else if (pathname === '/api/dashboard/points/checkout-status' && req.method === 'POST') {
       const input = JSON.parse(body.toString());
       if (!input || Object.keys(input).some(key=>key!=='sessionId') || !/^cs_[A-Za-z0-9_]{1,200}$/.test(input.sessionId || '')) throw new Error('Invalid checkout session.');

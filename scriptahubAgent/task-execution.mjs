@@ -91,7 +91,7 @@ export class TaskExecution {
         files:requests.flatMap(request=>request.files),result:row.result,error:row.error};
     }
     return { executionId: row.id, runId: row.run_id, taskId: row.task_id, state: row.state,
-      bookId: book.id, ownerId: book.owner, authorId: change.author, type: `scriptahub.${row.kind}`,
+      bookId: book.id, ownerId: book.owner, authorId: change.author, createdAt: change.created_at, type: `scriptahub.${row.kind}`,
       values: Object.fromEntries(Object.entries(payload.metadata.values).filter(([key]) => !['annotations','annotationDraftKey'].includes(key))), language: payload.metadata.language,
       baseRevision:change.base_revision, ...(payload.source ? {source:payload.source} : {}), annotations:approvedAnnotations(payload),
       files: payload.files.map((file, index) => ({ index, originalName: file.originalName, sha256: file.sha256, ...(file.role ? {role:file.role} : {}) })),

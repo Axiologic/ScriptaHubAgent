@@ -1,4 +1,4 @@
-import { mountPoints, pointsApi } from './account-points.js?v=credit-release-1';
+import { mountPoints, pointsApi } from './account-points.js?v=users-errors-1';
 import { newSubmissionId } from './submission-policy.js';
 
 const ro = document.documentElement.lang === 'ro';
@@ -8,6 +8,31 @@ const button = (en, romanian) => el('button', t(en,romanian), {type:'button',cla
 const personName = user => user.displayName || user.username || user.email || t('Unnamed account','Cont fără nume');
 const roles = user => (user.roles || []).map(role => role === 'admin' ? t('Administrator','Administrator') : role === 'user' || role === 'selfRegistered' ? t('Member','Membru') : role).join(' · ');
 const date = value => value ? new Date(value).toLocaleDateString(ro ? 'ro' : 'en') : '—';
+
+function errorMessage(error, action) {
+  if (error.status === 401) return t('Your session has expired. Sign in again.','Sesiunea a expirat. Autentifică-te din nou.');
+  if (error.code === 'account_service_access') return t(
+    'The account service did not authorize this action. Ask a platform administrator to check the access settings.',
+    'Serviciul de conturi a refuzat această acțiune. Cere unui administrator al platformei să verifice accesul.');
+  if (error.status === 403) return t(
+    'This action requires administrator access.','Această acțiune este disponibilă administratorilor.');
+  if (error.status === 429) return t(
+    'There were too many requests. Wait a moment and try again.','Au fost prea multe cereri. Așteaptă puțin și încearcă din nou.');
+  if (error.status === 504) return t(
+    'The account service took too long to respond. Try again.','Serviciul de conturi a răspuns prea greu. Încearcă din nou.');
+  if (error.code === 'users_page_invalid') return t(
+    'This page of users is invalid. Search again.','Pagina de utilizatori este invalidă. Repetă căutarea.');
+  if (error.code === 'credit_award_invalid') return t(
+    'Enter a valid number of credits and a reason.','Introdu un număr valid de credite și un motiv.');
+  if (error.code === 'account_service_rejected' || error.status === 400) return action === 'list'
+    ? t('The account service rejected the request for the user list. If it keeps happening, contact an administrator.',
+      'Serviciul de conturi a respins cererea de listare a utilizatorilor. Dacă problema persistă, contactează un administrator.')
+    : t('The account service rejected the credit award. If it keeps happening, contact an administrator.',
+      'Serviciul de conturi a respins acordarea creditelor. Dacă problema persistă, contactează un administrator.');
+  return action === 'list'
+    ? t('The user list could not be loaded. Try searching again.','Lista de utilizatori nu s-a putut încărca. Repetă căutarea.')
+    : t('The credit award could not be confirmed. Try again.','Acordarea creditelor nu a putut fi confirmată. Încearcă din nou.');
+}
 
 export async function mountUsers(host) {
   const listView = el('div',''), detailView = el('div','',{hidden:true});
@@ -51,7 +76,7 @@ export async function mountUsers(host) {
         await points.refresh();
         grantStatus.textContent=t('Credits awarded.','Creditele au fost acordate.');
         amount.value=reason.value='';requestId=undefined;
-      } catch(error) {grantStatus.textContent=error.message;}
+      } catch(error) {grantStatus.textContent=errorMessage(error,'grant');}
       finally {pending=false;grant.disabled=amount.disabled=reason.disabled=false;}
     };
     // The personal points view has its own state and is never switched to this user.
@@ -80,7 +105,7 @@ export async function mountUsers(host) {
       const previous=button('Previous','Înapoi'),next=button('Next','Înainte');
       previous.onclick=()=>void load(Math.max(0,start-25));next.onclick=()=>void load(start+25);
       if(start)pages.append(previous);if(start+result.users.length<total)pages.append(next);
-    }catch(error){if(token===request){list.replaceChildren();pages.replaceChildren();status.textContent=error.message;}}
+    }catch(error){if(token===request){list.replaceChildren();pages.replaceChildren();status.textContent=errorMessage(error,'list');}}
     finally{if(token===request)list.removeAttribute('aria-busy');}
   }
   searchForm.onsubmit=event=>{event.preventDefault();clearTimeout(timer);void load();};

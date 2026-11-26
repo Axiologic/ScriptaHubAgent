@@ -103,6 +103,7 @@ export class ApprovalCycles {
     const phase = row.kind === 'edition' || row.cost > 0 ? 'funding' : 'active';
     this.db.prepare(`UPDATE approval_cycles SET attempt=?,phase=?,task_id=NULL,issue=NULL,missing=NULL,
       reviewer=NULL,notification_id=NULL,updated_at=? WHERE id=?`).run(nextAttempt,phase,now(),row.id);
+    if (row.kind === 'animation') return this.present(this.read(row.id));
     if (row.kind === 'edition') {
       const original = this.db.prepare('SELECT * FROM tasks WHERE id=?').get(row.task_id);
       if (!original || original.base_revision !== this.store.book(row.book_id).revision) {

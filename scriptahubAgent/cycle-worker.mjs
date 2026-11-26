@@ -9,6 +9,7 @@ const creditReasons = {
   'book-proposal': 'AI book generation',
   edition: 'New book edition',
   fork: 'Derived book',
+  animation: 'Animation suggestion',
 };
 
 export function creditOperation(row, operation, amount) {
@@ -50,6 +51,20 @@ export async function advanceCycles(store, { apply = points, send = sendEmail, r
             const notice = cycles.notify(row,'Request restored',`Your request was restored. You need ${result.missing} more credits before trying again.`);
             transition('retryable','Insufficient points.',result.missing,notice);
           });
+        } else if (row.kind === 'animation') {
+          store.transaction(() => {
+            const cycle = cycles.read(row.id);
+            if (cycle?.phase !== 'funding' || cycle.attempt !== row.attempt) return;
+            const book = store.book(row.book_id);
+            if (book.owner === row.owner) {
+              db.prepare("UPDATE changes SET state='accepted',decided_at=?,decided_by=? WHERE id=?")
+                .run(timestamp(),row.owner,row.change_id);
+              store.event(row.owner,'change.accepted',row.book_id,row.change_id);
+              transition('completed');
+            } else {
+              transition('review');
+            }
+          });
         } else transition('active');
       } else if (row.phase === 'rewarding') {
         if (row.reward_validity_days && !row.expires_at) {
@@ -69,6 +84,11 @@ export async function advanceCycles(store, { apply = points, send = sendEmail, r
       } else if (row.phase === 'restoring') {
         if (row.cost) await apply(row,'refund',row.cost);
         store.transaction(() => {
+          if (row.kind === 'animation') {
+            const notice = cycles.notify(row,'Animation suggestion declined','Your animation suggestion was declined. The credits were returned.');
+            transition('rejected',null,null,notice);
+            return;
+          }
           if (row.change_id && ['manuscript','book-proposal'].includes(row.kind)) {
             db.prepare("UPDATE changes SET state='accepted',decided_at=NULL,decided_by=NULL,decision_note=NULL WHERE id=?").run(row.change_id);
           }

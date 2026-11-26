@@ -2,7 +2,13 @@ import fs from 'node:fs/promises';
 import path from 'node:path';
 import crypto from 'node:crypto';
 
-export const defaultPoints = Object.freeze({ initialCredits: 0, bookReward: 10, correctionReward: 2, editionCost: 5, forkCost: 8, promptBookCost: 8, rewardValidityDays: 180, firstNoticeDays: 30, lastNoticeDays: 7 });
+export const defaultPoints = Object.freeze({ initialCredits: 0, bookReward: 10, correctionReward: 2, editionCost: 5, forkCost: 8, promptBookCost: 8, animationCost: 5, rewardValidityDays: 180, firstNoticeDays: 30, lastNoticeDays: 7 });
+
+export function submissionCreditCost(kind, policy) {
+  if (kind === 'fork') return policy?.forkCost;
+  if (kind === 'book-proposal') return policy?.promptBookCost;
+  if (kind === 'animation') return policy?.animationCost;
+}
 
 export function validatePoints(points) {
   if (points === undefined) return { ...defaultPoints };

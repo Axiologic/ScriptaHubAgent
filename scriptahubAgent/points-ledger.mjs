@@ -4,7 +4,7 @@ export function describePointsLedger(store, ledger, owner, catalogue, language =
   const lookup = store.db.prepare(`SELECT b.id,b.title FROM approval_cycles ac
     JOIN books b ON b.id=ac.book_id WHERE ac.id=? AND ac.owner=?`);
   return {...ledger, entries:ledger.entries.map(entry => {
-    const match = /^(?:agent:ScriptaHubAgent\/scriptahubAgent:)?scriptahub:(?:reward|edition|fork|book-proposal):([a-f0-9-]{36})(?::[1-9][0-9]*)?$/i.exec(entry.referenceId || '');
+    const match = /^(?:agent:ScriptaHubAgent\/scriptahubAgent:)?scriptahub:(?:reward|edition|fork|book-proposal|animation):([a-f0-9-]{36})(?::[1-9][0-9]*)?$/i.exec(entry.referenceId || '');
     const record = match && lookup.get(match[1],owner);
     if (!record) return entry;
     const published = catalogue.find(book => book.id === record.id);

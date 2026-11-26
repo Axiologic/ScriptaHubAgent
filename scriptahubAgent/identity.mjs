@@ -15,7 +15,11 @@ export function parseToolResult(response) {
   const result = Array.isArray(response?.content)
     ? JSON.parse(response.content.filter(item => item.type === 'text').map(item => item.text).join('\n'))
     : response;
-  if (response?.isError || !result || result.error || result.ok === false) throw new Error(result?.error || 'Agent call failed');
+  if (response?.isError || !result || result.error || result.ok === false) {
+    throw Object.assign(new Error(result?.error || 'Agent call failed'), {
+      code:result?.code, status:result?.status ?? result?.statusCode,
+    });
+  }
   return result;
 }
 

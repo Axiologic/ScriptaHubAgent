@@ -730,7 +730,10 @@
         if (!response.ok) throw Error();
         cost = (await response.json())[key];
         if (!Number.isSafeInteger(cost) || cost < 0) throw Error();
-        notice.textContent = copy.creditCost(cost);
+        notice.textContent = key === 'animationCost'
+          ? (lang === 'ro' ? `Costul sugestiei: ${cost} ${cost === 1 ? 'credit' : 'credite'}`
+            : `Suggestion cost: ${cost} ${cost === 1 ? 'credit' : 'credits'}`)
+          : copy.creditCost(cost);
         form.dataset.contributionReady = 'true';
       } catch {
         cost = undefined;
@@ -860,20 +863,26 @@
     const animationContext = animation && book ? ScriptaBookView.markup(book, {variant: "compact-context", language: lang, showCategory: true, expandDescription: true}) : "";
     root.classList.toggle("animation-contribution", animation);
     root.innerHTML = `${embedded ? `<h2>${escape(words.feedbackTitle)}</h2>` : backToBook(book, lang) + pageHero(words.feedbackKicker, words.feedbackTitle)}<section class="workflow-layout"><form class="workflow-form" data-workflow-form>${animationContext ? `<div class="animation-book-reminder">${animationContext}</div>` : ""}<p class="workflow-message${animation ? " animation-contribution-question" : ""}">${escape(words.promise)}</p><div class="form-grid">
-      ${animation ? "" : `<label class="form-field form-field-wide"><span>${escape(words.kind)}</span><select name="kind">${words.kinds.map((kind) => `<option>${escape(kind)}</option>`).join("")}</select></label>`}${textarea(words.feedback, "feedback", words.feedbackHint, true)}${textarea(words.sources, "sources", words.sourcesHint)}</div><button class="workflow-submit" type="submit"${book ? "" : " disabled"}>${escape(submitLabels[lang])}</button><p class="workflow-note">${escape(ScriptaContributionBridge.note(lang))}</p><p class="workflow-status" data-workflow-status aria-live="polite"></p></form>${side}</section>`;
+      ${animation ? "" : `<label class="form-field form-field-wide"><span>${escape(words.kind)}</span><select name="kind">${words.kinds.map((kind) => `<option>${escape(kind)}</option>`).join("")}</select></label>`}${textarea(words.feedback, "feedback", words.feedbackHint, true)}${textarea(words.sources, "sources", words.sourcesHint)}</div>${book ? '<p class="workflow-note" data-creation-cost role="status"></p>' : ''}<button class="workflow-submit" type="submit"${book ? "" : " disabled"}>${escape(submitLabels[lang])}</button><p class="workflow-note">${escape(ScriptaContributionBridge.note(lang))}</p><p class="workflow-status" data-workflow-status aria-live="polite"></p></form>${side}</section>`;
     const form = root.querySelector("form");
     restoreDraft(form);
     form.dataset.contributionReady=String(Boolean(book));
     prepareContributionForm(form,lang);
-    form.addEventListener("submit", (event) => {
+    const cost = book ? costNotice(form,lang,'animationCost') : null;
+    form.addEventListener("submit", async event => {
       event.preventDefault();
-      if (!book || !form.reportValidity()) return;
+      if (!book || cost?.value() === undefined || !form.reportValidity()) return;
       const data = new FormData(form);
+      data.set('confirmedCost',String(cost.value()));
       const lines = [
         `Book ID: ${book.id}`, `Book: ${book.title[lang] || book.title.en}`, `Book directory: ${book.directory}`, `Edition language: ${lang}`, `Contribution type: ${animation ? (existing ? "Animation improvement" : "Animation proposal") : data.get("kind") || ""}`, ...(animation ? [`Animation source edition: ${book.animation?.edition || "Not yet produced"}`, `Animation file: ${book.animation?.shf || "None"}`] : []),
         "PROPOSED CHANGE / FEEDBACK", data.get("feedback") || "", "", "SOURCES / CONTEXT", data.get("sources") || "",
       ];
-      submitContribution(`${words.feedbackSubject}: ${book.title[lang] || book.title.en}`, lines, lang, form);
+      await submitContribution(`${words.feedbackSubject}: ${book.title[lang] || book.title.en}`, lines, lang, form, [], data, 'animation');
+      if (form.dataset.refreshContributionCost === 'true') {
+        delete form.dataset.refreshContributionCost;
+        await cost.load();
+      }
     });
   }
 

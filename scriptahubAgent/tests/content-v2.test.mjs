@@ -63,6 +63,8 @@ test('content-only format renders the unchanged Metacult URL and maps shared res
   assert.match(markup, /Original authored presentation/);
   assert.match(markup, /data-reading-format="read"/);
   assert.match(markup, /data-book-feedback/);
+  assert.match(markup, /<nav class="book-side-actions"[^>]*><a[^>]*data-animation-link/);
+  assert.doesNotMatch(markup.match(/<div class="book-actions">[^]*?<\/div>/)[0], /data-animation-link/);
   assert.equal(requests.length, 2, 'the book landing page is rendered by the agent');
   const css = markup.match(/href="([^"]*assets\/site\.css(?:\?[^"]*)?)"/)[1];
   assert.equal((await fetch(new URL(css, legacyUrl))).status, 200);

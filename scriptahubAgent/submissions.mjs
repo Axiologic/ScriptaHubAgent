@@ -1,3 +1,4 @@
+import { submissionCreditCost } from './points-policy.mjs';
 import { annotations } from './annotations.mjs';
 import fs from 'node:fs/promises';
 import path from 'node:path';
@@ -72,6 +73,9 @@ export async function saveSubmission({ body, contentType, user, dataDir, store, 
   if (meta.kind === 'fork' && (uploads.length || meta.targetBookId || !meta.values.titles?.trim() || !meta.values.prompt?.trim() || !meta.values.sourceEdition)) {
     throw new Error('A derived book requires a source edition, a new title and instructions.');
   }
+  if (meta.kind === 'animation' && !meta.values.feedback?.trim()) {
+    throw new Error('Describe the animation suggestion before submitting.');
+  }
   if (meta.kind === 'manuscript') {
     if (!uploads.length) throw new Error('A manuscript is required');
     const fields = new Set(['title','titles','readerLayout','readerTypography','coverMode','coverStyle','coverPalette','coverComposition','coverDescription']);
@@ -109,7 +113,7 @@ export async function saveSubmission({ body, contentType, user, dataDir, store, 
     return store.submit(existing,policy);
   };
   if (await fs.stat(directory).then(() => true, error => error.code === 'ENOENT' ? false : Promise.reject(error))) return existingReceipt();
-  const cost = meta.kind === 'fork' ? policy?.forkCost : meta.kind === 'book-proposal' ? policy?.promptBookCost : undefined;
+  const cost = submissionCreditCost(meta.kind,policy);
   if (cost !== undefined && (meta.confirmedCost ?? 0) !== cost) {
     throw Object.assign(new Error('The points cost has changed. Review it before continuing.'), {status:409});
   }
