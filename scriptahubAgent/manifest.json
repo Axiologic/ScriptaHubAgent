@@ -287,7 +287,10 @@
           "default": "agent:AchillesIDE/roboTeamAgent"
         }
       ]
-    }
+    },
+    "dev": {},
+    "qa": {},
+    "prod": {}
   },
   "ideSettings": [
     {
