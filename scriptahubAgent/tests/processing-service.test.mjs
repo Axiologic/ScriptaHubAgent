@@ -149,6 +149,39 @@ test('log overflow stops worker and cannot report success',async t=>{
   const status=await f.service.dispatch('scriptahub_skill_job_status',owner,{executionId:'execution',jobId:'job'});assert.equal(status.reason,'Log limit exceeded');
 });
 
+test('live workspace accounting tolerates temporary files and directories removed during a scan', async t => {
+  const f = await fixture(t, 'setInterval(() => {}, 1000)');
+  await f.prepare();
+  await f.service.start(owner, {executionId:'execution', jobId:'job'});
+  const job = f.service.directory({execution_id:'execution', job_id:'job'});
+  const task = path.join(job, 'task'), temporary = path.join(task, 'temporary');
+  const scratch = path.join(task, 'scratch');
+  await fs.writeFile(temporary, 'temporary');
+  await fs.mkdir(scratch);
+  await fs.writeFile(path.join(task, 'final.html'), 'result');
+  const io = (await import('node:fs')).default;
+  const list = io.readdirSync;
+  let removedFile = false, removedDirectory = false;
+  io.readdirSync = function (directory, ...args) {
+    if (directory === scratch && !removedDirectory) {
+      removedDirectory = true;
+      io.rmdirSync(scratch);
+    }
+    const entries = list.call(this, directory, ...args);
+    if (directory === task && !removedFile) {
+      removedFile = true;
+      io.unlinkSync(temporary);
+    }
+    return entries;
+  };
+  try { assert.ok(f.service.diskUsage() >= Buffer.byteLength('result')); }
+  finally { io.readdirSync = list; }
+  assert.ok(removedFile && removedDirectory);
+  assert.equal((await f.service.dispatch('scriptahub_skill_job_status', owner, {
+    executionId:'execution', jobId:'job'
+  })).state, 'running');
+});
+
 test('low storage refuses start and monitor failure stops an active worker',async t=>{
   const f=await fixture(t,'setInterval(()=>{},1000)');await f.prepare();
   const available=f.service.available;f.service.available=()=>0;

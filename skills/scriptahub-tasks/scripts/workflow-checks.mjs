@@ -1,3 +1,4 @@
+import {publicationFiles} from './publication-files.mjs';
 import { validateCatalogueKeywords } from './catalogue-keywords.mjs';
 import {withExecutionLock} from './anchored-files.mjs';
 import {guardRemoteBackups} from './remote-skill.mjs';
@@ -230,14 +231,10 @@ export async function verifyPackage(input,{hook=async()=>{}}={}) {
   const inventoryBytes=await fs.readFile(inventoryPath);
   const inventory=JSON.parse(inventoryBytes);
   if(inventory.executionId!==input.executionId || !Array.isArray(inventory.files) || !inventory.files.length)throw new Error('Inventory belongs to another execution or has no files');
-  const names=new Set();let bytes=0;
+  const candidates=new Set();
   for(const entry of inventory.files){
-    if(typeof entry.path!=='string'||/[\\\0]/.test(entry.path)||entry.path.startsWith('/')||entry.path.split('/').some(p=>!p||p==='.'||p==='..'||p.toLowerCase()==='.git')||names.has(entry.path))throw new Error('Unsafe or duplicate inventory path');
-    names.add(entry.path);
-    const file=await insideRun(path.relative(process.cwd(),path.join(root,entry.path)));
-    const value=await fs.readFile(file);
-    if(value.length!==entry.size||hash(value)!==entry.sha256)throw new Error('Inventory differs from package: '+entry.path);
-    bytes+=value.length;
+    if(typeof entry.path!=='string'||/[\\\0]/.test(entry.path)||entry.path.startsWith('/')||entry.path.split('/').some(p=>!p||p==='.'||p==='..'||p.toLowerCase()==='.git')||candidates.has(entry.path))throw new Error('Unsafe or duplicate inventory path');
+    candidates.add(entry.path);
   }
   const runGit=async args=>(await execute('git',['-c','core.hooksPath=/dev/null','-c','credential.helper=',...args],{cwd:root,timeout:30000,maxBuffer:8*1024*1024,env:{PATH:process.env.PATH,HOME:os.homedir(),GIT_TERMINAL_PROMPT:'0',GIT_ALLOW_PROTOCOL:'https',GIT_CONFIG_NOSYSTEM:'1',GIT_CONFIG_GLOBAL:'/dev/null'}})).stdout.trim();
   if(inventory.baseCommit!==null && !/^[a-f0-9]{40}$/.test(inventory.baseCommit || ''))throw new Error('Invalid base commit');
@@ -252,10 +249,19 @@ export async function verifyPackage(input,{hook=async()=>{}}={}) {
     : catalogue.hostname==='raw.githubusercontent.com' ? /^\/([\w.-]+)\/([\w.-]+)\/(.+)$/.exec(catalogue.pathname) : null;
   if(!match||!input.branch||!match[3].startsWith(input.branch+'/')||!/^refs\/heads\/[A-Za-z0-9][A-Za-z0-9._/-]*$/.test('refs/heads/'+input.branch))throw new Error('Catalogue/branch mismatch');
   const collectionPath=match[3].slice(input.branch.length+1);
-  if(path.posix.basename(collectionPath)!=='collection.json'||!names.has(collectionPath))throw new Error('Inventory must contain the catalogue update');
-  const collection=JSON.parse(await fs.readFile(path.join(root,collectionPath),'utf8'));
+  if(path.posix.basename(collectionPath)!=='collection.json'||!candidates.has(collectionPath))throw new Error('Inventory must contain the catalogue update');
+  const read = async name => fs.readFile(await insideRun(path.relative(process.cwd(),path.join(root,name))));
+  const collection=JSON.parse(await read(collectionPath));
   if(![1,2].includes(collection.schemaVersion)||!Array.isArray(collection.books)||collection.bookCount!==collection.books.length||new Set(collection.books.map(b=>b.id)).size!==collection.books.length||!collection.books.some(b=>b.id===input.bookId))throw new Error('Catalogue structure or task identity is invalid');
   validateCatalogueKeywords(collection);
+  const names = await publicationFiles(collectionPath, collection, input.bookId, candidates, read);
+  const files = inventory.files.filter(entry => names.has(entry.path));
+  let bytes = 0;
+  for (const entry of files) {
+    const value = await read(entry.path);
+    if (value.length !== entry.size || hash(value) !== entry.sha256) throw Error('Inventory differs from package: ' + entry.path);
+    bytes += value.length;
+  }
   const checksAudit = input.audit || input.audits || input.finalize;
   let task;
   if (checksAudit || input.checkReadingRoutes) {
@@ -401,7 +407,7 @@ export async function verifyPackage(input,{hook=async()=>{}}={}) {
     if (input.finalize) {
       if (typeof task.runId !== 'string' || !task.runId) throw Error('Missing claimed run identity');
       const validationRoot = path.posix.join(input.directory || '.', 'validation');
-      const approved = await atomicJson(validationRoot + '/verified-inventory.json', {...inventory, publicationPermitted: true});
+      const approved = await atomicJson(validationRoot + '/verified-inventory.json', {...inventory, files, publicationPermitted: true});
       const validation = await atomicJson(validationRoot + '/final-report.json', {
         executionId: input.executionId, runId: task.runId, bookId: input.bookId, publicationPermitted: true,
         audit: report.audit, reports, inventorySha256: approved.sha256,

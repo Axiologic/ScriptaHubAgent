@@ -680,14 +680,16 @@ test('publication requires all server-prepared units for the exact uploaded pack
       {digest:'b'.repeat(64),file:html.path,text:'Second part',changeId:null,image:Buffer.from('fixture image')}
     ]};
   };
-  f.upload();
   const args={executionId:f.task.executionId,stage:'package'};
+  assert.deepEqual(await f.service.moderateTask(agent,{...args,action:'status'}),{status:'pending'});
+  f.upload();
   await assert.rejects(f.publisher.publish(agent,args,f.config),/Complete robot moderation/);
   const first=await f.service.moderateTask(agent,args);
   assert.equal(first.position,0);
   await assert.rejects(f.service.moderateTask(agent,{...args,action:'record',position:0,digest:'0'.repeat(64),verdict:'passed'}),/does not match/);
   const second=await f.service.moderateTask(agent,{...args,action:'record',position:0,digest:first.digest,verdict:'passed'});
   assert.deepEqual(await f.service.moderateTask(agent,args),second);
+  assert.deepEqual(await f.service.moderateTask(agent,{...args,action:'status'}),{status:'pending',completedUnits:1});
   await assert.rejects(f.publisher.publish(agent,args,f.config),/Complete robot moderation/);
   const image=await f.service.moderateTask(agent,{...args,action:'image',position:1,digest:second.digest});
   assert.equal(Buffer.from(image.data,'base64').toString(),'fixture image');
@@ -698,6 +700,55 @@ test('publication requires all server-prepared units for the exact uploaded pack
   assert.equal(f.pushes(),0);
   assert.equal(f.service.moderationPassed(f.task.executionId,'package',f.publisher.row(f.task.executionId).digest),false);
 });
+
+for (const change of ['unchanged','changed bytes','changed render']) {
+  test('final moderation handles earlier artifact evidence: '+change,async t=>{
+    const f = await fixture(t,{kind:'book-proposal',approvePackage:false});
+    const {prepareReviewUnits} = await import('../content-moderation.mjs');
+    let renderedText = 'Original reader';
+    f.service.prepareModeration = (context,files) => prepareReviewUnits(context,files,{
+      prepare: async (root, _taskId, _file, output) => {
+        const directory = path.join(root,output);
+        await fs.mkdir(directory,{recursive:true});
+        await fs.writeFile(path.join(directory,'page.png'),'image:'+renderedText);
+        await fs.writeFile(path.join(directory,'units.json'),JSON.stringify([{image:'page.png',text:renderedText}]));
+        return true;
+      }
+    });
+    const executionId = f.task.executionId;
+    const artifact = {executionId,stage:'artifact'};
+    const finalFile = [...f.files.keys()].find(name => name.endsWith('/full.html'));
+    const file = 'sources/reader.html';
+    const bytes = change === 'changed bytes' ? Buffer.from('<p>Earlier bytes</p>') : f.files.get(finalFile);
+    const inventory = [{path:file,sha256:sha256(bytes),size:bytes.length}];
+    const {artifactId} = await f.service.moderateTask(agent,{...artifact,action:'prepare',file,files:inventory});
+    await f.service.moderateTask(agent,{...artifact,artifactId,action:'upload',file,offset:0,data:bytes.toString('base64')});
+    const first = await f.service.moderateTask(agent,{...artifact,artifactId,action:'next'});
+    assert.equal(first.file,file);
+    assert.equal(first.text,'Original reader');
+    assert.deepEqual(await f.service.moderateTask(agent,{...artifact,artifactId,action:'record',
+      position:first.position,digest:first.digest,verdict:'passed'}),{status:'passed'});
+    assert.deepEqual(await f.service.moderateTask(agent,{...artifact,action:'prepare',file,files:inventory}),
+      {artifactId,status:'passed'});
+    assert.deepEqual(await f.service.moderateTask(agent,{...artifact,action:'status'}),{status:'idle'});
+    assert.deepEqual(await f.service.moderateTask(agent,{...artifact,action:'status',file,digest:sha256(bytes)}),{status:'passed'});
+    assert.deepEqual(await f.service.moderateTask(agent,{...artifact,action:'status',file,digest:'0'.repeat(64)}),{status:'pending'});
+    if (change === 'changed render') renderedText = 'Rendered with different dependencies';
+    f.input.validation.inventorySha256 = '2'.repeat(64);
+    f.upload();
+    const publication = {executionId,stage:'package'};
+    const reviewed = [];
+    let unit = await f.service.moderateTask(agent,publication);
+    while (unit.status === 'review') {
+      reviewed.push(unit.file);
+      unit = await f.service.moderateTask(agent,{...publication,action:'record',position:unit.position,digest:unit.digest,verdict:'passed'});
+    }
+    assert.equal(reviewed.includes(finalFile),change !== 'unchanged');
+    assert.ok(reviewed.includes('collection.json'));
+    assert.deepEqual(await f.service.moderateTask(agent,{...publication,action:'status'}),
+      {status:'passed',inventorySha256:f.input.validation.inventorySha256});
+  });
+}
 
 test('the robot can publish after recording all submission and package verdicts',async t=>{
   const f=await fixture(t,{kind:'book-proposal',approvePackage:false});

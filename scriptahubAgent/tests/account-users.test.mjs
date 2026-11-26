@@ -4,6 +4,7 @@ import fs from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 import {createSiteServer} from '../server.mjs';
+import {savePointsPolicy} from '../points-policy.mjs';
 
 test('user administration is admin-only, paginated and independent of personal points',async t=>{
   const dataDir=await fs.mkdtemp(path.join(os.tmpdir(),'scripta-users-'));
@@ -16,10 +17,6 @@ test('user administration is admin-only, paginated and independent of personal p
       if(tool==='userpersisto_credits_balance')return {balance:args.userId==='admin'?100:20,reservedBalance:0};
       if(tool==='userpersisto_credits_ledger')return {entries:[],totalCount:0};
       if(tool==='userpersisto_credits_grant')return {ok:true};
-      if(tool==='userpersisto_billing_credit_price_get')return {unitAmountMinor:500,currency:'eur'};
-      if(tool==='userpersisto_billing_credit_price_set')return args;
-      if(tool==='userpersisto_billing_checkout_create')return {sessionId:'cs_test_checkout',clientSecret:'cs_test_checkout_secret_x',publishableKey:'pk_test_public'};
-      if(tool==='userpersisto_billing_checkout_verify')return {status:'paid',credited:true,credits:137};
       throw Error('Unexpected tool '+tool);
     }};
   };
@@ -30,7 +27,9 @@ test('user administration is admin-only, paginated and independent of personal p
   assert.equal((await (await get('admin','/api/session')).json()).canManageUsers,true);
   assert.equal((await (await get('reader','/api/session')).json()).canManageUsers,false);
   assert.equal((await (await get('admin','/api/dashboard')).json()).canManageUsers,true);
-  assert.equal((await (await get('reader','/api/dashboard')).json()).canManageUsers,false);
+  const dashboard = await (await get('reader','/api/dashboard')).json();
+  assert.equal(dashboard.canManageUsers,false);
+  assert.equal(dashboard.isBetaVersion,true);
   assert.equal((await get('reader','/api/dashboard/points/users')).status,403);
   assert.equal(calls.some(call=>call.tool==='userpersisto_user_list'),false);
   const users=await get('admin','/api/dashboard/points/users?search=Reader&start=25');assert.equal(users.status,200);
@@ -48,7 +47,7 @@ test('user administration is admin-only, paginated and independent of personal p
   const policyUrl='/api/dashboard/points/policy';
   assert.equal((await get('reader',policyUrl)).status,403);
   const policy=(await (await get('admin',policyUrl)).json()).points;
-  assert.deepEqual(policy,{bookReward:10,correctionReward:2,editionCost:5,forkCost:8,promptBookCost:8,rewardValidityDays:180,firstNoticeDays:30,lastNoticeDays:7});
+  assert.deepEqual(policy,{initialCredits:0,bookReward:10,correctionReward:2,editionCost:5,forkCost:8,promptBookCost:8,rewardValidityDays:180,firstNoticeDays:30,lastNoticeDays:7});
   const savePolicy=(actor,points)=>fetch(base+policyUrl,{method:'POST',headers:{'x-test-user':actor,'content-type':'application/json'},body:JSON.stringify(points)});
   assert.equal((await savePolicy('reader',policy)).status,403);
   const updated={...policy,bookReward:20,correctionReward:5,editionCost:10,forkCost:15,promptBookCost:20,rewardValidityDays:90,firstNoticeDays:14,lastNoticeDays:3};
@@ -59,11 +58,44 @@ test('user administration is admin-only, paginated and independent of personal p
   assert.equal((await savePolicy('admin',{...updated,bookReward:-1})).status,400);
   assert.deepEqual((await (await get('admin',policyUrl)).json()).points,updated);
 
-  const disabled={bookReward:0,correctionReward:0,editionCost:0,forkCost:0,promptBookCost:0,rewardValidityDays:0,firstNoticeDays:0,lastNoticeDays:0};
+  const disabled={initialCredits:0,bookReward:0,correctionReward:0,editionCost:0,forkCost:0,promptBookCost:0,rewardValidityDays:0,firstNoticeDays:0,lastNoticeDays:0};
   assert.equal((await savePolicy('admin',disabled)).status,200);
   assert.deepEqual((await (await get('admin',policyUrl)).json()).points,disabled,'saved zero values override defaults');
   assert.deepEqual(JSON.parse(await fs.readFile(path.join(dataDir,'points.json'),'utf8')),disabled);
 
+  const count = calls.length;
+  const json = { method: 'POST', headers: {'x-test-user': 'admin', 'content-type': 'application/json'}, body: '{}' };
+  const billing = '/api/dashboard/points/';
+  assert.equal((await get('reader',billing+'offer')).status,404);
+  assert.equal((await get('admin',billing+'offer-settings')).status,404);
+  assert.equal((await fetch(base+billing+'offer-settings',json)).status,404);
+  assert.equal((await fetch(base+billing+'checkout-status',json)).status,404);
+  assert.equal((await fetch(base+'/base-agent-additional-server/scriptahubAgent/3002'+billing+'checkout',json)).status,404);
+  assert.equal(calls.length,count,'disabled payment routes never contact UserPersisto');
+});
+
+test('outside beta the original pricing, checkout and reconciliation are available',async t=>{
+  const dataDir=await fs.mkdtemp(path.join(os.tmpdir(),'scripta-purchases-'));
+  const calls=[];
+  const verifyUser=async req=>{
+    const name=req.headers['x-test-user'];if(!name)return null;
+    return {id:'user:'+name,email:name+'@example.test',roles:name==='admin'?['admin']:['user'],userAgentCall:async(tool,args)=>{
+      calls.push({actor:name,tool,args});
+      if(tool==='userpersisto_billing_credits_offer')return {available:true,unitAmountMinor:500,currency:'eur'};
+      if(tool==='userpersisto_billing_credit_price_get')return {unitAmountMinor:500,currency:'eur'};
+      if(tool==='userpersisto_billing_credit_price_set')return args;
+      if(tool==='userpersisto_billing_checkout_create')return {sessionId:'cs_test_checkout'};
+      if(tool==='userpersisto_billing_checkout_verify')return {status:'paid',credited:true,credits:137};
+      throw Error('Unexpected tool '+tool);
+    }};
+  };
+  const server=createSiteServer(dataDir,{dataDir,verifyUser,isBetaVersion:false});
+  await new Promise(resolve=>server.listen(0,'127.0.0.1',resolve));
+  t.after(async()=>{await new Promise(resolve=>server.close(resolve));await fs.rm(dataDir,{recursive:true,force:true});});
+  const base='http://127.0.0.1:'+server.address().port;
+  const get=(actor,url)=>fetch(base+url,{headers:{'x-test-user':actor}});
+  assert.equal((await (await get('reader','/api/dashboard')).json()).isBetaVersion,false);
+  assert.equal((await (await get('reader','/api/dashboard/points/offer')).json()).available,true);
   assert.equal((await get('reader','/api/dashboard/points/offer-settings')).status,403);
   const pricing=await get('admin','/api/dashboard/points/offer-settings');assert.equal(pricing.status,200);
   assert.deepEqual(await pricing.json(),{unitAmountMinor:500,currency:'eur'});
@@ -113,4 +145,45 @@ test('user administration is admin-only, paginated and independent of personal p
   assert.ok(tools.includes('userpersisto_billing_credit_price_set'));
   assert.ok(!tools.includes('userpersisto_config_set'),'ScriptaHub does not receive access to provider secrets');
 
+});
+test('initial ScriptaHub credits lock the original amount and use a stable grant until confirmed',async t=>{
+  const dataDir=await fs.mkdtemp(path.join(os.tmpdir(),'scripta-initial-credits-'));
+  const calls=[], posted=new Map();
+  let loseFirstResponse=true;
+  const verifyUser=async req=>{
+    const name=req.headers['x-test-user'];
+    return name ? {id:'user:'+name,email:name+'@example.test'} : null;
+  };
+  const applyCredits=async args=>{
+    calls.push(args);
+    const key=args.userId+':'+args.referenceId;
+    if(posted.has(key)) assert.deepEqual(posted.get(key),args);
+    else posted.set(key,args);
+    if(loseFirstResponse){loseFirstResponse=false;throw Error('Response lost');}
+    return {ok:true};
+  };
+  const server=createSiteServer(dataDir,{dataDir,manageApprovals:true,verifyUser,applyCredits});
+  await new Promise(resolve=>server.listen(0,'127.0.0.1',resolve));
+  t.after(async()=>{await new Promise(resolve=>server.close(resolve));await fs.rm(dataDir,{recursive:true,force:true});});
+  const base='http://127.0.0.1:'+server.address().port;
+  const get=(name,pathname='/api/session')=>fetch(base+pathname,{headers:{'x-test-user':name}});
+  assert.equal((await get('existing')).status,200);
+  await savePointsPolicy(dataDir,{initialCredits:12});
+  assert.equal((await fetch(base+'/api/session')).status,401);
+  assert.equal((await get('existing')).status,200);
+  assert.equal(calls.length,0);
+
+  assert.equal((await get('reader')).status,503);
+  await savePointsPolicy(dataDir,{initialCredits:17});
+  const responses=await Promise.all([get('reader'),get('reader','/api/dashboard')]);
+  assert.deepEqual(responses.map(response=>response.status),[200,200]);
+  assert.equal((await get('reader')).status,200);
+  assert.ok(calls.length>=2);
+  assert.deepEqual(calls[0],{userId:'reader',amount:12,operation:'grant',referenceId:'scriptahub:initial-credits',reason:'Initial ScriptaHub credits'});
+  assert.ok(calls.every(call=>call.amount===12));
+  assert.equal(posted.size,1);
+
+  assert.equal((await get('later','/api/dashboard')).status,200);
+  assert.equal(calls.at(-1).amount,17);
+  assert.equal(posted.size,2);
 });

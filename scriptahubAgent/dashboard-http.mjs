@@ -6,11 +6,10 @@ import crypto from 'node:crypto';
 import { readBody } from './submissions.mjs';
 import { verifyRecord } from './record-integrity.mjs';
 
-export async function handleDashboard({ req, res, url, pathname, verifyUser, getStore, catalogue, pointsPolicy, dataDir, publicMount = '' }) {
+export async function handleDashboard({ req, res, url, pathname, verifyUser, getStore, catalogue, pointsPolicy, dataDir, rememberMember, isBetaVersion, publicMount = '' }) {
   const body = req.method === 'POST' ? await readBody(req, 32768) : Buffer.alloc(0);
   const user = await verifyUser(req, url, body);
   if (!user) { res.writeHead(401); res.end(); return; }
-  const store = getStore(); store.remember(user, catalogue());
   let result;
   if (pathname === '/api/dashboard/points/policy') {
     if (!user.roles?.includes('admin')) {res.writeHead(403);res.end();return;}
@@ -20,6 +19,12 @@ export async function handleDashboard({ req, res, url, pathname, verifyUser, get
     res.writeHead(200,{'content-type':'application/json','cache-control':'private, no-store'});
     res.end(JSON.stringify(result));return;
   }
+  if (isBetaVersion && ['/api/dashboard/points/offer', '/api/dashboard/points/offer-settings', '/api/dashboard/points/checkout', '/api/dashboard/points/checkout-status'].includes(pathname)) {
+    res.writeHead(404, {'cache-control':'no-store'}); res.end(); return;
+  }
+  const policy = await pointsPolicy();
+  await rememberMember(user, policy);
+  const store = getStore();
   if (pathname === '/api/dashboard/points' || pathname.startsWith('/api/dashboard/points/')) {
     if (!user.userAgentCall) throw Object.assign(new Error('Points service is unavailable.'), {status:503});
     const member = user.id.slice(5);
@@ -78,8 +83,8 @@ export async function handleDashboard({ req, res, url, pathname, verifyUser, get
     if (book.origin !== 'catalogue' && book.revision === 0 && !user.roles?.includes('admin') && !store.canRead(book,user)) { res.writeHead(404);res.end();return; }
     result = {bookId:book.id,revision:book.revision,owner:book.owner === user.id};
   }
-  else if (req.method === 'GET' && pathname === '/api/dashboard') result = { ...store.overview(user), pointsPolicy: await pointsPolicy() };
-  else if (req.method === 'GET' && pathname === '/api/dashboard/points-policy') result = await pointsPolicy();
+  else if (req.method === 'GET' && pathname === '/api/dashboard') result = { ...store.overview(user), pointsPolicy: policy, isBetaVersion };
+  else if (req.method === 'GET' && pathname === '/api/dashboard/points-policy') result = policy;
   else if (req.method === 'GET' && /^\/api\/dashboard\/files\/[0-9a-f-]{36}\/\d+$/.test(pathname)) {
     const [, submissionId, index] = pathname.match(/files\/([^/]+)\/(\d+)$/);
     const change = store.db.prepare('SELECT * FROM changes WHERE id=?').get(submissionId);
@@ -98,7 +103,6 @@ export async function handleDashboard({ req, res, url, pathname, verifyUser, get
     const input = JSON.parse(body.toString());
     if (pathname === '/api/dashboard/review') result = store.decide(user, input.changeId, input.decision, input.note, input.annotationDecisions, input.attempt);
     else if (pathname === '/api/dashboard/editions') {
-      const policy = await pointsPolicy();
       const {editionCost} = policy;
       if (!store.cycles.read(input.submissionId ?? '') && (input.confirmedCost ?? 0) !== editionCost) throw Object.assign(new Error('The points cost has changed. Review it before continuing.'), {status:409});
       result = store.submitEdition(user,input.bookId,input.submissionId,editionCost,policy);

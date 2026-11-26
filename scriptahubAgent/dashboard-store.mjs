@@ -12,6 +12,32 @@ const id = prefix => `${prefix}-${crypto.randomUUID().replaceAll('-', '')}`;
 const text = (value, max = 16000) => typeof value === 'string' && value.trim().length <= max ? value.trim() : fail('Invalid text');
 
 const standaloneEditionInstructions = 'Review the existing book and prepare a complete new edition, preserving its subject and attribution.';
+const wordSegments = new Intl.Segmenter(undefined, { granularity: 'word' });
+
+function suppliedTitle(values) {
+  return values.titles?.trim() || values.title?.trim();
+}
+
+function draftBookTitle(db, { metadata, files = [] }) {
+  const { kind, values } = metadata;
+  const document = files.find(file => file.role !== 'cover' && file.originalName);
+  const filename = document && path.basename(document.originalName.replaceAll('\\', '/'))
+    .replace(/\.(pdf|docx?)$/iu, '').replace(/_+/gu, ' ');
+  const brief = values.description?.trim() || values.prompt?.trim() || filename;
+  const label = brief?.trim().replace(/\s+/gu, ' ') || (kind === 'manuscript' ? 'Manuscript' : 'Book proposal');
+  const characters = Array.from(label);
+  let title = label;
+  if (characters.length > 72) {
+    const limit = characters.slice(0, 72).join('').length;
+    const segment = wordSegments.segment(label).containing(limit);
+    const end = segment?.isWordLike && segment.index > 0 ? segment.index : limit;
+    title = label.slice(0, end).trimEnd() + '…';
+  }
+  const draft = title;
+  const taken = db.prepare("SELECT 1 FROM books WHERE title=? AND origin='created' AND revision=0 LIMIT 1");
+  for (let number = 2; taken.get(title); number++) title = `${draft} (${number})`;
+  return title;
+}
 
 export class DashboardStore {
   constructor(directory, { manageApprovals = false } = {}) {
@@ -23,6 +49,8 @@ export class DashboardStore {
       CREATE TABLE IF NOT EXISTS books (id TEXT PRIMARY KEY, owner TEXT NOT NULL, title TEXT NOT NULL,
         source_id TEXT, origin TEXT NOT NULL, revision INTEGER NOT NULL DEFAULT 0, created_at TEXT NOT NULL);
       CREATE TABLE IF NOT EXISTS people (id TEXT PRIMARY KEY, email TEXT NOT NULL, name TEXT NOT NULL);
+      CREATE TABLE IF NOT EXISTS initial_credit_grants (user_id TEXT PRIMARY KEY REFERENCES people(id),
+        amount INTEGER NOT NULL, granted_at TEXT);
       CREATE TABLE IF NOT EXISTS collaborators (book_id TEXT NOT NULL REFERENCES books(id), user_id TEXT NOT NULL,
         PRIMARY KEY(book_id,user_id));
       CREATE TABLE IF NOT EXISTS changes (id TEXT PRIMARY KEY, book_id TEXT REFERENCES books(id), author TEXT NOT NULL,
@@ -58,6 +86,15 @@ export class DashboardStore {
       if (!this.db.prepare('PRAGMA table_info(events)').all().some(column => column.name === 'subject_user')) {
         this.db.exec('ALTER TABLE events ADD COLUMN subject_user TEXT');
       }
+      const unnamed = this.db.prepare(`SELECT b.id,c.payload FROM books b JOIN changes c ON c.id=(
+        SELECT initial.id FROM changes initial WHERE initial.book_id=b.id AND initial.kind IN ('manuscript','book-proposal')
+          AND json_extract(initial.payload,'$.metadata.targetBookId') IS NULL ORDER BY initial.rowid LIMIT 1)
+        WHERE b.title='Untitled book' AND b.origin='created' AND b.revision=0 ORDER BY c.created_at,c.rowid`).all();
+      const updateTitle = this.db.prepare('UPDATE books SET title=? WHERE id=?');
+      for (const book of unnamed) {
+        const intake = JSON.parse(book.payload);
+        if (!suppliedTitle(intake.metadata.values)) updateTitle.run(draftBookTitle(this.db, intake), book.id);
+      }
     });
   }
   close() { this.db.close(); }
@@ -70,11 +107,17 @@ export class DashboardStore {
     this.db.prepare('INSERT INTO events(book_id,change_id,task_id,actor,action,created_at,subject_user) VALUES(?,?,?,?,?,?,?)')
       .run(book, change, task, actor, action, now(), subjectUser);
   }
-  remember(user, catalogue = []) {
+  remember(user, catalogue = [], initialCredits = 0) {
     if (catalogue.length && !user.installationAdministratorId) fail('The system administrator identity is unavailable; imported books cannot be assigned yet.', 503);
     this.transaction(() => {
-      this.db.prepare('INSERT INTO people VALUES(?,?,?) ON CONFLICT(id) DO UPDATE SET email=excluded.email,name=excluded.name')
-        .run(user.id, user.email, user.displayName || '');
+      const name = user.displayName || '';
+      const added = this.db.prepare('INSERT INTO people VALUES(?,?,?) ON CONFLICT(id) DO NOTHING')
+        .run(user.id, user.email, name).changes;
+      if (added && initialCredits > 0) {
+        this.db.prepare('INSERT INTO initial_credit_grants(user_id,amount) VALUES(?,?)').run(user.id, initialCredits);
+      } else if (!added) {
+        this.db.prepare('UPDATE people SET email=?,name=? WHERE id=?').run(user.email, name, user.id);
+      }
       if (!user.installationAdministratorId) return;
       const insert = this.db.prepare('INSERT OR IGNORE INTO books(id,owner,title,source_id,origin,created_at) VALUES(?,?,?,?,?,?)');
       for (const book of catalogue) {
@@ -82,6 +125,12 @@ export class DashboardStore {
         insert.run(book.id, user.installationAdministratorId, title, book.id, 'catalogue', now());
       }
     });
+  }
+  pendingInitialCredits(userId) {
+    return this.db.prepare('SELECT amount FROM initial_credit_grants WHERE user_id=? AND granted_at IS NULL').get(userId)?.amount;
+  }
+  confirmInitialCredits(userId) {
+    this.db.prepare('UPDATE initial_credit_grants SET granted_at=? WHERE user_id=? AND granted_at IS NULL').run(now(), userId);
   }
   book(bookId) { return this.db.prepare('SELECT * FROM books WHERE id=?').get(bookId) || fail('Book not found', 404); }
   canRead(book, user) {
@@ -134,8 +183,9 @@ export class DashboardStore {
       }
       this.validateSubmission({ id: record.owner }, meta);
       let book, state = 'open';
-      if (['manuscript', 'book-proposal', 'fork'].includes(meta.kind) && !meta.targetBookId) {
-        const title = text(meta.values.title || meta.values.titles || 'Untitled book', 500);
+      if (isNewBook) {
+        const proposedTitle = suppliedTitle(meta.values);
+        const title = proposedTitle ? text(proposedTitle, 500) : draftBookTitle(this.db, record);
         book = { id: id('bk'), owner: record.owner, revision: 0 };
         this.db.prepare('INSERT INTO books(id,owner,title,source_id,origin,created_at) VALUES(?,?,?,?,?,?)')
           .run(book.id, book.owner, title, meta.bookId || null, 'created', now());

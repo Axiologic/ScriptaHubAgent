@@ -7,8 +7,9 @@ import { artworkRequirement } from './publication-artwork.mjs';
 
 const roles = ['comprehensive-summary', 'relevant-keywords', 'marketing-summary', 'short-description'];
 const steps = new Set(['resume-book','moderate-submission','prepare-manuscript', ...roles, 'shared-editorial-analysis',
-  'process-content','translate-resources','review-correct','export-book-pdf','validate-final','publish-result','book-result']);
+  'process-content','translate-resources','review-correct','export-book-pdf','validate-final','validate-edit','publish-result','book-result']);
 const terminal = ['completed', 'failed', 'cancelled'];
+const artifactPhases = new Set(['prepare-manuscript', ...roles, 'translate-resources', 'review-correct', 'export-book-pdf']);
 const sha256 = bytes => createHash('sha256').update(bytes).digest('hex');
 function requireEvidence(condition, message) {
   if (!condition) throw new Error(message);
@@ -54,6 +55,9 @@ export async function completeCreateBookPhase({directory, step, completionId}, c
   const savePackageHandoff = step === 'review-correct' && processingMode === 'process' && task.type === 'scriptahub.manuscript'
     && ['process-content', 'translate-resources'].includes(savedStep);
   if (finishing) {
+    if (step === 'publish-result' && processingMode === 'process' && state === 'running' && !status.publicationPending) {
+      await saveModerationProgress(await call('scriptahub_task_moderate', {executionId, stage:'package', action:'status'}));
+    }
     requireEvidence(isTerminal && (state !== 'completed' || (status.publication?.executionId === executionId
       && status.publication.bookId === task.bookId && /^[a-f0-9]{40}$/.test(status.publication.commit))), 'Publication or cancellation is still unresolved');
     if (processingMode === 'process') requireEvidence(state === 'completed', status.taskError || 'Publication did not complete');
@@ -63,8 +67,14 @@ export async function completeCreateBookPhase({directory, step, completionId}, c
     requireEvidence(modeMatches, 'The saved processing mode does not match the current service state: ' + state);
     if (step === 'resume-book') requireEvidence(savedStep === step, 'Save the service state and processing mode in the handoff');
     else if (processingMode === 'process') {
+      if (artifactPhases.has(step)) {
+        const moderation = await call('scriptahub_task_moderate',{executionId,stage:'artifact',action:'status'});
+        await saveModerationProgress(moderation);
+        requireEvidence(moderation.status === 'idle', 'Finish the active artifact review');
+      }
       if (step === 'moderate-submission') {
         const result = await call('scriptahub_task_moderate', {executionId, stage: 'submission', action: 'status'});
+        await saveModerationProgress(result);
         requireEvidence(result.status === 'passed', 'Submission moderation has not passed');
       } else {
         requireEvidence(savedStep === step || savePackageHandoff, 'Save the completed ' + step + ' handoff');
@@ -86,7 +96,23 @@ export async function completeCreateBookPhase({directory, step, completionId}, c
     step, completionId, artifact: {path: handoffPath, sha256: sha256(handoffBytes)}, nextEdgeId, outputs:[...outputs.values()],
   });
 
+  async function saveModerationProgress(result) {
+    if (result.status !== 'pending' || !Number.isSafeInteger(result.completedUnits) || result.completedUnits < 1) return;
+    await atomicJson(`.workflow-completion/${completionId}.progress.json`, {
+      step, completionId, completedUnits:result.completedUnits
+    });
+  }
+
+  async function requireArtifactReview(file, digest) {
+    const result = await call('scriptahub_task_moderate',{executionId,stage:'artifact',action:'status',file,digest});
+    requireEvidence(result.status === 'passed', 'Missing artifact moderation for ' + file);
+  }
+
   async function checkArtifacts() {
+    if (step === 'validate-edit') {
+      await checkFinalApproval();
+      return;
+    }
     const primary = ctx.editorialSource;
     const direct = ctx.manuscriptEditions;
     requireEvidence(primary?.language && (!direct || Object.hasOwn(direct, primary.language)), 'Missing the pinned editorial source');
@@ -105,6 +131,7 @@ export async function completeCreateBookPhase({directory, step, completionId}, c
         const evidence = await verifySourceAudit(directory, source, reference, pdfPath);
         await artifact(reference.path, language + ' source audit', reference.sha256);
         if (evidence.jobPath) await artifact(evidence.jobPath, language + ' source audit job', reference.jobSha256);
+        await requireArtifactReview(source.path, source.sha256);
       }
       if (roles.includes(step) || ['shared-editorial-analysis','process-content'].includes(step)) {
         const editorial = direct
@@ -119,6 +146,7 @@ export async function completeCreateBookPhase({directory, step, completionId}, c
           const receipt = await json(result.receipt, language + ' ' + role + ' validation receipt', result.receiptSha256);
           requireEvidence(role === 'relevant-keywords' ? Number.isInteger(receipt.count) && receipt.count > 0 && receipt.keywords?.length === receipt.count
             : receipt.status === 'passed', 'Validation did not pass for ' + language + ' ' + role);
+          if (step === role) await requireArtifactReview(result.output, result.outputSha256);
         }
         if (['shared-editorial-analysis','process-content','marketing-summary','short-description'].includes(step)) {
           const result = await sharedEditorial({executionId, directory, ...(direct && {language}), action: step === 'process-content' ? 'verify' : 'status'});
@@ -168,7 +196,9 @@ export async function completeCreateBookPhase({directory, step, completionId}, c
         if (artwork.required || input.cover !== undefined || input.thumbnail !== undefined) files.push(input.cover, input.thumbnail ?? input.cover);
         for (const file of files) {
           requireEvidence(typeof file === 'string' && file.split('/').every(part => part && part !== '.' && part !== '..'), 'Invalid staged resource for ' + language);
-          await artifact(bookDirectory + '/' + file, language + ' staged ' + file);
+          const name = bookDirectory + '/' + file;
+          const bytes = await artifact(name, language + ' staged ' + file);
+          if (!artwork.sourceHash && [input.cover,input.thumbnail].includes(file)) await requireArtifactReview(name,sha256(bytes));
         }
         if (task.type === 'scriptahub.manuscript' && Object.hasOwn(direct ?? {}, language)) {
           const source = direct[language];
@@ -183,14 +213,25 @@ export async function completeCreateBookPhase({directory, step, completionId}, c
         && report.readingRoutesChecked === true && (task.type !== 'scriptahub.book-proposal' || report.pdfRequired === true)
         && /^[a-f0-9]{64}$/.test(report.inventory?.sha256 || ''),
         'The staged publication package did not pass verification');
-      await artifact(report.inventory.path, 'draft inventory', report.inventory.sha256);
+      const draft = await json(report.inventory.path, 'draft inventory', report.inventory.sha256);
+      if (task.type === 'scriptahub.book-proposal') {
+        for (const file of draft.files.filter(entry => entry.path.endsWith('/book.pdf'))) {
+          await requireArtifactReview(directory + '/package/' + file.path,file.sha256);
+        }
+      }
     }
-    if (step === 'validate-final') {
-      const report = await json(directory + '/validation/final-report.json', 'final validation');
-      requireEvidence(report.executionId === executionId && report.runId === task.runId && report.bookId === task.bookId
-        && report.publicationPermitted === true && report.audit?.errorFindings === 0 && /^[a-f0-9]{64}$/.test(report.inventorySha256),
-      'Missing final publication approval');
-      await artifact(directory + '/validation/verified-inventory.json', 'approved inventory', report.inventorySha256);
-    }
+    if (step === 'validate-final') await checkFinalApproval();
+  }
+
+  async function checkFinalApproval() {
+    const report = await json(directory + '/validation/final-report.json', 'final validation');
+    requireEvidence(report.executionId === executionId && report.runId === task.runId && report.bookId === task.bookId
+      && report.publicationPermitted === true && report.audit?.errorFindings === 0 && /^[a-f0-9]{64}$/.test(report.inventorySha256),
+    'Missing final publication approval');
+    await artifact(directory + '/validation/verified-inventory.json', 'approved inventory', report.inventorySha256);
+    const moderation = await call('scriptahub_task_moderate',{executionId,stage:'package',action:'status'});
+    await saveModerationProgress(moderation);
+    requireEvidence(moderation.status === 'passed' && moderation.inventorySha256 === report.inventorySha256,
+      'The frozen publication inventory must have a matching moderation verdict');
   }
 }

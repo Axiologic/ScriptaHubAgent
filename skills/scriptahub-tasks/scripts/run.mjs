@@ -6,7 +6,8 @@ import {sharedEditorial} from './shared-editorial.mjs';
 import {prepareReadingRoutes} from './prepare-reading-routes.mjs';
 import {publishFromRobot} from './robot-publication.mjs';
 import {runRemoteSkill,runRemoteSequence,releaseIncompleteRemote,discardTranslationJob,guardRemoteBackups} from './remote-skill.mjs';
-import {preflight,writeHandoff,verifyPackage,requirePreflight} from './workflow-checks.mjs';
+import {localRenderingFiles} from './publication-files.mjs';
+import {insideRun,preflight,writeHandoff,verifyPackage,requirePreflight} from './workflow-checks.mjs';
 import {completeCreateBookPhase} from './create-book-completion.mjs';
 import { constants } from 'node:fs';
 import path from 'node:path';
@@ -169,13 +170,65 @@ export async function publishPackage(call, input, {hook=async()=>{},stageOnly=fa
     });
 }
 
+async function uploadModerationArtifact(call, {executionId, taskDirectory, file}) {
+    if (!/^tasks\/[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$/.test(taskDirectory || '')
+        || typeof file !== 'string' || !file.startsWith(taskDirectory + '/')) throw new Error('Use an artifact inside this task');
+    return withExecutionLock(process.cwd(),executionId,async () => {
+        const names = new Set([file]);
+        const files = new Map();
+        let total = 0;
+        for (const name of names) {
+            if (!name.startsWith(taskDirectory + '/') || name.split('/').some(part => !part || part.startsWith('.'))) {
+                throw new Error('Invalid moderation artifact path');
+            }
+            const filename = await insideRun(name).catch(error => {
+                if (name !== file && error.code === 'ENOENT') return null;
+                throw error;
+            });
+            if (!filename) continue;
+            const {size} = await fs.stat(filename);
+            total += size;
+            if (files.size >= 500 || size > 50000000 || total > 512000000) throw new Error('Moderation artifact inventory is too large');
+            const bytes = await fs.readFile(filename);
+            if (bytes.length !== size) throw new Error('Moderation artifact changed during preparation');
+            files.set(name,bytes);
+            if (/\.(?:html?|xhtml|css|svg)$/i.test(name)) {
+                for (const dependency of localRenderingFiles(name,bytes.toString('utf8'))) {
+                    if (dependency.startsWith(taskDirectory + '/')) names.add(dependency);
+                }
+            }
+        }
+        const tool = 'scriptahub_task_moderate';
+        const payload = {executionId,stage:'artifact'};
+        const inventory = [...files].map(([name,bytes]) => ({
+            path:name,sha256:crypto.createHash('sha256').update(bytes).digest('hex'),size:bytes.length
+        }));
+        const prepared = await call(tool,{...payload,action:'prepare',file,files:inventory});
+        if (prepared.status === 'passed' || ['failed','cancelled','completed','stop_requested'].includes(prepared.state)) return prepared;
+        const {artifactId} = prepared;
+        if (!/^[a-f0-9]{64}$/.test(artifactId || '')) throw new Error('Invalid moderation artifact receipt');
+        for (const [name,bytes] of files) {
+            for (let offset=0;offset<bytes.length;) {
+                const chunk = {...payload,action:'upload',artifactId,file:name,offset};
+                const block = bytes.subarray(offset,offset+uploadBlockSize(tool,chunk,bytes.length-offset));
+                const response = await call(tool,{...chunk,data:block.toString('base64')});
+                offset += block.length;
+                if (response.nextOffset !== offset) throw new Error('Invalid moderation upload acknowledgement');
+            }
+        }
+        return {artifactId,...await call(tool,{...payload,action:'next',artifactId})};
+    });
+}
+
 export async function moderateContent(call,input) {
-    const {executionId,stage,action,position,digest,verdict,category,taskDirectory} = input;
-    const payload = {executionId,stage,action,position,digest,verdict,category};
+    const {executionId,stage,action,position,digest,verdict,category,taskDirectory,artifactId} = input;
+    if (stage === 'artifact' && action === 'prepare') return uploadModerationArtifact(call,input);
+    const payload = {executionId,stage,action,position,digest,verdict,category,artifactId};
     if (action !== 'image') return call('scriptahub_task_moderate',payload);
     if (!/^tasks\/[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$/.test(taskDirectory || '')
       || !Number.isSafeInteger(position) || position<0 || !/^[a-f0-9]{64}$/.test(digest || '')
-      || !['submission','package'].includes(stage)) throw new Error('Invalid review image destination');
+      || !['submission','package','artifact'].includes(stage)
+      || (stage === 'artifact' && !/^[a-f0-9]{64}$/.test(artifactId || ''))) throw new Error('Invalid review image destination');
     const directory = taskDirectory + '/moderation/' + stage;
     let current = await fs.realpath(process.cwd());
     for (const part of directory.split('/')) {

@@ -120,6 +120,27 @@ export async function prepareReadingRoutes({executionId, directory, collectionPa
       chosen[language] = {fullContent:bookRoot + '/' + full, shortContent:bookRoot + '/' + short};
     }
     for (const [filename, html] of landings) await atomicFile(filename, html);
+    if (!modern) {
+      const filename = bookRoot + '/editions.json';
+      const history = await readJson(filename).catch(error => {
+        if (error.code !== 'ENOENT') throw error;
+        return null;
+      });
+      if (!history) {
+        const currentEdition = metadata.currentEdition || book.currentEdition || 'edition-1';
+        const readers = Object.fromEntries(languages.map(language => {
+          const {fullContent, shortContent} = metadata.editions[language];
+          return [language, {fullContent, shortContent}];
+        }));
+        const pdf = Object.fromEntries(languages.filter(language => metadata.editions[language].pdf)
+          .map(language => [language, metadata.editions[language].pdf]));
+        await atomicJson(filename, {schemaVersion:1, bookId:book.id, currentEdition, editions:[{
+          id:currentEdition, number:1, publishedAt:new Date().toISOString().slice(0, 10),
+          readers, pdf, covers:metadata.coverUrl ?? {}, contributors:[]
+        }]});
+        metadata.currentEdition = book.currentEdition = currentEdition;
+      }
+    }
     const saved = await atomicJson(file, document);
     if (modern) book.sha256 = saved.sha256;
     await atomicJson(catalogue, collection);

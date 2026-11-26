@@ -94,6 +94,51 @@ test('a description without attachments reaches the Add book executor with its i
   } finally { store.close(); }
 });
 
+test('untitled requests use recognizable dashboard titles without supplying a title to the robot', async t => {
+  const root = await fs.mkdtemp(path.join(os.tmpdir(), 'scripta-draft-title-'));
+  const user = { id:'user:alice', email:'alice@example.test', roles:['admin'] };
+  const server = createSiteServer(root, {dataDir:root, verifyUser:async()=>user});
+  await new Promise(resolve=>server.listen(0,'127.0.0.1',resolve));
+  t.after(async()=>{await new Promise(resolve=>server.close(resolve));await fs.rm(root,{recursive:true,force:true});});
+  const base = `http://127.0.0.1:${server.address().port}`;
+  async function submit(kind, values, filename) {
+    const body = new FormData();
+    body.set('metadata', JSON.stringify({submissionId:crypto.randomUUID(),kind,values,agreementVersion:'2026-09-10',
+      agreementAccepted:true,confirmedCost:defaultPoints.promptBookCost,language:'ro'}));
+    if (filename) body.set('documents',new File(['%PDF-1.7'],filename));
+    const response = await fetch(base+'/api/submissions',{method:'POST',body});
+    assert.equal(response.status,202);
+    return response.json();
+  }
+  const proposal = await submit('book-proposal',{titles:' ',description:'Scrie o carte despre cetățile dacice'});
+  const similar = await submit('book-proposal',{description:'Scrie o carte despre cetățile dacice'});
+  const french = await submit('book-proposal',{description:'J’aimerais un livre sur les forteresses daces, les découvertes archéologiques récentes et leur contexte.'});
+  const manuscript = await submit('manuscript',{},'Punguța_cu_doi_bani.pdf');
+  const explicit = await submit('book-proposal',{titles:'Untitled book',description:'A book about urban gardens'});
+  const store = server.getDashboardStore();
+  assert.equal(store.book(proposal.bookId).title,'Scrie o carte despre cetățile dacice');
+  assert.equal(store.book(similar.bookId).title,'Scrie o carte despre cetățile dacice (2)');
+  assert.equal(store.book(french.bookId).title,'J’aimerais un livre sur les forteresses daces, les découvertes…');
+  assert.equal(store.book(manuscript.bookId).title,'Punguța cu doi bani');
+  assert.equal(store.book(explicit.bookId).title,'Untitled book');
+
+  const executor = 'agent:test/draft-title';
+  const service = new TaskExecution(store,root);
+  service.snapshot(executor,{taskType:'add-book',batchId:'draft-titles'});
+  const {task} = service.claim(executor,{taskType:'add-book',batchId:'draft-titles',taskId:proposal.task.id,runId:'draft-titles'});
+  assert.equal(task.values.titles,' ');
+  assert.equal(task.values.title,undefined);
+
+  store.db.prepare("UPDATE books SET title='Untitled book' WHERE id=?").run(manuscript.bookId);
+  const reopened = new DashboardStore(root);
+  reopened.close();
+  const dashboard = await (await fetch(base+'/api/dashboard')).json();
+  assert.equal(dashboard.books.find(book=>book.id===manuscript.bookId).title,'Punguța cu doi bani');
+  assert.equal(dashboard.tasks.find(item=>item.id===proposal.task.id).title,'Scrie o carte despre cetățile dacice');
+  assert.equal(dashboard.changes.find(item=>item.id===similar.submissionId).title,'Scrie o carte despre cetățile dacice (2)');
+  assert.equal(dashboard.books.find(book=>book.id===explicit.bookId).title,'Untitled book');
+});
+
 test('an uploaded cover stays separate from manuscripts and reaches the executor with verified bytes', async t => {
   const root = await fs.mkdtemp(path.join(os.tmpdir(), 'scripta-cover-'));
   const server = createSiteServer(root, {dataDir:root, verifyUser:async()=>({id:'user:alice',email:'alice@example.test'})});

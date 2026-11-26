@@ -52,12 +52,30 @@ function inventory(root) {
   visit(''); files.sort((a,b)=>a.path<b.path?-1:a.path>b.path?1:0); return {files,total};
 }
 function usedBytes(root) {
-  let total=0; const visit=directory=>{for(const item of fs.readdirSync(directory,{withFileTypes:true})) {
-    const filename=path.join(directory,item.name),st=fs.lstatSync(filename);
-    if(st.isDirectory()&&!st.isSymbolicLink())visit(filename);
-    else if(st.isFile()&&st.nlink===1) total+=st.size;
-    else throw new Error('Unsupported workspace entry');
-  }}; visit(root); return total;
+  let total = 0;
+  const visit = (directory, entries) => {
+    for (const item of entries) {
+      const filename = path.join(directory, item.name);
+      // A live worker may rename or remove an entry after it was listed.
+      const stat = fs.lstatSync(filename, {throwIfNoEntry:false});
+      if (!stat) continue;
+      if (stat.isDirectory()) {
+        let children;
+        try { children = fs.readdirSync(filename, {withFileTypes:true}); }
+        catch (error) {
+          if (error.code === 'ENOENT') continue;
+          throw error;
+        }
+        visit(filename, children);
+      } else if (stat.isFile() && stat.nlink === 1) {
+        total += stat.size;
+      } else {
+        throw new Error('Unsupported workspace entry');
+      }
+    }
+  };
+  visit(root, fs.readdirSync(root, {withFileTypes:true}));
+  return total;
 }
 // Measure retained logical sizes without following links. Counting every hardlink
 // is conservative; unsupported entries fail startup rather than hiding usage.
@@ -319,7 +337,10 @@ export class ProcessingService {
         const state=this.tasks.execution(executor,input.executionId).state;
         if(state!=='running')return this.stop(record,'Task stop requested',true);
         if(this.diskUsage()>MAX_STORED||this.available(this.root)<FLOOR) return this.stop(record,'Workspace storage limit exceeded');
-      } catch {this.stop(record,'Workspace monitor failed');}
+      } catch (error) {
+        console.error('Processing workspace monitor failed:', record.row.job_id, error.code || error.message);
+        this.stop(record,'Workspace monitor failed');
+      }
     },100);
     try {this.store.db.prepare("UPDATE task_processing_jobs SET state='running',updated_at=? WHERE execution_id=? AND job_id=? AND state='starting'").run(time(),input.executionId,input.jobId);}
     catch {this.stop(record,'Worker state persistence failed');throw Object.assign(new Error('Processing state unavailable'),{status:503});}

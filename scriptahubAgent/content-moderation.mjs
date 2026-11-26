@@ -41,7 +41,10 @@ export async function prepareReviewUnits(context, files, {prepare=render}={}) {
   const add = (file,text,image = null) => {
     const digest = createHash('sha256').update(JSON.stringify([file.path,file.changeId,text]));
     if (image) digest.update(image);
-    units.push({digest:digest.digest('hex'),file:file.path,changeId:file.changeId ?? null,text,image});
+    const fingerprint = file.sha256 && createHash('sha256')
+      .update(JSON.stringify([path.extname(file.path).toLowerCase(),file.sha256,text]))
+      .update(image ?? Buffer.alloc(0)).digest('hex');
+    units.push({digest:digest.digest('hex'),fingerprint,file:file.path,changeId:file.changeId ?? null,text,image});
   };
   try {
     for (const file of files) {

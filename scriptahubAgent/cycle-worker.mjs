@@ -47,7 +47,7 @@ export async function advanceCycles(store, { apply = points, send = sendEmail, r
         if (result.insufficient) {
           store.transaction(() => {
             db.prepare("UPDATE tasks SET state='cancelled',updated_at=? WHERE id=? AND state='queued'").run(timestamp(),row.task_id);
-            const notice = cycles.notify(row,'Request restored',`Your request was restored. You need ${result.missing} more points before trying again.`);
+            const notice = cycles.notify(row,'Request restored',`Your request was restored. You need ${result.missing} more credits before trying again.`);
             transition('retryable','Insufficient points.',result.missing,notice);
           });
         } else transition('active');

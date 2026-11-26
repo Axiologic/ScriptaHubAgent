@@ -7,6 +7,58 @@ import test from 'node:test';
 import { completeCreateBookPhase } from '../scripts/create-book-completion.mjs';
 import { atomicJson, writeHandoff } from '../scripts/workflow-checks.mjs';
 
+test('an unfinished package review records progress without issuing a completion receipt', async t => {
+  const previous = process.cwd();
+  const root = await fs.mkdtemp(path.join(os.tmpdir(), 'book-completion-'));
+  process.chdir(root);
+  t.after(async () => {
+    process.chdir(previous);
+    await fs.rm(root, {recursive:true, force:true});
+  });
+  const directory = 'tasks/one', step = 'publish-result';
+  const completionId = 'a02eb494-65fc-490d-be4a-f4795971938f';
+  const task = {taskId:'one', executionId:'execution-one', runId:'run-one', bookId:'book-one'};
+  await atomicJson(directory + '/run-state/claimed.json', {task});
+  await writeHandoff({directory, step:'validate-final', context:{...task, processingMode:'process'}});
+  const call = (tool, input) => {
+    if (tool === 'scriptahub_task_status') return {...task, state:'running'};
+    assert.equal(tool, 'scriptahub_task_moderate');
+    assert.deepEqual(input, {executionId:task.executionId, stage:'package', action:'status'});
+    return {status:'pending', completedUnits:66};
+  };
+  await assert.rejects(completeCreateBookPhase({directory, step, completionId}, call), /still unresolved/);
+  const base = '.workflow-completion/' + completionId;
+  assert.deepEqual(JSON.parse(await fs.readFile(base + '.progress.json')), {step, completionId, completedUnits:66});
+  await assert.rejects(fs.stat(base + '.json'), {code:'ENOENT'});
+});
+
+test('final edition validation needs a moderation verdict for its exact inventory', async t => {
+  const previous = process.cwd();
+  const root = await fs.mkdtemp(path.join(os.tmpdir(), 'edition-completion-'));
+  process.chdir(root);
+  t.after(async () => {
+    process.chdir(previous);
+    await fs.rm(root, {recursive:true, force:true});
+  });
+  const directory = 'tasks/one', step = 'validate-edit';
+  const completionId = 'a02eb494-65fc-490d-be4a-f4795971938f';
+  const task = {taskId:'one', executionId:'execution-one', runId:'run-one', bookId:'book-one'};
+  await atomicJson(directory + '/run-state/claimed.json', {task});
+  await writeHandoff({directory, step, context:{...task, processingMode:'process'}});
+  const inventory = await atomicJson(directory + '/validation/verified-inventory.json', {});
+  await atomicJson(directory + '/validation/final-report.json', {
+    ...task, publicationPermitted:true, audit:{errorFindings:0}, inventorySha256:inventory.sha256
+  });
+  let status = {status:'pending',completedUnits:3};
+  const check = () => completeCreateBookPhase({directory, step, completionId},
+    tool => tool === 'scriptahub_task_moderate' ? status : {...task,state:'running'});
+  await assert.rejects(check, /matching moderation verdict/);
+  status = {status:'passed',inventorySha256:'a'.repeat(64)};
+  await assert.rejects(check, /matching moderation verdict/);
+  status.inventorySha256 = inventory.sha256;
+  assert.equal((await check()).path,'.workflow-completion/'+completionId+'.json');
+});
+
 test('multilingual summary requires the accepted output and passing receipt for every source', async t => {
   const previous = process.cwd();
   const root = await fs.mkdtemp(path.join(os.tmpdir(), 'book-completion-'));
@@ -18,7 +70,7 @@ test('multilingual summary requires the accepted output and passing receipt for 
   const step = 'comprehensive-summary', directory = 'tasks/one';
   const completionId = 'a02eb494-65fc-490d-be4a-f4795971938f';
   const task = {taskId:'one', executionId:'execution-one', runId:'run-one', bookId:'book-one'};
-  const call = async () => ({...task, state:'running'});
+  const call = async (tool, input) => tool === 'scriptahub_task_moderate' ? {status:input.file ? 'passed' : 'idle'} : {...task, state:'running'};
   const write = async (file, value) => {
     const name = directory + '/' + file;
     await fs.mkdir(path.dirname(name), {recursive:true});

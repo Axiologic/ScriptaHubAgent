@@ -1,4 +1,4 @@
-import { mountPoints, pointsApi } from './account-points.js?v=credit-payment-feedback-10';
+import { mountPoints, pointsApi } from './account-points.js?v=credit-release-1';
 import { newSubmissionId } from './submission-policy.js';
 
 const ro = document.documentElement.lang === 'ro';

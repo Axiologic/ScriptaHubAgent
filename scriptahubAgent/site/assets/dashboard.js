@@ -1,12 +1,17 @@
 import { showToast } from './notifications.js';
 import './reading.js';
 import { newSubmissionId } from './submission-policy.js';
-import { dashboardText } from './dashboard-copy.js?v=credits-ui-6';
+import { dashboardText } from './dashboard-copy.js?v=admin-tabs-1';
 import { currentChangeStatus } from './change-status.js';
 const root = new URL('../', import.meta.url);
 const t = (key, values) => dashboardText(document.documentElement.lang, key, values);
 const content = document.querySelector('#dashboard-content');
-let data, view = 'books', mutation = false, initialViewApplied = false;
+const adminPanel = document.querySelector('#dashboard-admin-panel');
+const adminContent = document.querySelector('#dashboard-admin-content');
+const tabs = [...document.querySelectorAll('[data-view]')];
+const adminTabs = [...adminPanel.querySelectorAll('[data-admin-view]')];
+const administrationTab = document.querySelector('#dashboard-admin-tab');
+let data, view = 'books', adminView = 'settings', mutation = false, initialViewApplied = false;
 let publishedBooks = globalThis.SCRIPTA_COLLECTION?.books || [];
 const disclosureStates = new Map();
 let refreshing = false;
@@ -59,22 +64,26 @@ async function load({ background = false } = {}) {
   render();
   if (!initialViewApplied) {
     initialViewApplied = true;
-    const requested = new URL(location.href).searchParams.get('tab');
-    const tab = tabs.find(tab=>tab.dataset.view===requested);
-    if (tab) selectView(tab);
+    const query = new URL(location.href).searchParams;
+    const requested = query.get('tab');
+    const nestedTab = adminTabs.find(tab => tab.dataset.adminView === requested);
+    const tab = nestedTab ? administrationTab : tabs.find(tab => tab.dataset.view === requested);
+    if (requested) selectView(tab && !tab.hidden ? tab : tabs[0], nestedTab ? requested : query.get('section') || 'settings');
   }
 }
 async function refresh({ background = false } = {}) {
   if (refreshing || mutation) return;
   refreshing = true;
   const control = document.querySelector('#refresh'); control.disabled = true;
-  if (!background) content.setAttribute('aria-busy', 'true');
+  const panel = view === 'admin' ? adminContent : content;
+  if (!background) panel.setAttribute('aria-busy', 'true');
   try { await load({background});if(!background && view==='points')await dashboardSections.get('points')?.controller?.refresh(); } catch (error) { if (!background) showToast(error.message, 'error'); }
-  finally { refreshing = false; control.disabled = false; if (!background) content.setAttribute('aria-busy', 'false'); }
+  finally { refreshing = false; control.disabled = false; if (!background) panel.setAttribute('aria-busy', 'false'); }
 }
 async function mutate(endpoint, body) {
   if (mutation) return false; mutation = true;
-  const controls = new Map([...content.querySelectorAll('button')].map(node=>[node,node.disabled]));
+  const panel = view === 'admin' ? adminContent : content;
+  const controls = new Map([...panel.querySelectorAll('button')].map(node=>[node,node.disabled]));
   for (const node of controls.keys()) node.disabled = true;
   try {
     const result = await api(endpoint, body);await load();
@@ -114,9 +123,7 @@ async function suggest(book) {
 }
 function bookCard(book) {
   const owner = book.owner === data.user.id;
-  const published = publishedBooks.find(item => item.id === book.id);
-  const language = document.documentElement.lang;
-  const title = published?.title?.[language] || published?.title?.en || book.title;
+  const title = catalogueTitle(book.id, book.title);
   const creation = book.creation, cycle = creation?.cycle;
   const publishedBook = Boolean(book.revision || book.origin === 'catalogue');
   const status = publishedBook ? (creation ? states.completed : null) : cycle?.phase === 'funding' ? cycleCopy.funding : states[creation?.state];
@@ -169,6 +176,7 @@ function addCycleState(node, cycle, owner) {
   if (!cycle || !cycleCopy[cycle.phase]) return;
   node.append(element('p', t(cycleCopy[cycle.phase]), 'dashboard-meta'));
   if (cycle.issue) node.append(element('p', cycle.missing ? t('You need {count} more credits.', {count:cycle.missing}) : t(cycle.issue), 'dashboard-meta'));
+  if (owner && cycle.missing && data.isBetaVersion !== false) node.append(element('p', t('ScriptaHub is in beta. Contact a platform administrator for additional credits.'), 'dashboard-meta'));
   if (owner && cycle.phase === 'retryable') node.append(button('Try again', () => void mutate('/retry',{cycleId:cycle.id,attempt:cycle.attempt})));
 }
 function changeCard(change) {
@@ -287,9 +295,14 @@ function changeCard(change) {
   }
   return node;
 }
+function catalogueTitle(bookId, fallback) {
+  const title = publishedBooks.find(book => book.id === bookId)?.title;
+  if (typeof title === 'string') return title || fallback;
+  return title?.[document.documentElement.lang] || title?.en || Object.values(title || {}).find(Boolean) || fallback;
+}
 function taskCard(task) {
   const kinds = { 'book-proposal': 'Book proposal', manuscript: 'Manuscript', edit: 'Edit', fork: 'Derived book', animation: 'Animation', translation: 'Translation', 'librarian-feedback': 'Library feedback' };
-  const node = card(task.title, states[task.state], `${t(kinds[task.kind] || task.kind)} · ${date(task.created_at)}`);
+  const node = card(catalogueTitle(task.book_id, task.title), states[task.state], `${t(kinds[task.kind] || task.kind)} · ${date(task.created_at)}`);
   if (task.state === 'queued') node.append(element('p', t('Waiting for a scheduled or manual processing run.'), 'dashboard-meta'));
   if (task.error) node.append(element('p', task.error));
   if (task.result) node.append(element('p', task.result));
@@ -315,13 +328,13 @@ function editionRequestForm() {
   section.append(element('h2',t('Request a new edition')));
   const label=element('label',t('Book')), select=element('select');
   const placeholder=element('option',t('Select a book'));placeholder.value='';select.append(placeholder);
-  for(const book of data.editions){const option=element('option',book.title || book.bookId);option.value=book.bookId;select.append(option);}
+  for(const book of data.editions){const option=element('option',catalogueTitle(book.bookId, book.title || book.bookId));option.value=book.bookId;select.append(option);}
   const submit=button('Submit new edition',()=>void requestEdition(select.value));submit.disabled=true;
   const note=element('p',undefined,'dashboard-meta');
   select.onchange=()=>{const book=data.editions.find(item=>item.bookId===select.value);submit.disabled=!book || Boolean(book.activeTask) || Boolean(data.editionCycles?.some(item=>item.bookId===book.bookId));note.textContent=book?.activeTask?t('An edition is already pending or running.'):t('Use {count} credits to create this edition?',{count:data.pointsPolicy?.editionCost || 0});};
   label.append(select);section.append(label,note,submit);return section;
 }
-function renderChangeGroups(changes) {
+function renderChangeGroups(changes, target) {
   const groups = new Map();
   for (const change of changes) {
     const key = change.book_id || null;
@@ -334,7 +347,7 @@ function renderChangeGroups(changes) {
     const section = disclosure(`group:${bookId || 'library'}`, 'dashboard-change-group');
     const header = element('summary', undefined, 'dashboard-change-group-heading');
     const title = element('h2');
-    const titleText = element('span', bookId ? requests[0].title : t('Library feedback'), 'dashboard-change-group-title');
+    const titleText = element('span', bookId ? catalogueTitle(bookId, requests[0].title) : t('Library feedback'), 'dashboard-change-group-title');
     const requestTypes = {
       'book-proposal': 'Create book', manuscript: 'Create book', edit: 'Book corrections',
       fork: 'Create derived book', animation: 'Book animation', translation: 'Book translation',
@@ -380,7 +393,7 @@ function renderChangeGroups(changes) {
       stateSummary.append(indicator);
     }
     titleText.append(stateSummary);
-    title.id = `change-group-${index++}`;section.setAttribute('aria-labelledby', title.id);
+    title.id = `${target.id}-change-group-${index++}`;section.setAttribute('aria-labelledby', title.id);
     const count = element('span', String(requests.length), 'dashboard-change-group-count');
     count.setAttribute('aria-label', `${t('Editorial requests')}: ${requests.length}`);
     count.title = count.getAttribute('aria-label');
@@ -405,73 +418,138 @@ function renderChangeGroups(changes) {
     }
     for (const change of requests) list.append(changeCard(change));
     section.append(list);
-    content.append(section);
+    target.append(section);
   }
 }
 
 const dashboardSections = new Map();
-function renderPointsSection(name) {
+function renderPointsSection(name, target) {
   let entry = dashboardSections.get(name);
   if (!entry) {
-    const node = element('div', undefined, name === 'points' ? 'account-points' : 'account-users dashboard-' + name);
+    const node = element('div', undefined, name === 'points' ? 'account-points' : 'account-users dashboard-' + (name === 'settings' ? 'admin' : name));
     node.append(element('p', t('Loading dashboard…'), 'dashboard-meta'));
     entry = {node};dashboardSections.set(name,entry);
     const modules = {
-      admin: () => import('./account-admin.js?v=create-credit-1'),
-      users: () => import('./account-users.js?v=credit-payment-feedback-10'),
-      points: () => import('./account-points.js?v=create-credit-1'),
+      settings: () => import('./account-admin.js?v=credit-release-1'),
+      users: () => import('./account-users.js?v=credit-release-1'),
+      points: () => import('./account-points.js?v=credit-release-1'),
     };
     const loadModule = modules[name]();
-    void loadModule.then(async module => {entry.controller=await (name === 'admin' ? module.mountAdministration(node) : name === 'users' ? module.mountUsers(node) : module.mountPoints(node,{accountId:data.user.id}));}).catch(error => {
+    const creditPurchasesEnabled = data.isBetaVersion === false;
+    void loadModule.then(async module => {
+      entry.controller = await (name === 'settings' ? module.mountAdministration(node, undefined, {creditPurchasesEnabled})
+        : name === 'users' ? module.mountUsers(node) : module.mountPoints(node, {accountId:data.user.id, creditPurchasesEnabled}));
+    }).catch(error => {
       node.replaceChildren(element('p', error.message, 'dashboard-meta'));
       dashboardSections.delete(name);
     });
   }
   // Polling and tab switches must not discard pending price or award form input.
-  if (content.firstElementChild !== entry.node) content.replaceChildren(entry.node);
+  if (target.firstElementChild !== entry.node) target.replaceChildren(entry.node);
+}
+
+function renderAdministration() {
+  const tab = adminTabs.find(node => node.dataset.adminView === adminView && !node.hidden);
+  markSelectedTab(adminTabs, tab);
+  adminContent.setAttribute('aria-labelledby', tab.id);
+  if (adminView === 'settings' || adminView === 'users') {
+    renderPointsSection(adminView, adminContent);
+    return;
+  }
+  adminContent.replaceChildren();
+  if (adminView === 'reviews') {
+    if (!data.changes.length) adminContent.append(element('div', t('No change requests.'), 'dashboard-empty'));
+    renderChangeGroups(data.changes, adminContent);
+  } else {
+    if (!data.tasks.length) adminContent.append(element('div', t('No tasks.'), 'dashboard-empty'));
+    for (const task of data.tasks) adminContent.append(taskCard(task));
+  }
 }
 
 function render() {
-  for (const node of content.querySelectorAll('details[data-disclosure-key]')) disclosureStates.set(node.dataset.disclosureKey, node.open);
+  const target = view === 'admin' ? adminContent : content;
+  for (const node of target.querySelectorAll('details[data-disclosure-key]')) disclosureStates.set(node.dataset.disclosureKey, node.open);
   localize();
-  document.querySelector('#dashboard-tasks-tab').hidden = data.canManageTasks !== true;
-  for (const name of ['admin','users']) document.querySelector('#dashboard-'+name+'-tab').hidden = data.canManageUsers !== true;
-  if (!data.canManageUsers) {
-    for (const name of ['admin','users']) {dashboardSections.get(name)?.node.replaceChildren();dashboardSections.delete(name);}
-    if (view === 'admin' || view === 'users') { selectView(tabs.find(tab=>tab.dataset.view==='books')); return; }
+  for (const tab of adminTabs) {
+    tab.hidden = ['tasks','reviews'].includes(tab.dataset.adminView) ? !data.canManageTasks : !data.canManageUsers;
   }
-  if (['points','admin','users'].includes(view)) { renderPointsSection(view); return; }
-  if(view==='tasks' && !data.canManageTasks) { selectView(tabs.find(tab=>tab.dataset.view==='changes')); return; }
+  administrationTab.hidden = adminTabs.every(tab => tab.hidden);
+  if (!data.canManageUsers) {
+    for (const name of ['settings','users']) {
+      dashboardSections.get(name)?.node.replaceChildren();
+      dashboardSections.delete(name);
+    }
+  }
+  if (administrationTab.hidden) adminContent.replaceChildren();
+
+  if (view === 'admin') {
+    if (administrationTab.hidden) {
+      selectView(tabs[0]);
+    } else if (!adminTabs.some(tab => tab.dataset.adminView === adminView && !tab.hidden)) {
+      selectView(administrationTab);
+    } else {
+      renderAdministration();
+    }
+    return;
+  }
+  if (view === 'points') { renderPointsSection(view, content); return; }
   content.replaceChildren();
+  if (view === 'changes') {
+    const bookIds = new Set(data.books.map(book => book.id));
+    const changes = data.changes.filter(change => change.author === data.user.id || bookIds.has(change.book_id));
+    if (!changes.length) content.append(element('div', t('No change requests.'), 'dashboard-empty'));
+    renderChangeGroups(changes, content);
+    return;
+  }
   const selectedBook = new URL(location.href).searchParams.get('book');
-  const collections = { books: selectedBook ? [...data.books].sort((a,b) => Number(b.id === selectedBook) - Number(a.id === selectedBook)) : data.books,
-    changes: data.changes, tasks: data.tasks };
-  const builders = { books: bookCard, changes: changeCard, tasks: taskCard };
-  if(view==='books' && data.editions?.length)content.append(editionRequestForm());
-  if (!collections[view].length) content.append(element('div', t({ books: 'No books yet. Create a book to get started.', changes: 'No change requests.', tasks: 'No tasks.' }[view]), 'dashboard-empty'));
-  if (view === 'changes') renderChangeGroups(data.changes);
-  else for (const item of collections[view]) content.append(builders[view](item));
+  const books = selectedBook ? [...data.books].sort((a,b) => Number(b.id === selectedBook) - Number(a.id === selectedBook)) : data.books;
+  if (data.editions?.length) content.append(editionRequestForm());
+  if (!books.length) content.append(element('div', t('No books yet. Create a book to get started.'), 'dashboard-empty'));
+  for (const book of books) content.append(bookCard(book));
 }
-const tabs = [...document.querySelectorAll('[data-view]')];
-function selectView(node) {
-  if(node.hidden || (node.dataset.view==='tasks' && !data?.canManageTasks) || (['admin','users'].includes(node.dataset.view) && !data?.canManageUsers)) return;
+
+function markSelectedTab(tabList, selected) {
+  for (const tab of tabList) {
+    tab.setAttribute('aria-selected', String(tab === selected));
+    tab.tabIndex = tab === selected ? 0 : -1;
+  }
+}
+function selectView(node, section = adminView) {
+  if (node.hidden) return;
   view = node.dataset.view;
-  const url = new URL(location.href);url.searchParams.set('tab',view);history.replaceState(history.state,'',url);
-  tabs.forEach(tab => { tab.setAttribute('aria-selected', String(tab === node)); tab.tabIndex = tab === node ? 0 : -1; });
-  content.setAttribute('aria-labelledby', node.id); if (data) render();
+  const url = new URL(location.href);
+  url.searchParams.set('tab', view);
+  if (view === 'admin') {
+    const tab = adminTabs.find(item => !item.hidden && item.dataset.adminView === section) || adminTabs.find(item => !item.hidden);
+    adminView = tab.dataset.adminView;
+    url.searchParams.set('section', adminView);
+  } else {
+    url.searchParams.delete('section');
+    content.setAttribute('aria-labelledby', node.id);
+  }
+  history.replaceState(history.state, '', url);
+  markSelectedTab(tabs, node);
+  content.hidden = view === 'admin';
+  adminPanel.hidden = view !== 'admin';
+  if (data) render();
 }
-tabs.forEach((node, index) => {
-  node.addEventListener('click', () => selectView(node));
-  node.addEventListener('keydown', event => {
-    const visibleTabs=tabs.filter(tab=>!tab.hidden), index=visibleTabs.indexOf(node);
-    let target;
-    if (event.key === 'ArrowRight') target = visibleTabs[(index + 1) % visibleTabs.length];
-    if (event.key === 'ArrowLeft') target = visibleTabs[(index + visibleTabs.length - 1) % visibleTabs.length];
-    if (event.key === 'Home') target = visibleTabs[0];
-    if (event.key === 'End') target = visibleTabs[visibleTabs.length - 1];
-    if (target) { event.preventDefault(); selectView(target); target.focus(); }
-  });
-});
+function bindTabs(tabList, select) {
+  for (const node of tabList) {
+    node.addEventListener('click', () => select(node));
+    node.addEventListener('keydown', event => {
+      const visible = tabList.filter(tab => !tab.hidden);
+      const index = visible.indexOf(node);
+      let target;
+      if (event.key === 'ArrowRight') target = visible[(index + 1) % visible.length];
+      if (event.key === 'ArrowLeft') target = visible[(index + visible.length - 1) % visible.length];
+      if (event.key === 'Home') target = visible[0];
+      if (event.key === 'End') target = visible.at(-1);
+      if (target) { event.preventDefault(); select(target); target.focus(); }
+    });
+  }
+}
+bindTabs(tabs, selectView);
+bindTabs(adminTabs, tab => { if (view === 'admin' && !tab.hidden) selectView(administrationTab, tab.dataset.adminView); });
 document.querySelector('#refresh').addEventListener('click', refresh);
 document.addEventListener('scriptahub:points-policy', () => { void api('/points-policy').then(policy => { if(data) data.pointsPolicy=policy; }).catch(error => showToast(error.message,'error')); });
 function localize() {
@@ -489,7 +567,9 @@ void refresh();
 
 // Keep asynchronous funding, publication and restoration status visible.
 setInterval(()=>{
-  if (!mutation && !refreshing && data && ['books','changes','tasks'].includes(view) && document.visibilityState==='visible'
+  const activeAdminView = view === 'admin' && ['tasks','reviews'].includes(adminView);
+  if (!mutation && !refreshing && data && (view === 'books' || view === 'changes' || activeAdminView) && document.visibilityState === 'visible'
     && (data.editionCycles?.length
-      || data.changes.some(item=>['funding','active','restoring','published'].includes(item.cycle?.phase)))) void refresh({background:true});
+      || data.changes.some(item => ['funding','active','restoring','published'].includes(item.cycle?.phase))
+      || (activeAdminView && data.tasks.some(task => ['queued','running','stop_requested'].includes(task.state))))) void refresh({background:true});
 },5000);

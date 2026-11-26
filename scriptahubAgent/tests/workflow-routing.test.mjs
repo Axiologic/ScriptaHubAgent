@@ -81,9 +81,13 @@ test('generation, translation and editing apply moderation before accepting new 
   assert.match(prompt(create, 'prepare-manuscript'), /Deliver full chapters with complete prose\. Keep romance non-graphic/);
   assert.match(prompt(create, 'prepare-manuscript'), /Before pinning the authored HTML.*revise only an affected passage/);
   assert.match(prompt(create, 'translate-resources'), /correct the affected batch against its source/);
-  assert.match(prompt(create, 'review-correct'), /Inspect the generated artwork before staging/);
+  assert.match(prompt(create, 'review-correct'), /Review each generated cover and thumbnail with the artifact moderation procedure/);
   assert.match(prompt(create, 'prepare-manuscript'), /restrained language and non-graphic imagery for every sensitive subject/);
   assert.match(prompt(create, 'review-correct'), /non-graphic imagery for sensitive subjects/);
   assert.match(prompt(edit, 'apply-edit'), /restrained language and non-graphic visuals for sensitive subjects/);
   assert.match(prompt(edit, 'apply-edit'), /Keep romantic passages non-graphic/);
+  assert.match(prompt(create, 'validate-final'), /complete the remaining package moderation units/);
+  assert.match(prompt(edit, 'validate-edit'), /complete the remaining package moderation units/);
+  assert.doesNotMatch(prompt(create, 'publish-result'), /classify the package review units/);
+  assert.doesNotMatch(prompt(edit, 'submit-edit'), /classify the package review units/);
 });

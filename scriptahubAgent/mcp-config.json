@@ -229,7 +229,8 @@
             "type": "string",
             "enum": [
               "submission",
-              "package"
+              "package",
+              "artifact"
             ]
           },
           "action": {
@@ -238,8 +239,46 @@
               "status",
               "next",
               "image",
-              "record"
+              "record",
+              "prepare",
+              "upload"
             ]
+          },
+          "artifactId": {
+            "type": "string",
+            "pattern": "^[a-f0-9]{64}$"
+          },
+          "file": {
+            "type": "string"
+          },
+          "files": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "path": {
+                  "type": "string"
+                },
+                "sha256": {
+                  "type": "string",
+                  "pattern": "^[a-f0-9]{64}$"
+                },
+                "size": {
+                  "type": "integer",
+                  "minimum": 0
+                }
+              },
+              "required": [
+                "path",
+                "sha256",
+                "size"
+              ],
+              "additionalProperties": false
+            }
+          },
+          "data": {
+            "type": "string",
+            "maxLength": 87384
           },
           "position": {
             "type": "integer",

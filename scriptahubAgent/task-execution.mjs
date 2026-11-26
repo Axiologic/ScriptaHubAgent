@@ -1,3 +1,4 @@
+import {activeModerationArtifact, approvedArtifactFile, artifactFileReview, clearModerationArtifact, createModerationArtifactTables, moderationArtifact} from './moderation-artifacts.mjs';
 import { blockedMessage, categories, policyVersion, portableVisualKey, prepareReviewUnits } from './content-moderation.mjs';
 import { approvedAnnotations } from './annotations.mjs';
 import crypto from 'node:crypto';
@@ -59,6 +60,7 @@ export class TaskExecution {
       package_digest TEXT NOT NULL, policy_version INTEGER NOT NULL, position INTEGER NOT NULL,
       digest TEXT NOT NULL, change_id TEXT, file TEXT NOT NULL, text TEXT NOT NULL, image BLOB,
       approved INTEGER NOT NULL DEFAULT 0, PRIMARY KEY(execution_id,stage,position));`);
+    createModerationArtifactTables(store);
     createPublicationTables(store);
     createProcessingTables(store);
   }
@@ -247,43 +249,106 @@ export class TaskExecution {
     }
     return files;
   }
-  async moderateTask(executor,{executionId,stage='submission',action='next',position,digest,verdict,category,offset=0} = {}) {
-    if (!['submission','package'].includes(stage) || !['status','next','image','record'].includes(action)) fail('Invalid moderation operation');
+  async moderateTask(executor,{executionId,stage='submission',action='next',position,digest,verdict,category,offset=0,...artifact} = {}) {
+    const preview = stage === 'artifact';
+    if (!['submission','package','artifact'].includes(stage)
+      || !['status','next','image','record',...(preview ? ['prepare','upload'] : [])].includes(action)) fail('Invalid moderation operation');
     const row = this.execution(executor,executionId);
     if (row.state !== 'running' || row.finished_at) return this.status(executor,{executionId});
     const db = this.store.db;
+    if (preview) {
+      if (!this.moderationPassed(executionId,'submission')) fail('Complete submission moderation first',409);
+      if (action === 'prepare' || action === 'upload') {
+        return this.store.transaction(() => moderationArtifact(db, executionId, action, {...artifact,offset}, policyVersion));
+      }
+      if (action === 'status' && artifact.artifactId === undefined) {
+        if (artifact.file !== undefined) {
+          const key = artifactFileReview(artifact.file,digest);
+          return {status:this.moderationPassed(executionId,key) ? 'passed' : 'pending'};
+        }
+        const active = db.prepare('SELECT digest FROM task_moderation_artifacts WHERE execution_id=?').get(executionId);
+        const {count} = db.prepare('SELECT count(*) AS count FROM task_moderation_verdicts WHERE execution_id=? AND policy_version=?').get(executionId,policyVersion);
+        return active ? {status:'pending',artifactId:active.digest,completedUnits:count} : {status:'idle'};
+      }
+      if (!/^[a-f0-9]{64}$/.test(artifact.artifactId || '')) fail('Invalid moderation artifact identity');
+      stage = 'artifact:' + artifact.artifactId;
+    }
     const publication = stage === 'package' ? new PublicationTransfer(this).row(executionId) : null;
+    if (action === 'status' && stage === 'package' && !publication) return {status:'pending'};
     if (stage === 'package' && (!publication || !this.moderationPassed(executionId,'submission'))) {
       fail('Upload the validated package and complete submission moderation first',409);
     }
     const packageDigest = publication?.digest ?? '';
     const key = [executionId,stage,packageDigest,policyVersion];
     const scope = 'execution_id=? AND stage=? AND package_digest=? AND policy_version=?';
-    if (this.moderationPassed(executionId,stage,packageDigest)) return {status:'passed'};
-    if (action === 'status') return {status:'pending'};
+    if (this.moderationPassed(executionId,stage,packageDigest)) {
+      const inventorySha256 = action === 'status' && publication && JSON.parse(publication.manifest).validation.inventorySha256;
+      return {status:'passed',...(inventorySha256 && {inventorySha256})};
+    }
+    if (action === 'status') {
+      const {next} = db.prepare(`SELECT min(position) AS next FROM task_moderation_units
+        WHERE ${scope} AND approved=0`).get(...key);
+      return {status:'pending', ...(next > 0 && {completedUnits:next})};
+    }
+    const savePassed = () => {
+      this.saveModeration(executionId,stage,packageDigest);
+      db.prepare('DELETE FROM task_moderation_units WHERE execution_id=? AND stage=?').run(executionId,stage);
+      if (preview) {
+        this.saveModeration(executionId,approvedArtifactFile(db,executionId,artifact.artifactId));
+        clearModerationArtifact(db,executionId);
+      }
+      return {status:'passed'};
+    };
+    const rejectUnit = (category, changeId) => {
+      if (!preview) return this.finishModeration(executor,executionId,{category,changeId});
+      return this.store.transaction(() => {
+        activeModerationArtifact(db,executionId,artifact.artifactId);
+        db.prepare('DELETE FROM task_moderation_units WHERE execution_id=? AND stage=?').run(executionId,stage);
+        clearModerationArtifact(db,executionId);
+        return {status:'blocked',category};
+      });
+    };
+    const seen = db.prepare('SELECT 1 FROM task_moderation_verdicts WHERE execution_id=? AND policy_version=? AND fingerprint=?');
     const nextUnit = () => db.prepare(`SELECT position,digest,file,text,length(image) AS imageSize
       FROM task_moderation_units WHERE ${scope} AND approved=0 ORDER BY position LIMIT 1`).get(...key);
     if (action === 'next') {
       let unit = nextUnit();
       if (unit) return {status:'review',...unit};
-      const files = await this.moderationFiles(executor,row,stage,publication);
+      const files = preview ? moderationArtifact(db,executionId,action,artifact)
+        : await this.moderationFiles(executor,row,stage,publication);
       const prepared = await this.prepareModeration({taskId:row.task_id,stage},files);
       const current = this.execution(executor,executionId);
       if (current.state !== 'running' || current.finished_at) return this.status(executor,{executionId});
       if (this.moderationPassed(executionId,stage,packageDigest)) return {status:'passed'};
       unit = nextUnit();
       if (unit) return {status:'review',...unit};
-      if (prepared.finding) return this.finishModeration(executor,executionId,prepared.finding);
+      if (prepared.finding) return rejectUnit(prepared.finding.category,prepared.finding.changeId);
       if (!prepared.units.length) fail('No material was prepared for moderation',409);
-      this.store.transaction(() => {
-        db.prepare('DELETE FROM task_moderation_units WHERE execution_id=? AND stage=?').run(executionId,stage);
-        const insert = db.prepare('INSERT INTO task_moderation_units VALUES(?,?,?,?,?,?,?,?,?,?,0)');
-        prepared.units.forEach((item,index) => insert.run(...key,index,item.digest,item.changeId,item.file,item.text,item.image));
+      const fingerprints = new Set();
+      const pending = prepared.units.filter(({fingerprint}) => {
+        if (!fingerprint) return true;
+        if (fingerprints.has(fingerprint) || seen.get(executionId,policyVersion,fingerprint)) return false;
+        fingerprints.add(fingerprint);
+        return true;
       });
-      return {status:'review',...nextUnit()};
+      return this.store.transaction(() => {
+        const current = this.execution(executor,executionId);
+        if (current.state !== 'running' || current.finished_at) return this.status(executor,{executionId});
+        if (this.moderationPassed(executionId,stage,packageDigest)) return {status:'passed'};
+        if (preview) activeModerationArtifact(db,executionId,artifact.artifactId);
+        const saved = nextUnit();
+        if (saved) return {status:'review',...saved};
+        if (!pending.length) return savePassed();
+        db.prepare('DELETE FROM task_moderation_units WHERE execution_id=? AND stage=?').run(executionId,stage);
+        const insert = db.prepare(`INSERT INTO task_moderation_units
+          (execution_id,stage,package_digest,policy_version,position,digest,change_id,file,text,image,fingerprint)
+          VALUES(?,?,?,?,?,?,?,?,?,?,?)`);
+        pending.forEach((item,index) => insert.run(...key,index,item.digest,item.changeId,item.file,item.text,item.image,item.fingerprint ?? null));
+        return {status:'review',...nextUnit()};
+      });
     }
     if (!Number.isSafeInteger(position) || position < 0 || typeof digest !== 'string') fail('Invalid moderation unit');
-    const unit = db.prepare(`SELECT digest,change_id,approved,length(image) as size
+    const unit = db.prepare(`SELECT digest,change_id,approved,fingerprint,length(image) as size
       FROM task_moderation_units WHERE ${scope} AND position=?`).get(...key,position);
     if (!unit || unit.digest !== digest) fail('Moderation unit does not match the prepared material',409);
     if (action === 'image') {
@@ -294,16 +359,19 @@ export class TaskExecution {
       return {size:unit.size,nextOffset:offset+bytes.length,data:bytes.toString('base64')};
     }
     if (verdict === 'blocked' && categories.has(category) && !unit.approved) {
-      return this.finishModeration(executor,executionId,{category,changeId:unit.change_id});
+      return rejectUnit(category,unit.change_id);
     }
     if (verdict !== 'passed' || category !== undefined) fail('Invalid moderation verdict');
     return this.store.transaction(() => {
+      const current = this.execution(executor,executionId);
+      if (current.state !== 'running' || current.finished_at) return this.status(executor,{executionId});
+      if (this.moderationPassed(executionId,stage,packageDigest)) return {status:'passed'};
+      if (preview) activeModerationArtifact(db,executionId,artifact.artifactId);
       db.prepare(`UPDATE task_moderation_units SET approved=1,image=NULL,text='' WHERE ${scope} AND position=?`).run(...key,position);
+      if (unit.fingerprint) db.prepare('INSERT OR IGNORE INTO task_moderation_verdicts VALUES(?,?,?)')
+        .run(executionId,policyVersion,unit.fingerprint);
       const next = nextUnit();
-      if (next) return {status:'review',...next};
-      this.saveModeration(executionId,stage,packageDigest);
-      db.prepare('DELETE FROM task_moderation_units WHERE execution_id=? AND stage=?').run(executionId,stage);
-      return {status:'passed'};
+      return next ? {status:'review',...next} : savePassed();
     });
   }
   finishModeration(executor,executionId,{category,changeId},publicationOwner) {
@@ -387,6 +455,8 @@ export class TaskExecution {
       this.store.db.prepare('UPDATE tasks SET state=?,result=?,error=?,updated_at=? WHERE id=?').run(state,result,error || null,time,row.task_id);
       this.store.db.prepare('UPDATE task_executions SET finished_at=?,finish_digest=? WHERE id=?').run(time,digest,executionId);
       this.store.db.prepare('DELETE FROM task_moderation_units WHERE execution_id=?').run(executionId);
+      this.store.db.prepare('DELETE FROM task_moderation_verdicts WHERE execution_id=?').run(executionId);
+      clearModerationArtifact(this.store.db, executionId);
       const change = this.store.db.prepare('SELECT book_id FROM changes WHERE id=?').get(row.change_id);
       if (rejectedChange && row.base_revision !== null) {
         const rejected = this.store.db.prepare(`UPDATE changes SET state='rejected',decided_at=?,decided_by=?,decision_note=?
