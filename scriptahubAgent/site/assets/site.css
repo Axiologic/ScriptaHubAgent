@@ -337,6 +337,23 @@ button, select { cursor: pointer; }
 .keyword-cloud-modal.is-open { opacity: 1; }
 .keyword-cloud-modal-stage { position: relative; width: 100%; height: 100dvh; overflow: hidden; }
 .keyword-cloud-modal .keyword-cloud { width: 100%; height: 100%; min-height: 100%; border-radius: 0; }
+.keyword-cloud-selection-instruction {
+  position: absolute;
+  z-index: 1;
+  inset-block-start: clamp(14px, 2.2vw, 32px);
+  inset-inline: clamp(62px, 7vw, 90px);
+  width: fit-content;
+  max-width: min(44ch, calc(100% - 124px));
+  margin: 0 auto;
+  padding: .42rem .7rem;
+  border-radius: 6px;
+  background: rgb(8 14 14 / .76);
+  color: #f4f5ef;
+  font-size: .76rem;
+  line-height: 1.4;
+  text-align: center;
+  pointer-events: none;
+}
 .keyword-cloud-modal-close { position: absolute; z-index: 1; top: clamp(14px, 2.2vw, 32px); right: clamp(14px, 2.2vw, 32px); display: grid; width: 44px; height: 44px; place-items: center; border: 1px solid rgba(244, 245, 239, .35); border-radius: 50%; background: rgba(8, 14, 14, .74); color: #f4f5ef; font-size: 1.65rem; line-height: 1; }
 .keyword-cloud-modal-close:hover, .keyword-cloud-modal-close:focus-visible { border-color: var(--green); color: var(--green); outline: 0; }
 .keyword-cloud-modal-instruction { position: absolute; z-index: 1; bottom: clamp(16px, 3vw, 32px); left: 16px; right: 16px; margin: 0; color: rgba(240, 255, 248, .75); font-size: .72rem; letter-spacing: .1em; text-align: center; text-transform: uppercase; }
@@ -538,13 +555,15 @@ button, select { cursor: pointer; }
 .contribution-agreement > a { color: var(--green); font-size: .74rem; }
 .contract-accept { display: grid; grid-template-columns: 20px minmax(0, 1fr); gap: 9px; margin-top: 17px; padding-top: 15px; border-top: 1px solid var(--line); color: var(--ink); cursor: pointer; font-size: .79rem; font-weight: 720; line-height: 1.4; }
 .contract-accept input { width: 17px; height: 17px; margin: 1px 0 0; accent-color: var(--green); }
-.editions-list { display: grid; gap: 16px; }
+.editions-list { display: grid; padding: 16px 0 32px; }
 .edition-card { display: grid; grid-template-columns: clamp(64px, 9vw, 96px) minmax(0, 1fr); align-items: start; gap: 16px; padding: 20px; }
-.edition-card h2 { margin: 0 0 7px; font-size: 1.35rem; }
+.editions-list > .edition-card + .edition-card { border-top: 1px solid var(--line); }
+.edition-card h3 { margin: 0 0 7px; font-size: 1.35rem; }
 .edition-date { color: var(--green); font-size: .76rem; font-weight: 720; letter-spacing: .06em; text-transform: uppercase; }
 .edition-changes { margin: 7px 0 14px; color: var(--content); line-height: 1.55; }
-.edition-downloads { display: flex; flex-wrap: wrap; gap: 7px; }
+.edition-downloads { display: flex; align-items: center; justify-content: flex-end; flex-wrap: wrap; gap: 7px; max-width: 100%; margin-inline-start: auto; }
 .edition-downloads a { padding: 7px 9px; border: 1px solid var(--line); border-radius: 5px; color: var(--green); font-size: var(--action-font-size); text-decoration: none; }
+.edition-downloads .workflow-note { margin: 0; }
 .workflow-message { padding: 24px; color: var(--content); line-height: 1.6; }
 
 .librarian-hero { display: grid; grid-template-columns: minmax(260px, .68fr) minmax(0, 1fr); align-items: end; gap: clamp(28px, 5vw, 74px); padding: clamp(34px, 5vw, 68px) 0; }
@@ -1269,7 +1288,8 @@ html[lang] [data-workflow-page="create"] .workflow-hero h1 {
 .edition-history-cover { display: block; width: 100%; height: auto; aspect-ratio: 2 / 3; object-fit: contain; margin: 0; box-shadow: 4px 6px 18px rgba(0, 0, 0, .18); }
 .edition-card-no-cover { grid-template-columns: minmax(0, 1fr); }
 .edition-card-details { min-width: 0; }
-.edition-card-meta { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 10px; margin-bottom: 7px; }
+.edition-card-toolbar { display: flex; align-items: center; flex-wrap: wrap; gap: 7px 14px; margin-bottom: 7px; }
+.edition-card-meta { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 10px; }
 .edition-card-meta .publication-status { margin: 0; }
 .edition-card-meta time { letter-spacing: 0; text-transform: none; }
 body[data-book-workflow] .workflow-hero { display: block; padding: 18px 0 22px; }
@@ -1475,8 +1495,38 @@ shf-player {
  --shf-control-hover:color-mix(in srgb,var(--ink) 9%,transparent);
 }
 
-/* A source reference stays compact above the derived-book brief. */
-.fork-source .workflow-book-compact{grid-template-columns:64px minmax(0,1fr);align-items:center;padding:16px 0}.fork-source .workflow-book-compact>a{width:64px}.fork-source .workflow-book-compact h2{margin:0;font-size:22px}.fork-source+.workflow-layout{margin-top:0;padding-top:16px}
+.fork-guidance { margin: 0 0 14px; color: var(--content); font-size: .88rem; line-height: 1.5; }
+.fork-source {
+  padding: 12px clamp(14px, 1.75vw, 22px);
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--green) 7%, var(--panel));
+}
+.fork-source .workflow-book-compact {
+  grid-template-columns: 56px minmax(0, 1fr);
+  align-items: center;
+  gap: 12px;
+  padding: 0;
+  background: transparent;
+}
+.fork-source .workflow-book-compact > a { width: 56px; }
+.fork-source .workflow-book-compact h2 {
+  margin: 0;
+  font-size: clamp(1.1rem, 1.8vw, 1.45rem);
+  line-height: 1.3;
+  overflow-wrap: anywhere;
+}
+[data-workflow-page="fork"] .create-workflow-layout { padding: 16px 0 36px; }
+[data-workflow-page="fork"] .create-workflow-form.workflow-form {
+  padding: clamp(14px, 1.75vw, 22px);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+}
+[data-workflow-page="fork"] .create-form-grid {
+  grid-template-columns: minmax(0, 1fr);
+  grid-template-areas: "title" "instructions";
+  gap: 14px;
+}
+[data-workflow-page="fork"] [data-creation-cost] { margin: 0; }
 
 /* Both dark variants have a black surround, distinct from the cloud floor. */
 :root:is([data-theme="dark"],[data-theme="dark-orange"]){--canvas:#000000;--body-glow:transparent}
@@ -1580,35 +1630,122 @@ body[data-animation-book] .workflow-layout {grid-template-columns:minmax(0,1fr)}
 .agreement-page{width:100%;min-width:0}
 .agreement-page .contribution-agreement li{hyphens:none;overflow-wrap:anywhere}
 
-.animation-book-reminder .workflow-book-compact{grid-template-columns:80px minmax(0,1fr);padding:4px 0;gap:16px}
-.animation-book-reminder .workflow-book-compact>a{width:80px}
-.animation-book-reminder .workflow-book-compact h2{font-size:1.05rem;margin:0 0 4px}
-.animation-book-reminder .workflow-book-compact .category{font-size:.8rem;color:var(--muted);margin:0 0 6px}
-.animation-book-reminder .workflow-book-compact p{margin-top:0}
-.animation-contribution>h2,.animation-feedback.animation-contribution>h2{margin-bottom:6px}
-body[data-book-workflow] .animation-contribution>.workflow-hero{padding-bottom:8px}
-.animation-contribution>.workflow-layout{padding-top:0}
-.animation-contribution .workflow-form{padding-top:8px}
-.animation-contribution .animation-contribution-question{margin:14px 0 18px;padding:0;color:var(--ink);font-weight:750;line-height:1.45;background:transparent}
-:root:is([data-theme="dark"],[data-theme="dark-orange"]) .animation-contribution-question{color:#fff}
-.book-description-disclosure{position:relative;padding-right:2rem;min-width:0}
-.workflow-book-compact .book-description-disclosure>p{display:block;line-height:1.5;max-height:3em;overflow:hidden;margin:0;text-align:justify;hyphens:auto;overflow-wrap:anywhere;-webkit-line-clamp:unset;line-clamp:unset}
-.book-description-disclosure.is-expanded{padding-right:0;padding-bottom:2rem}
-.workflow-book-compact .book-description-disclosure.is-expanded>p{max-height:none}
-.book-description-toggle{position:absolute;right:0;bottom:0;display:grid;place-items:center;width:1.8rem;height:1.5em;min-height:32px;padding:0;border:0;border-radius:4px;background:transparent;color:var(--ink);font:inherit;font-size:1.1rem;font-weight:800;line-height:1;cursor:pointer}
-.book-description-toggle[hidden]{display:none}
-.book-description-toggle:hover{background:var(--field)}
-.book-description-toggle:focus-visible{outline:2px solid var(--ink);outline-offset:2px}
-@media(max-width:480px){
- .animation-book-reminder .workflow-book-compact{grid-template-columns:58px minmax(0,1fr);gap:6px 10px}
- .animation-book-reminder .workflow-book-compact>a{width:58px;grid-column:1;grid-row:1/3}
- .animation-book-reminder .workflow-book-compact>div{display:contents}
- .animation-book-reminder .workflow-book-compact h2,.animation-book-reminder .workflow-book-compact .category{grid-column:2}
- .animation-book-reminder .book-description-disclosure{grid-column:1/-1;margin-top:4px}
+.animation-contribution > .animation-contribution-layout {
+  grid-template-columns: minmax(0, 1fr);
+  gap: clamp(14px, 2vw, 24px);
+  padding: 0 0 clamp(20px, 3vw, 36px);
+}
+.book-workflow-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 16px 0 14px;
+}
+.book-workflow-header > .eyebrow {
+  min-width: 0;
+  margin: 0;
+  font-size: .9rem;
+  letter-spacing: normal;
+  text-transform: none;
+  overflow-wrap: anywhere;
+}
+.book-workflow-header > .workflow-back { flex: none; max-width: 48%; padding: 0; }
+.book-workflow-header .workflow-back .button { white-space: normal; }
+.book-workflow-title {
+  grid-column: 1 / -1;
+  min-width: 0;
+  margin: 0;
+  color: var(--ink);
+  font-size: clamp(1.1rem, 1.8vw, 1.45rem);
+  line-height: 1.3;
+  overflow-wrap: anywhere;
+}
+.animation-contribution-layout > .animation-book-reminder {
+  min-width: 0;
+  padding: clamp(14px, 1.75vw, 22px);
+  background: color-mix(in srgb, var(--green) 7%, var(--panel));
+  border-radius: 8px;
+}
+.animation-contribution-layout .animation-book-reminder .workflow-book-compact {
+  grid-template-columns: minmax(0, 1fr);
+  gap: 8px;
+  padding: 0;
+  background: transparent;
+}
+.animation-book-reminder .workflow-book-compact .category { margin: 0; color: var(--muted); font-size: .8rem; }
+.animation-book-reminder .book-description-disclosure {
+  align-self: stretch;
+  min-width: 0;
+  min-height: 0;
+  max-height: 40vh;
+  overflow-y: auto;
+}
+.animation-book-reminder .book-description-cover {
+  display: block;
+  float: inline-start;
+  width: clamp(56px, 7vw, 80px);
+  aspect-ratio: 2 / 3;
+  margin-inline-end: 12px;
+  margin-block-end: 6px;
+}
+.animation-book-reminder .book-description-cover:focus-visible { outline: 2px solid var(--green); outline-offset: -2px; }
+.animation-book-reminder .book-description-disclosure:focus-visible { outline: 2px solid var(--green); outline-offset: -2px; }
+.animation-book-reminder .workflow-book-compact .book-description-disclosure > p {
+  display: block;
+  margin: 0;
+  overflow: visible;
+  overflow-wrap: anywhere;
+  white-space: pre-line;
+  line-height: 1.5;
+  -webkit-line-clamp: unset;
+  line-clamp: unset;
+}
+.animation-feedback.animation-contribution > h2 { margin-bottom: 14px; }
+.animation-contribution .animation-contribution-layout > .workflow-form {
+  min-width: 0;
+  margin: 0;
+  padding: clamp(14px, 1.75vw, 22px);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+}
+.animation-contribution-layout .workflow-account { margin-bottom: 12px; padding-bottom: 10px; }
+.animation-contribution-layout .inline-contribution-agreement { margin-top: 12px; padding-top: 6px; }
+.animation-contribution-question { margin: 0 0 12px; color: var(--ink); font-weight: 680; line-height: 1.45; }
+.animation-contribution-fields { grid-template-columns: minmax(0, 1fr); gap: 12px; }
+.animation-contribution-fields > .form-field { min-width: 0; grid-template-rows: auto 1fr; }
+.animation-contribution-fields textarea[name="feedback"] { min-height: 110px; }
+.animation-contribution-fields textarea[name="sources"] { min-height: 80px; }
+.animation-contribution-actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  flex-wrap: wrap;
+  gap: 8px 12px;
+  margin-top: 14px;
+}
+.animation-contribution-actions .workflow-submit { margin: 0; }
+.animation-contribution-cost { flex: 1 1 10rem; margin: 0; color: var(--ink); font-size: .8rem; font-weight: 680; }
+.animation-contribution-layout .workflow-status:empty { display: none; }
+@media (min-width: 880px) {
+  .animation-contribution > .animation-contribution-layout:has(.animation-book-reminder) {
+    grid-template-columns: minmax(230px, .38fr) minmax(0, 1fr);
+    align-items: stretch;
+  }
+  .animation-contribution-layout > .animation-book-reminder { contain: size; }
+  .animation-contribution-layout .animation-book-reminder .workflow-book-compact {
+    height: 100%;
+    grid-template-rows: auto minmax(0, 1fr);
+  }
+  .animation-book-reminder .book-description-disclosure { max-height: none; }
+}
+@media (min-width: 1100px) {
+  .animation-contribution-fields { grid-template-columns: minmax(0, 3fr) minmax(0, 2fr); }
+  .animation-contribution-fields > .form-field { grid-column: auto; }
 }
 
 /* Edition-specific intellectual provenance, shared across all book pages. */
-.contributors-book-title{margin:0 0 22px;font-size:1.05rem;font-weight:600}
+.contributors-book-title{margin-bottom:22px}
 .contributors-list{width:100%;padding-bottom:24px}
 .contribution-edition{width:100%;margin:0 0 28px;border-spacing:0;table-layout:auto;border:1px solid var(--line);border-top:0;border-radius:0 0 12px 12px;overflow:hidden;background:var(--panel)}
 .contribution-edition caption{text-align:left;padding:16px 22px;color:var(--ink);font-size:.9rem;font-weight:750;letter-spacing:.015em;background:color-mix(in srgb,var(--field) 85%,var(--panel));border:1px solid var(--line);border-bottom:0;border-radius:12px 12px 0 0;box-shadow:inset 3px 0 var(--green)}
