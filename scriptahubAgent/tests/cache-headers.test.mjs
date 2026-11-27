@@ -210,7 +210,7 @@ test('every authenticated manifest route has a no-store answer', async t => {
 });
 
 // Copy of the values Ploinky accepts in a route's `cache` field
-// (Ploinky cli/server/policy/routeCacheMarks.js, isRouteCacheMark).
+// (Ploinky cli/server/policy/routeCacheMarkValues.js, isRouteCacheMark).
 const acceptedMarks = new Set(['page', 'immutable', 'never']);
 
 test('the manifest carries only cache values Ploinky accepts', async () => {
@@ -220,16 +220,17 @@ test('the manifest carries only cache values Ploinky accepts', async () => {
   }
 });
 
+// Ploinky's import-free values file loads with plain Node, so this check needs no AgentLib.
+// It skips only when no sibling Ploinky checkout carries the file (a Ploinky without `never`).
 test('the Ploinky validator accepts the manifest when its checkout is present', async t => {
-  const candidates = [process.env.PLOINKY_ROUTE_CACHE_MARKS, path.resolve(import.meta.dirname, '../../../ploinky/cli/server/policy/routeCacheMarks.js'),
-    path.resolve(import.meta.dirname, '../../../ploinky-cloudflare-cache/cli/server/policy/routeCacheMarks.js')].filter(Boolean);
+  const relative = 'cli/server/policy/routeCacheMarkValues.js';
+  const candidates = [process.env.PLOINKY_ROUTE_CACHE_MARKS, path.resolve(import.meta.dirname, '../../../ploinky', relative),
+    path.resolve(import.meta.dirname, '../../../ploinky-cloudflare-cache', relative)].filter(Boolean);
   let file;
   for (const candidate of candidates) { try { await fs.access(candidate); file = candidate; break; } catch {} }
-  if (!file) { t.skip('no Ploinky checkout with cli/server/policy/routeCacheMarks.js found; set PLOINKY_ROUTE_CACHE_MARKS to enable'); return; }
-  let isRouteCacheMark;
-  try { ({ isRouteCacheMark } = await import(file)); }
-  catch (error) { t.skip(`the Ploinky validator cannot load here (${error.code || error.message}); set PLOINKY_AGENTLIB_DIR to enable`); return; }
-  if (typeof isRouteCacheMark !== 'function') { t.skip('the Ploinky file does not export isRouteCacheMark'); return; }
+  if (!file) { t.skip(`no Ploinky checkout with ${relative} found; set PLOINKY_ROUTE_CACHE_MARKS to its path to enable`); return; }
+  const { isRouteCacheMark } = await import(file);
+  assert.equal(typeof isRouteCacheMark, 'function', `${file} exports isRouteCacheMark`);
   const manifest = JSON.parse(await fs.readFile(manifestUrl, 'utf8'));
   for (const route of manifest.routerAccess.httpRoutes) {
     if (route.cache !== undefined) assert.equal(isRouteCacheMark(route.cache), true, `${route.path}: ${route.cache}`);
