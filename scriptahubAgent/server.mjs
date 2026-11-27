@@ -255,7 +255,11 @@ export function createSiteServer(siteRoot, { dataDir: submissionDataDir = dataDi
       if (pathname === '/health') { res.writeHead(200, { 'content-type': 'application/json' }); res.end('{"ok":true}'); return; }
       if (pathname === '/api/session') {
         const user = await verifyUser(req, url, Buffer.alloc(0));
-        if (!user) { res.writeHead(401); res.end(); return; }
+        if (!user || req.method === 'HEAD') {
+          res.writeHead(user ? 204 : 401, { 'cache-control': 'private, no-store' });
+          res.end();
+          return;
+        }
         await rememberMember(user, await pointsPolicy());
         const payload = JSON.stringify({ user: { id: user.id, email: user.email, displayName: user.displayName || '' }, canManageUsers: user.roles?.includes('admin') === true });
         res.writeHead(200, { 'content-type': 'application/json', 'cache-control': 'private, no-store' });

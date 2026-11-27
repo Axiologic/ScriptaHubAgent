@@ -24,6 +24,12 @@ test('account page requires identity and delegates settings to UserPersisto', as
   const dashboard=await fs.readFile(new URL('../site/account/dashboard.html',import.meta.url),'utf8');
   assert.match(dashboard,/data-view="admin"[^>]*hidden/);
   assert.match(dashboard,/data-view="points"/);
+  const anonymousProbe = await fetch(root + 'api/session', { method: 'HEAD' });
+  assert.equal(anonymousProbe.status, 401);
+  const signedInProbe = await fetch(root + 'api/session', { method: 'HEAD', headers: { 'x-test-user': 'reader' } });
+  assert.equal(signedInProbe.status, 204);
+  assert.equal(signedInProbe.headers.get('cache-control'), 'private, no-store');
+  assert.equal(await signedInProbe.text(), '');
   const session = await fetch(root + 'api/session', { headers: { 'x-test-user': 'reader' } });
   assert.deepEqual((await session.json()).user, { id: user.id, email: user.email, displayName: user.displayName });
   const manifest = JSON.parse(await fs.readFile(new URL('../manifest.json', import.meta.url)));

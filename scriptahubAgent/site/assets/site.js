@@ -129,6 +129,7 @@
   const supported = collection.supportedLanguages.map((item) => item.code);
   const scriptUrl = document.currentScript?.src;
   const siteRootUrl = scriptUrl ? new URL("../", scriptUrl) : new URL("./", location.href);
+  let headerSignedIn = null;
   const siteScaleKey = "scripta-site-scale-v2";
   const siteThemeKey = "scripta-site-theme";
   const cloudInstruction = {
@@ -345,6 +346,39 @@
     else node.textContent = value;
   }
 
+  function syncHeaderAccount(menu, language) {
+    const login = menu.querySelector('.header-login');
+    const logout = menu.querySelector('[data-header-logout]');
+    const toggle = menu.querySelector('button');
+    const panel = menu.querySelector('.header-account-options');
+    const labels = {
+      en: ['Log in', 'Log out'], ro: ['Autentificare', 'Deconectare'],
+      fr: ['Connexion', 'Déconnexion'], de: ['Anmelden', 'Abmelden'],
+      es: ['Iniciar sesión', 'Cerrar sesión'], pt: ['Iniciar sessão', 'Terminar sessão'],
+      it: ['Accedi', 'Esci'], pl: ['Zaloguj się', 'Wyloguj się'],
+    };
+    const [loginLabel, logoutLabel] = labels[language] || labels.en;
+    login.textContent = loginLabel;
+    logout.textContent = logoutLabel;
+    menu.dataset.accountLanguage = language;
+    login.hidden = headerSignedIn !== false;
+    toggle.hidden = headerSignedIn !== true;
+    if (!headerSignedIn) {
+      panel.hidden = true;
+      toggle.setAttribute('aria-expanded', 'false');
+    }
+  }
+
+  async function refreshHeaderSession() {
+    const response = await fetch(new URL('api/session', siteRootUrl), {
+      method: 'HEAD', credentials: 'same-origin', cache: 'no-store', redirect: 'manual',
+    }).catch(() => null);
+    headerSignedIn = response?.status === 204;
+    for (const menu of document.querySelectorAll('.header-account-menu')) {
+      syncHeaderAccount(menu, menu.dataset.accountLanguage);
+    }
+  }
+
   function localizeGlobalHeader(language) {
     const accountLabels = { en: 'My account', ro: 'Contul meu', fr: 'Mon compte', de: 'Mein Konto', es: 'Mi cuenta', pt: 'A minha conta', it: 'Il mio account', pl: 'Moje konto' };
     document.querySelectorAll('.site-header .header-tools').forEach(tools => {
@@ -376,13 +410,29 @@
         toggle.setAttribute('aria-controls', panel.id);
         panel.setAttribute('aria-label', 'Account');
         tools.append(menu);
-        menu.append(toggle, panel);
-        panel.append(link);
+        const login = document.createElement('a');
+        login.className = 'header-login';
+        const logout = document.createElement('a');
+        logout.dataset.headerLogout = '';
+        logout.className = 'account-menu-link';
+        menu.append(toggle, panel, login);
+        panel.append(link, logout);
+        import(new URL('assets/account-context.js', siteRootUrl)).then(({ accountLoginPath, accountLogoutPath }) => {
+          function updateReturnPaths() {
+            login.href = accountLoginPath(siteRootUrl, location.href);
+            logout.href = accountLogoutPath(siteRootUrl, location.href);
+          }
+          updateReturnPaths();
+          menu.addEventListener('focusin', updateReturnPaths);
+          menu.addEventListener('click', updateReturnPaths);
+          addEventListener('popstate', updateReturnPaths);
+        });
         const close = () => { panel.hidden = true; toggle.setAttribute('aria-expanded', 'false'); };
         toggle.addEventListener('click', () => {
           panel.hidden = !panel.hidden;
           toggle.setAttribute('aria-expanded', String(!panel.hidden));
         });
+        panel.addEventListener('click', event => { if (event.target.closest('a[href]')) close(); });
         document.addEventListener('click', event => { if (!menu.contains(event.target)) close(); });
         menu.addEventListener('keydown', event => {
           if (event.key === 'Escape') { close(); toggle.focus(); }
@@ -390,6 +440,8 @@
       }
       menu.querySelector('button').setAttribute('aria-label', accountLabel);
       menu.querySelector('button').title = accountLabel;
+      menu.querySelector('nav').setAttribute('aria-label', accountLabel);
+      syncHeaderAccount(menu, language);
       link.className = 'account-menu-link';
       link.textContent = accountLabel;
       let dashboard = tools.querySelector('[data-dashboard-link]');
@@ -1168,5 +1220,9 @@
   if (isBookPage()) { ScriptaBookView.page(collection.books.find(book => book.id === document.body.dataset.bookId), language); localizeGlobalHeader(language); setupSearch(language); setupBookHeroAlignment(); setupBookReading(language); setupCoverPreview(language); }
   else if (isAppPage()) { document.documentElement.lang = language; localizeGlobalHeader(language); setLanguagePicker(language); setupSearch(language); if (document.querySelector("[data-all-books]")) watchCatalogueChanges(); }
   else renderHome(language);
+  if (document.querySelector('.header-account-menu')) {
+    void refreshHeaderSession();
+    addEventListener('pageshow', event => { if (event.persisted) void refreshHeaderSession(); });
+  }
   if (!isBookPage() && !isAppPage()) addEventListener("popstate", () => renderKeywordSelection(new URL(location.href).searchParams.get("keyword"), selectedLanguage()));
 })();

@@ -350,6 +350,18 @@ test('workspace administrators can review their own books and other owners corre
   assert.equal(store.decide(secondAdmin,correction.submissionId,'accept').state,'accepted');
   assert.equal(store.cycles.read(correction.submissionId).reviewer,secondAdmin.id);
   assert.equal(store.cycles.read(correction.submissionId).phase,'awaiting_publication');
+
+  const paid = store.submit(record('book-proposal',author,{description:'Paid generation'}),{promptBookCost:8});
+  const worker = {apply:async()=>({}),send:async()=>({providerMessageId:'test-mail'})};
+  await advanceCycles(store,worker);
+  for (const created of [proposal,paid]) store.cancel(secondAdmin,created.task.id);
+  await advanceCycles(store,worker);
+  await advanceCycles(store,worker);
+  assert.equal(store.cycles.read(paid.cycle.id).phase,'retryable');
+  assert.throws(()=>store.transaction(()=>store.cycles.retry(secondAdmin,paid.cycle.id,1)),/Request not found/);
+  const retry = store.transaction(()=>store.cycles.retry(secondAdmin,proposal.cycle.id,1));
+  assert.equal(retry.attempt,2);
+  assert.equal(store.book(proposal.bookId).owner,admin.id);
 });
 
 

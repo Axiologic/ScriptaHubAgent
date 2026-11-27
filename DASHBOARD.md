@@ -8,9 +8,9 @@ The manifest declares `routerAccess.entryPath` as the public server entry. Ploin
 
 The delegated UserPersisto profile supplies `installationAdministratorId`, the identifier persisted when installation setup completed. ScriptaHub never selects the first visitor, an email address or an arbitrary member of the admin role. Catalogue books are registered once with this owner on authenticated requests; missing provider metadata refuses attribution explicitly. Later catalogue refreshes never replace ownership. New books and forks belong to the authenticated creator, and forks retain their source book ID.
 
-The owner can grant or revoke collaborator access by exact account email. The target must first sign in to ScriptaHub so its verified provider ID is known locally. Collaborators can read private book history, proposals and documents and submit changes; they cannot approve proposals, cancel tasks or manage collaborators. Any authenticated reader can propose a change to an imported public book. Proposal authors can inspect their own submission and its documents after access is revoked, but cannot read other private submissions or submit new changes to the private book.
+Workspace administrators see every book, including unpublished books, under All books. They have the same book management permissions as the owner. The owner or a workspace administrator can grant or revoke collaborator access by exact account email. The target must first sign in to ScriptaHub so its verified provider ID is known locally. Collaborators can read private book history, proposals and documents and submit changes. Any authenticated reader can propose a change to an imported public book. Proposal authors retain access to their own submissions and documents after collaborator access is revoked.
 
-Access events record the acting account and the recipient separately. Edition submission records the book owner as its actor. Display names (or verified account emails when names are empty) are resolved for presentation; authorization continues to use stable provider IDs. Existing events without a recorded recipient remain explicitly unidentified. Repeated access requests that do not change access do not create activity events.
+Access events record the acting account and the recipient separately. Edition submission records the requester as its actor. Display names (or verified account emails when names are empty) are resolved for presentation; authorization continues to use stable provider IDs. Existing events without a recorded recipient remain explicitly unidentified. Repeated access requests that do not change access do not create activity events.
 
 ## Changes and tasks
 
@@ -38,12 +38,12 @@ All routes run through the existing authenticated `/api/*` Router rule and signe
 
 | Route | Behavior |
 | --- | --- |
-| `GET /api/dashboard` | Current user's books, contributions, tasks and permitted history |
-| `POST /api/submissions` | Multipart intake; accepts owner changes without a task; initial book creation retains its task |
-| `POST /api/dashboard/review` | Owner-only accept/reject with annotation decisions; does not queue work |
-| `POST /api/dashboard/editions` | Atomic explicit edition request for an accessible book; charges the requester, snapshots approved corrections if present, and requires bookId, submissionId and confirmedCost |
-| `POST /api/dashboard/access` | Owner-only collaborator grant/removal |
-| `POST /api/dashboard/cancel` | Owner-only cancellation of a queued task or cooperative stop request for running work |
+| `GET /api/dashboard` | Books, contributions and permitted history. Workspace administrators can see all books and tasks |
+| `POST /api/submissions` | Multipart intake with direct editorial changes for book owners and workspace administrators |
+| `POST /api/dashboard/review` | Owners and workspace administrators decide proposals and individual annotations |
+| `POST /api/dashboard/editions` | Owners, workspace administrators and approved contributors can request an edition. The requester pays the configured cost |
+| `POST /api/dashboard/access` | Owners and workspace administrators grant or remove collaborator access |
+| `POST /api/dashboard/cancel` | Owners, workspace administrators and edition requesters can cancel queued work or request a stop |
 | `GET /api/dashboard/files/:submissionId/:index` | Authorized private document download |
 
 Approving corrections only retains them for a future edition. It never spends points or queues generation. Explicit edition and fork requests capture the configured cost and debit the requester through UserPersisto before becoming claimable. ScriptaHub creates tasks; existing Cron jobs invoke RoboTeam workflows. ScriptaHub owns the final push and collection.json update after the workflow robot confirms readiness and independent final validation passes.

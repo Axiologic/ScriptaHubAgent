@@ -802,6 +802,8 @@ button, select { cursor: pointer; }
 [data-intro-librarian],
 .header-create,
 .workflow-submit { display: inline-flex; align-items: center; justify-content: center; gap: 7px; }
+.workflow-form > .workflow-submit:not([hidden]) { display: flex; width: fit-content; max-width: 100%; margin-inline-start: auto; }
+:is(.create-form-footer, .suggest-submit-bar, .animation-contribution-actions, .librarian-search-form > div) > button[type="submit"] { margin-inline-start: auto; }
 [data-intro-start]::before { width: 0; height: 0; border-top: 4px solid transparent; border-bottom: 4px solid transparent; border-left: 6px solid currentColor; content: ""; }
 [data-intro-start-voice]::before { content: "♪"; font-size: .84rem; line-height: 1; }
 [data-librarian-button]::before { content: "✦"; font-size: .76rem; line-height: 1; }
@@ -1183,12 +1185,11 @@ html[lang] [data-workflow-page="create"] .workflow-hero h1 {
   .instruction-dialog header, .instruction-dialog footer { padding-block: 10px; }
   .instruction-close, .instruction-done.workflow-submit { min-height: 44px; }
   .instruction-close { min-width: 44px; }
-  .instruction-done.workflow-submit { width: 100%; }
   .instruction-custom .form-field input, .instruction-custom .instruction-add { height: max(44px, 2.15rem); }
   .instruction-pills li span { white-space: normal; overflow-wrap: anywhere; }
   :root .workflow-page .form-field :is(input, textarea, select) { font-size: max(16px, .85rem); }
   .create-form-footer { align-items: stretch; flex-direction: column; gap: 18px; }
-  .create-form-footer .workflow-submit { justify-content: center; }
+  .create-form-footer .workflow-submit { align-self: flex-end; }
 }
 @media (max-width: 359px) {
   .instruction-choices { grid-template-columns: minmax(0, 1fr); }
@@ -1790,6 +1791,9 @@ body[data-animation-book] .workflow-layout {grid-template-columns:minmax(0,1fr)}
 :root .site-icon-button:disabled { background: var(--field); color: var(--muted); cursor: default; }
 :root .button.button-no-icon::before { content: none; }
 .header-account-menu > button { cursor: pointer; }
+:root .site-header.header-unified .header-account-menu > .header-login { display: inline-flex; align-items: center; min-height: 38px; padding: 0 10px; border: 1px solid var(--line); border-radius: 10px; background: var(--field); color: var(--ink); font-size: var(--action-font-size); text-decoration: none; white-space: nowrap; }
+:root .site-header.header-unified .header-account-menu > .header-login:is(:hover,:focus-visible) { background: var(--inset-hover); color: var(--green); }
+:root .site-header.header-unified .header-account-menu > :is(.header-account,.header-login)[hidden] { display: none; }
 .header-account-options[hidden] { display: none; }
 .header-account-options { position: absolute; z-index: 100; right: 0; top: calc(100% + 8px); display: grid; width: max-content; min-width: 180px; max-width: calc(100vw - 32px); padding: 6px; border: 1px solid var(--line); border-radius: 10px; background: var(--surface); }
 :root .site-header.header-unified .header-account-options > a { display: flex; align-items: center; min-height: 44px; padding: 8px 12px; box-sizing: border-box; border: 0; border-radius: 6px; background: transparent; color: var(--ink); font-size: var(--action-font-size); text-decoration: none; }

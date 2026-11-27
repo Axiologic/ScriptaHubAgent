@@ -91,7 +91,8 @@ export class ApprovalCycles {
 
   retry(user, cycleId, attempt) {
     const row = this.read(cycleId);
-    if (!row || row.owner !== user.id) fail('Request not found.', 404);
+    if (!row || (row.owner !== user.id && !(row.cost === 0 && row.book_id
+        && this.store.canManageBook(this.store.book(row.book_id),user)))) fail('Request not found.', 404);
     if (row.attempt !== attempt) {
       if (row.attempt === attempt + 1) return this.present(row);
       fail('This retry belongs to a previous attempt.');
