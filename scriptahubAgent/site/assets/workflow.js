@@ -596,7 +596,11 @@
   }
   const pageHero = (kicker, title, lead = "") => `<section class="workflow-hero"><div><p class="eyebrow">${escape(kicker)}</p><h1 title="${escape(title)}">${escape(title)}</h1></div>${lead ? `<p class="lead">${escape(lead)}</p>` : ""}</section>`;
   const backLabels = { en: "Back to book", fr: "Retour au livre", de: "Zurück zum Buch", es: "Volver al libro", pt: "Voltar ao livro", it: "Torna al libro", ro: "Înapoi la carte", pl: "Powrót do książki" };
-  const backToBook = (book, lang) => book ? `<nav class="workflow-back"><a class="button button-quiet" href="${escape(new URL(book.editions[lang].book, siteRoot).href)}?lang=${lang}">${escape(backLabels[lang])}</a></nav>` : "";
+  const backToBook = (book, lang) => {
+    const href = book && ScriptaBookView.model(book, lang).href;
+    return href ? `<nav class="workflow-back"><a class="button button-quiet" href="${escape(href)}">${escape(backLabels[lang])}</a></nav>` : "";
+  };
+  const bookWorkflowHeader = (title, book, lang) => `<div class="book-workflow-header"><p class="eyebrow">${escape(title)}</p>${backToBook(book, lang)}</div>`;
   const agreementTerms = (words) => `<p>${escape(words.contractIntro)}</p><ol>${words.contractItems.map(item => `<li>${escape(item)}</li>`).join("")}</ol><a href="https://creativecommons.org/licenses/by/4.0/" target="_blank" rel="noopener noreferrer">${escape(words.contractLink)}</a>`;
   const submitLabels = {en:'Submit proposal',ro:'Trimite propunerea',fr:'Soumettre la proposition',de:'Vorschlag einreichen',es:'Enviar propuesta',pt:'Enviar proposta',it:'Invia proposta',pl:'Prześlij propozycję'};
   function prepareContributionForm(form, lang) {
@@ -604,7 +608,7 @@
     section.className='inline-contribution-agreement';
     section.innerHTML=`<details><summary>${escape(words.contractTitle)}</summary><div class="contribution-agreement">${agreementTerms(words)}</div></details><label class="contract-accept"><input type="checkbox" data-contract-accept required><span>${escape(words.contractAccept)}</span></label>`;
     const button=form.querySelector('button[type="submit"]');
-    form.insertBefore(section,form.querySelector('.create-form-footer, .suggest-submit-bar') || button);
+    form.insertBefore(section,form.querySelector('.create-form-footer, .suggest-submit-bar, .animation-contribution-actions') || button);
     button.textContent=submitLabels[lang];
     ScriptaContributionBridge.bindFormValidity(form);
   }
@@ -821,12 +825,13 @@
 
   function renderFork(lang) {
     const book = activeBook(), labels = proposalLabels[lang], fields = createFieldLabels[lang];
-    if (!book) { root.innerHTML = pageHero("Fork", text[lang].missingBook); return; }
+    const header = bookWorkflowHeader(labels[0], book, lang);
+    if (!book) { root.innerHTML = `${header}<p class="workflow-message">${escape(text[lang].missingBook)}</p>`; return; }
     document.title = `${labels[0]} · ScriptaHub`;
     const inputs = field(fields.title,"titles","text",true,fields.titleHint,false,"create-title-field")
       + textarea(labels[2],"prompt",labels[3],true,"create-instructions-field")
       + '<p data-creation-cost class="workflow-note" role="status"></p>';
-    root.innerHTML = backToBook(book,lang) + pageHero("Fork",labels[0],labels[1])
+    root.innerHTML = header + `<p class="fork-guidance">${escape(labels[1])}</p>`
       + `<div class="fork-source">${compactBookContext(book,lang,text[lang],false)}</div>`
       + creationForm(inputs,submitLabels[lang],lang);
     const form = root.querySelector('form');
@@ -849,21 +854,42 @@
 
   function renderFeedback(lang, animation = false) {
     if (!animation) {
-      import('./suggest.js').then(({renderSuggest}) => renderSuggest({root,book:activeBook(),lang,siteRoot,words:text[lang],submitContribution,prepareContributionForm}))
-        .catch(() => { root.textContent = 'Could not open the annotation editor. Reload to try again.'; });
+      const book = activeBook();
+      const words = text[lang];
+      const editor = document.createElement('div');
+      root.innerHTML = bookWorkflowHeader(words.feedbackTitle, book, lang);
+      root.append(editor);
+      import('./suggest.js').then(({renderSuggest}) => {
+        if (editor.isConnected) return renderSuggest({root:editor,book,lang,siteRoot,words,submitContribution,prepareContributionForm});
+      }).catch(() => { editor.textContent = 'Could not open the annotation editor. Reload to try again.'; });
       return;
     }
     const labels = proposalLabels[lang];
     const existing = Boolean(activeBook()?.animation);
-    const words = animation ? {...text[lang], feedbackTitle: labels[existing ? 6 : 4], feedbackKicker: "Animation", promise: labels[existing ? 7 : 5], feedback: labels[8], feedbackHint: labels[9], feedbackSubject: existing ? "ScriptaHub animation improvement" : "ScriptaHub animation proposal"} : text[lang];
+    const words = {...text[lang], feedbackTitle: labels[existing ? 6 : 4], promise: labels[existing ? 7 : 5], feedback: labels[8], feedbackHint: labels[9], feedbackSubject: existing ? "ScriptaHub animation improvement" : "ScriptaHub animation proposal"};
     const book = activeBook();
     if (!document.body.dataset.animationBook) document.title = `${words.feedbackTitle} · ScriptaHub`;
     const embedded = Boolean(document.body.dataset.animationBook);
-    const side = embedded || animation ? "" : `<div class="workflow-aside-stack">${compactBookContext(book, lang, words)}</div>`;
-    const animationContext = animation && book ? ScriptaBookView.markup(book, {variant: "compact-context", language: lang, showCategory: true, expandDescription: true}) : "";
-    root.classList.toggle("animation-contribution", animation);
-    root.innerHTML = `${embedded ? `<h2>${escape(words.feedbackTitle)}</h2>` : backToBook(book, lang) + pageHero(words.feedbackKicker, words.feedbackTitle)}<section class="workflow-layout"><form class="workflow-form" data-workflow-form>${animationContext ? `<div class="animation-book-reminder">${animationContext}</div>` : ""}<p class="workflow-message${animation ? " animation-contribution-question" : ""}">${escape(words.promise)}</p><div class="form-grid">
-      ${animation ? "" : `<label class="form-field form-field-wide"><span>${escape(words.kind)}</span><select name="kind">${words.kinds.map((kind) => `<option>${escape(kind)}</option>`).join("")}</select></label>`}${textarea(words.feedback, "feedback", words.feedbackHint, true)}${textarea(words.sources, "sources", words.sourcesHint)}</div>${book ? '<p class="workflow-note" data-creation-cost role="status"></p>' : ''}<button class="workflow-submit" type="submit"${book ? "" : " disabled"}>${escape(submitLabels[lang])}</button><p class="workflow-note">${escape(ScriptaContributionBridge.note(lang))}</p><p class="workflow-status" data-workflow-status aria-live="polite"></p></form>${side}</section>`;
+    const bookTitle = book ? ScriptaBookView.model(book, lang).title : "";
+    const animationContext = book ? ScriptaBookView.markup(book, {variant: "compact-context", language: lang, showTitle: false, showCategory: true, scrollDescription: true}) : "";
+    root.classList.add("animation-contribution");
+    root.innerHTML = `${embedded ? `<h2>${escape(words.feedbackTitle)}</h2>` : bookWorkflowHeader(words.feedbackTitle, book, lang)}
+      <section class="workflow-layout animation-contribution-layout">
+        ${bookTitle ? `<h${embedded ? 3 : 2} class="book-workflow-title">${escape(bookTitle)}</h${embedded ? 3 : 2}>` : ""}
+        ${animationContext ? `<div class="animation-book-reminder">${animationContext}</div>` : ""}
+        <form class="workflow-form" data-workflow-form>
+          <p class="animation-contribution-question">${escape(words.promise)}</p>
+          <div class="form-grid animation-contribution-fields">
+            ${textarea(words.feedback, "feedback", words.feedbackHint, true)}
+            ${textarea(words.sources, "sources", words.sourcesHint)}
+          </div>
+          <div class="animation-contribution-actions">
+            ${book ? '<p class="animation-contribution-cost" data-creation-cost role="status"></p>' : ''}
+            <button class="workflow-submit" type="submit"${book ? "" : " disabled"}>${escape(submitLabels[lang])}</button>
+          </div>
+          <p class="workflow-status" data-workflow-status aria-live="polite"></p>
+        </form>
+      </section>`;
     const form = root.querySelector("form");
     restoreDraft(form);
     form.dataset.contributionReady=String(Boolean(book));
@@ -875,7 +901,9 @@
       const data = new FormData(form);
       data.set('confirmedCost',String(cost.value()));
       const lines = [
-        `Book ID: ${book.id}`, `Book: ${book.title[lang] || book.title.en}`, `Book directory: ${book.directory}`, `Edition language: ${lang}`, `Contribution type: ${animation ? (existing ? "Animation improvement" : "Animation proposal") : data.get("kind") || ""}`, ...(animation ? [`Animation source edition: ${book.animation?.edition || "Not yet produced"}`, `Animation file: ${book.animation?.shf || "None"}`] : []),
+        `Book ID: ${book.id}`, `Book: ${book.title[lang] || book.title.en}`, `Book directory: ${book.directory}`, `Edition language: ${lang}`,
+        `Contribution type: ${existing ? "Animation improvement" : "Animation proposal"}`,
+        `Animation source edition: ${book.animation?.edition || "Not yet produced"}`, `Animation file: ${book.animation?.shf || "None"}`,
         "PROPOSED CHANGE / FEEDBACK", data.get("feedback") || "", "", "SOURCES / CONTEXT", data.get("sources") || "",
       ];
       await submitContribution(`${words.feedbackSubject}: ${book.title[lang] || book.title.en}`, lines, lang, form, [], data, 'animation');
@@ -889,12 +917,14 @@
   async function renderEditions(lang) {
     const words = text[lang];
     const book = activeBook();
-    document.title = `${words.editionsTitle} · ScriptaHub`;
+    const bookTitle = book && ScriptaBookView.model(book, lang).title;
+    const header = bookWorkflowHeader(words.editionsTitle, book, lang);
+    document.title = `${words.editionsTitle} · ${bookTitle || "ScriptaHub"}`;
     if (!book) {
-      root.innerHTML = `${pageHero(words.editionsKicker, words.editionsTitle, words.editionsLead)}<p class="workflow-message">${escape(words.missingBook)}</p>`;
+      root.innerHTML = `${header}<p class="workflow-message">${escape(words.missingBook)}</p>`;
       return;
     }
-    root.innerHTML = `${backToBook(book, lang)}${pageHero(words.editionsKicker, `${words.editionsTitle}: ${book.title[lang] || book.title.en}`, words.editionsLead)}<section class="workflow-layout"><div class="editions-list" data-editions-list><p class="workflow-message">…</p></div>${bookContext(book, lang, words)}</section>`;
+    root.innerHTML = `${header}<h2 class="book-workflow-title">${escape(bookTitle)}</h2><section class="editions-list" data-editions-list><p class="workflow-message">…</p></section>`;
     try {
       const response = await fetch(`../${book.directory}/editions.json`);
       if (!response.ok) throw new Error(String(response.status));
@@ -911,7 +941,16 @@
         const readers = Object.entries(edition.readers || {}).flatMap(([code, formats]) => Object.entries(formats).map(([format, path]) => `<a href="../${escape(book.directory)}/${escape(path)}">${escape(format === "shortContent" ? readingWords.short : readingWords.full)} · ${escape(collection.supportedLanguages.find((item) => item.code === code)?.name || code)}</a>`)).join("");
         const coverPath = edition.covers?.[lang] || edition.covers?.en;
         const cover = `<img class="edition-history-cover" data-book-cover data-book-id="${escape(book.id)}" ${coverPath ? `src="../${escape(book.directory)}/${escape(coverPath)}"` : ""} alt="${escape(`${book.title[lang] || book.title.en} · ${label}`)}" loading="lazy">`;
-        return `<article class="edition-card${cover ? "" : " edition-card-no-cover"}">${cover}<div class="edition-card-details"><div class="edition-card-meta">${current}${date ? `<time class="edition-date" datetime="${escape(edition.publishedAt)}">${escape(date)}</time>` : ""}</div><h2>${escape(label)}</h2><p class="edition-changes"><strong>${escape(words.changes)}:</strong> ${escape(changes)}</p><div class="edition-downloads">${downloads || `<span class="workflow-note">${escape(words.noPdf)}</span>`}${readers}</div></div></article>`;
+        return `<article class="edition-card${cover ? "" : " edition-card-no-cover"}">${cover}
+          <div class="edition-card-details">
+            <div class="edition-card-toolbar">
+              <div class="edition-card-meta">${current}${date ? `<time class="edition-date" datetime="${escape(edition.publishedAt)}">${escape(date)}</time>` : ""}</div>
+              <div class="edition-downloads">${downloads || `<span class="workflow-note">${escape(words.noPdf)}</span>`}${readers}</div>
+            </div>
+            <h3>${escape(label)}</h3>
+            <p class="edition-changes"><strong>${escape(words.changes)}:</strong> ${escape(changes)}</p>
+          </div>
+        </article>`;
       }).join("");
     } catch {
       root.querySelector("[data-editions-list]").innerHTML = `<p class="workflow-message">${escape(words.loadError)}</p>`;
@@ -929,11 +968,13 @@
   const contributorColumns = {en:["Author","Contribution"],ro:["Autor","Contribuție"],fr:["Auteur","Contribution"],de:["Autor","Beitrag"],es:["Autor","Contribución"],pt:["Autor","Contribuição"],it:["Autore","Contributo"],pl:["Autor","Wkład"]};
   function renderContributors(lang) {
     const book = activeBook(), words = text[lang], title = contributorLabels[lang];
-    document.title = `${title} · ${book?.title?.[lang] || book?.title?.en || "ScriptaHub"}`;
-    if (!book) { root.innerHTML = `${pageHero("ScriptaHub", title)}<p class="workflow-message">${escape(words.missingBook)}</p>`; return; }
+    const bookTitle = book && ScriptaBookView.model(book, lang).title;
+    const header = bookWorkflowHeader(title, book, lang);
+    document.title = `${title} · ${bookTitle || "ScriptaHub"}`;
+    if (!book) { root.innerHTML = `${header}<p class="workflow-message">${escape(words.missingBook)}</p>`; return; }
     const releases = [...(book.contributions || [])].sort((a,b) => Number(b.number) - Number(a.number));
     const columns = contributorColumns[lang];
-    root.innerHTML = `${backToBook(book, lang)}${pageHero("ScriptaHub", title)}<p class="contributors-book-title">${escape(book.title[lang] || book.title.en)}</p><section class="contributors-list">${releases.map(release => `<table class="contribution-edition" data-contribution-edition="${escape(release.edition)}"><caption>${escape(release.label?.[lang] || release.label?.en || release.edition)}</caption><thead><tr><th scope="col">${escape(columns[0])}</th><th scope="col">${escape(columns[1])}</th></tr></thead><tbody>${release.entries.map(entry => `<tr class="contributor-entry"><th scope="row">${contributionLink(entry.name, entry.url)}</th><td><p>${contributionDescription(entry.description?.[lang] || entry.description?.en)}</p></td></tr>`).join("")}</tbody></table>`).join("")}</section>`;
+    root.innerHTML = `${header}<h2 class="book-workflow-title contributors-book-title">${escape(bookTitle)}</h2><section class="contributors-list">${releases.map(release => `<table class="contribution-edition" data-contribution-edition="${escape(release.edition)}"><caption>${escape(release.label?.[lang] || release.label?.en || release.edition)}</caption><thead><tr><th scope="col">${escape(columns[0])}</th><th scope="col">${escape(columns[1])}</th></tr></thead><tbody>${release.entries.map(entry => `<tr class="contributor-entry"><th scope="row">${contributionLink(entry.name, entry.url)}</th><td><p>${contributionDescription(entry.description?.[lang] || entry.description?.en)}</p></td></tr>`).join("")}</tbody></table>`).join("")}</section>`;
   }
 
   function renderTranslation(lang) {

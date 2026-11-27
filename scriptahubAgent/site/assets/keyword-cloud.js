@@ -8,6 +8,16 @@
     en: "Ctrl-drag to move", fr: "Ctrl-glisser pour déplacer", de: "Strg-Ziehen zum Verschieben", es: "Ctrl-arrastrar para mover",
     pt: "Ctrl-arraste para mover", it: "Ctrl-trascina per spostare", ro: "Ctrl-trage pentru deplasare", pl: "Ctrl-przeciągnij, aby przesunąć",
   };
+  const selectionInstructions = {
+    en: "Select a word to find books on that topic.",
+    fr: "Sélectionnez un mot pour découvrir des livres sur ce sujet.",
+    de: "Wähle ein Wort aus, um Bücher zu diesem Thema zu finden.",
+    es: "Selecciona una palabra para encontrar libros sobre ese tema.",
+    pt: "Seleciona uma palavra para encontrar livros sobre esse tema.",
+    it: "Seleziona una parola per trovare libri su quell’argomento.",
+    ro: "Apasă pe un cuvânt ca să descoperi cărți pe tema lui.",
+    pl: "Wybierz słowo, aby znaleźć książki na ten temat.",
+  };
   const halton = (index, base) => {
     let fraction = 1;
     let value = 0;
@@ -33,12 +43,19 @@
     const opener = document.activeElement instanceof HTMLElement ? document.activeElement : null;
     const sourceCloud = originatingCloud || opener?.closest?.(".keyword-cloud") || null;
     if (sourceCloud) sourceCloud._suspended = true;
+    const language = document.documentElement.lang;
+    const selectionInstruction = selectionInstructions[language] || selectionInstructions.en;
     const modalInstruction = /\b(?:Ctrl|Strg)-/i.test(options.modalInstruction)
       ? options.modalInstruction
-      : `${options.modalInstruction} · ${panInstructions[document.documentElement.lang] || panInstructions.en}`;
+      : `${options.modalInstruction} · ${panInstructions[language] || panInstructions.en}`;
     const modal = document.createElement("div");
     modal.className = "keyword-cloud-modal";
-    modal.innerHTML = `<section class="keyword-cloud-modal-stage" role="dialog" aria-modal="true" aria-label="${escapeHtml(options.ariaLabel)}"><div class="keyword-cloud keyword-cloud-modal-canvas"></div><button class="keyword-cloud-modal-close" type="button" aria-label="${escapeHtml(options.closeLabel)}">×</button><p class="keyword-cloud-modal-instruction">${escapeHtml(modalInstruction)}</p></section>`;
+    modal.innerHTML = `<section class="keyword-cloud-modal-stage" role="dialog" aria-modal="true" aria-label="${escapeHtml(options.ariaLabel)}" aria-describedby="keyword-cloud-selection-instruction">
+      <div class="keyword-cloud keyword-cloud-modal-canvas"></div>
+      <p class="keyword-cloud-selection-instruction" id="keyword-cloud-selection-instruction">${escapeHtml(selectionInstruction)}</p>
+      <button class="keyword-cloud-modal-close" type="button" aria-label="${escapeHtml(options.closeLabel)}">×</button>
+      <p class="keyword-cloud-modal-instruction">${escapeHtml(modalInstruction)}</p>
+    </section>`;
     const modalCloud = modal.querySelector(".keyword-cloud-modal-canvas");
     const closeButton = modal.querySelector(".keyword-cloud-modal-close");
     let dispose = () => {};

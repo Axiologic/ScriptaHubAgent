@@ -10,6 +10,7 @@
   const discoveryTitles = { en: "Discover", fr: "Explorer", de: "Entdecken", es: "Descubre", pt: "Descubra", it: "Scopri", ro: "Descoperă", pl: "Odkrywaj" };
   const featuredBookLabels = { en: "From the shelf", fr: "Dans les rayons", de: "Aus dem Regal", es: "De la biblioteca", pt: "Da estante", it: "Dallo scaffale", ro: "Din bibliotecă", pl: "Z biblioteki" };
   const featuredNextLabels = { en: "Next Book", fr: "Livre suivant", de: "Nächstes Buch", es: "Libro siguiente", pt: "Próximo livro", it: "Libro successivo", ro: "Cartea următoare", pl: "Następna książka" };
+  const featuredPreviousLabels = { en: "Previous Book", fr: "Livre précédent", de: "Vorheriges Buch", es: "Libro anterior", pt: "Livro anterior", it: "Libro precedente", ro: "Cartea anterioară", pl: "Poprzednia książka" };
   const librarianSectionLabels = {
     en: { kicker: "Find your next book", title: "Ask AI Librarian" },
     fr: { kicker: "Trouvez votre prochaine lecture", title: "Demandez au bibliothécaire IA" },
@@ -541,18 +542,17 @@
   function setupMissionBookStrip(container, language, details) {
     container._disposeMissionStrip?.();
     const pool = [...missionStripBooks];
+    const strip = container.closest(".home-feature-strip");
     if (!pool.length) {
       container._disposeMissionStrip = null;
       container.hidden = true;
-      const strip = container.closest(".home-feature-strip");
       strip?.classList.add("is-empty");
       strip?.querySelector("[data-featured-card-link]")?.remove();
-      strip?.querySelector("[data-featured-next]")?.remove();
       if (details) details.innerHTML = `<p>${escape(emptyShelfLabels[language])}</p>`;
       return;
     }
     container.hidden = false;
-    container.closest(".home-feature-strip")?.classList.remove("is-empty");
+    strip?.classList.remove("is-empty");
     const pending = new Set();
     let poolIndex = 0;
     let slotCount = 0;
@@ -564,7 +564,6 @@
     const renderDetails = (book) => {
       if (!details) return;
       [featuredShow] = ScriptaBookView.render(details, book, { variant: "featured", language, kicker: featuredBookLabels[language] });
-      const strip = details.closest(".home-feature-strip");
       if (strip) {
         let link = strip.querySelector("[data-featured-card-link]");
         if (!link) {
@@ -577,23 +576,6 @@
           strip.append(link);
         }
         link.href = ScriptaBookView.model(book, language).href;
-        let next = strip.querySelector("[data-featured-next]");
-        if (!next) {
-          next = document.createElement("button");
-          next.type = "button";
-          next.dataset.featuredNext = "";
-          next.className = "featured-carousel-next";
-          next.innerHTML = '<span aria-hidden="true">›</span>';
-          next.addEventListener("click", event => {
-            event.preventDefault();
-            event.stopPropagation();
-            const icon = container.querySelector("[data-mission-book]");
-            if (icon && !icon.classList.contains("is-leaving")) replaceIcon(icon);
-          });
-          strip.append(next);
-        }
-        next.setAttribute("aria-label", featuredNextLabels[language]);
-        next.title = featuredNextLabels[language];
       }
     };
 
@@ -645,10 +627,12 @@
       if (details && visibleBooks[0]) renderDetails(visibleBooks[0]);
       syncFeaturedCardHeight();
     };
-    const replaceIcon = (icon) => {
+    const replaceIcon = (icon, direction = 1) => {
       const slotIndex = [...container.querySelectorAll("[data-mission-book]")].indexOf(icon);
-      const visibleIds = new Set([...container.querySelectorAll("[data-book-id]")].map((item) => item.dataset.bookId));
-      const replacement = nextBook(visibleIds);
+      if (slotIndex < 0 || pool.length < 2) return;
+      const replacement = details
+        ? pool[(pool.indexOf(visibleBooks[slotIndex]) + direction + pool.length) % pool.length]
+        : nextBook(new Set(visibleBooks.map(book => book.id)));
       icon.classList.add("is-leaving");
       details?.classList.add("is-card-leaving");
       const swapTimer = setTimeout(() => {
@@ -698,6 +682,28 @@
       }
     };
 
+    const controls = [];
+    if (details && strip && pool.length > 1) {
+      strip.classList.add("has-featured-navigation");
+      for (const [position, direction, labels, chevron] of [
+        ["previous", -1, featuredPreviousLabels, "m14 6-6 6 6 6"],
+        ["next", 1, featuredNextLabels, "m10 6 6 6-6 6"],
+      ]) {
+        const button = document.createElement("button");
+        button.type = "button";
+        button.setAttribute(`data-featured-${position}`, "");
+        button.className = `featured-carousel-control featured-carousel-${position}`;
+        button.title = labels[language];
+        button.setAttribute("aria-label", button.title);
+        button.innerHTML = `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="${chevron}"/></svg>`;
+        button.addEventListener("click", () => {
+          const icon = container.querySelector("[data-mission-book]:not(.is-leaving)");
+          if (icon) replaceIcon(icon, direction);
+        });
+        strip.append(button);
+        controls.push(button);
+      }
+    }
     renderSlots();
     const observer = globalThis.ResizeObserver ? new ResizeObserver(renderSlots) : null;
     observer?.observe(container);
@@ -709,6 +715,8 @@
     container._disposeMissionStrip = () => {
       disposed = true;
       if (details) ScriptaBookView.unmount(details);
+      controls.forEach(button => button.remove());
+      strip?.classList.remove("has-featured-navigation");
       clearInterval(interval);
       pending.forEach(clearTimeout);
       observer?.disconnect();
