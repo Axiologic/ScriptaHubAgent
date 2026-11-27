@@ -134,18 +134,21 @@ export class DashboardStore {
     this.db.prepare('UPDATE initial_credit_grants SET granted_at=? WHERE user_id=? AND granted_at IS NULL').run(now(), userId);
   }
   book(bookId) { return this.db.prepare('SELECT * FROM books WHERE id=?').get(bookId) || fail('Book not found', 404); }
+  canManageBook(book, user) {
+    return book.owner === user.id || (Array.isArray(user.roles) && user.roles.includes('admin'));
+  }
   canRead(book, user) {
-    return book.owner === user.id || Boolean(this.db.prepare('SELECT 1 FROM collaborators WHERE book_id=? AND user_id=?').get(book.id, user.id));
+    return this.canManageBook(book,user) || Boolean(this.db.prepare('SELECT 1 FROM collaborators WHERE book_id=? AND user_id=?').get(book.id, user.id));
   }
   canRequestEdition(book,user) {
-    return book.owner === user.id || Boolean(this.db.prepare(
+    return this.canManageBook(book,user) || Boolean(this.db.prepare(
       "SELECT 1 FROM changes WHERE book_id=? AND author=? AND state='accepted' AND kind<>'edition-request' LIMIT 1"
     ).get(book.id,user.id));
   }
   editionAccess(book,user) {
     if (!this.canRequestEdition(book,user)) fail('A new edition requires book ownership or an approved contribution to this book.',403);
   }
-  owner(book, user) { if (book.owner !== user.id) fail('Only the book owner can perform this action', 403); }
+  requireBookManager(book, user) { if (!this.canManageBook(book,user)) fail('Only the book owner or a workspace administrator can perform this action', 403); }
   validateSubmission(user, meta) {
     if (meta.kind === 'fork' && !meta.targetBookId) {
       const source = this.book(meta.bookId);
@@ -171,7 +174,8 @@ export class DashboardStore {
     this.event(actor, 'task.queued', change.book_id, change.id, taskId);
     return this.db.prepare('SELECT * FROM tasks WHERE id=?').get(taskId);
   }
-  submit(record, policy = {}) {
+  submit(record, policy = {}, user = {id:record.owner}) {
+    if (user.id !== record.owner) fail('Submission belongs to another account', 403);
     return this.transaction(() => {
       const previous = this.db.prepare('SELECT * FROM changes WHERE id=?').get(record.id);
       if (previous) return this.receipt(previous);
@@ -183,7 +187,7 @@ export class DashboardStore {
         const duplicate = this.cycles.findContribution(record);
         if (duplicate) return this.receipt(this.db.prepare('SELECT * FROM changes WHERE id=?').get(duplicate.change_id));
       }
-      this.validateSubmission({ id: record.owner }, meta);
+      this.validateSubmission(user, meta);
       let book, state = 'open';
       if (isNewBook) {
         const proposedTitle = suppliedTitle(meta.values);
@@ -194,9 +198,7 @@ export class DashboardStore {
         state = 'accepted';
       } else if (meta.targetBookId || meta.bookId) {
         book = this.book(meta.targetBookId || meta.bookId);
-        if (book.origin !== 'catalogue' && book.revision === 0 && book.owner !== record.owner
-          && !this.db.prepare('SELECT 1 FROM collaborators WHERE book_id=? AND user_id=?').get(book.id, record.owner)) fail('Book access required', 403);
-        if (book.owner === record.owner && !(managed && meta.kind === 'animation' && cost > 0)) state = 'accepted';
+        if (this.canManageBook(book,user) && !(managed && meta.kind === 'animation' && cost > 0)) state = 'accepted';
       } else if (meta.kind !== 'librarian-feedback') fail('A book is required');
       const change = { id: record.id, book_id: book?.id || null, author: record.owner, kind: meta.kind,
         state, base_revision: book?.revision || 0 };
@@ -231,10 +233,7 @@ export class DashboardStore {
         fail('New books are processed and validated by the workflow; only corrections require this review.',409);
       }
       const book = this.book(change.book_id);
-      if (!user.roles?.includes('admin')) {
-        this.owner(book, user);
-
-      }
+      this.requireBookManager(book,user);
       const payload = JSON.parse(change.payload), items = annotations(payload.metadata);
       if (items) {
         if (!annotationDecisions || typeof annotationDecisions !== 'object' || Array.isArray(annotationDecisions)
@@ -316,7 +315,7 @@ export class DashboardStore {
     return this.transaction(() => {
       const row = this.db.prepare('SELECT t.*,c.book_id,c.author FROM tasks t JOIN changes c ON c.id=t.change_id WHERE t.id=?').get(taskId) || fail('Task not found', 404);
       const requested=this.db.prepare("SELECT 1 FROM events WHERE task_id=? AND action='edition.submitted' AND actor=?").get(taskId,user.id);
-      if (!user.roles?.includes('admin') && !requested) this.owner(this.book(row.book_id), user);
+      if (!requested) this.requireBookManager(this.book(row.book_id),user);
       if (this.db.prepare("SELECT 1 FROM approval_cycles WHERE task_id=? AND phase='funding'").get(taskId)) fail('Wait for points confirmation before cancelling.',409);
       if (['cancelled', 'stop_requested'].includes(row.state)) return;
       if (!['queued', 'running'].includes(row.state)) fail('This task has already finished.', 409);
@@ -327,7 +326,7 @@ export class DashboardStore {
   }
   access(user, bookId, email, remove = false) {
     return this.transaction(() => {
-      const book = this.book(bookId); this.owner(book, user);
+      const book = this.book(bookId); this.requireBookManager(book,user);
       const person = this.db.prepare('SELECT * FROM people WHERE lower(email)=lower(?)').get(text(email, 320));
       if (!person) fail('This account must sign in to ScriptaHub once before it can be added.', 404);
       if (person.id === book.owner) fail('The owner already has access');
@@ -346,12 +345,12 @@ export class DashboardStore {
         AND json_extract(initial.payload,'$.metadata.targetBookId') IS NULL ORDER BY initial.rowid LIMIT 1)
       LEFT JOIN tasks t ON t.id=(SELECT recent.id FROM tasks recent WHERE recent.change_id=c.id AND recent.base_revision IS NULL
         ORDER BY recent.rowid DESC LIMIT 1)
-      WHERE b.owner=? OR EXISTS (SELECT 1 FROM collaborators member WHERE member.book_id=b.id AND member.user_id=?)
-      ORDER BY b.created_at DESC,b.rowid DESC`).all(user.id, user.id)
+      WHERE ? OR b.owner=? OR EXISTS (SELECT 1 FROM collaborators member WHERE member.book_id=b.id AND member.user_id=?)
+      ORDER BY b.created_at DESC,b.rowid DESC`).all(Number(canManageTasks), user.id, user.id)
       .map(({creation_id,creation_kind,creation_state,creation_error,...book})=>({
         ...book,
         ...(creation_id && {creation:{kind:creation_kind,state:creation_state,error:creation_error,
-          cycle:book.owner === user.id ? this.cycles.present(this.cycles.read(creation_id)) : null}})
+          cycle:this.canManageBook(book,user) ? this.cycles.present(this.cycles.read(creation_id)) : null}})
       }));
     const changes = this.db.prepare(`SELECT c.*,b.title,b.owner,t.state AS processing_state,t.updated_at AS processing_updated_at, t.error AS processing_error,
       COALESCE(NULLIF(trim(p.name),''),p.email) AS author_name FROM changes c LEFT JOIN books b ON b.id=c.book_id
@@ -361,8 +360,8 @@ export class DashboardStore {
       ORDER BY c.created_at DESC`).all(user.id, user.id, user.id, Number(canManageTasks));
     const tasks = canManageTasks ? this.db.prepare(`SELECT t.*,c.book_id,c.author,b.title,b.owner,(SELECT ac.owner FROM approval_cycles ac WHERE ac.task_id=t.id) AS requester FROM tasks t JOIN changes c ON c.id=t.change_id
       JOIN books b ON b.id=c.book_id ORDER BY t.created_at DESC`).all() : [];
-    const editionBooks = this.db.prepare(`SELECT b.* FROM books b WHERE owner=? OR EXISTS
-      (SELECT 1 FROM changes c WHERE c.book_id=b.id AND c.author=? AND c.state='accepted' AND c.kind<>'edition-request')`).all(user.id,user.id);
+    const editionBooks = this.db.prepare(`SELECT b.* FROM books b WHERE ? OR owner=? OR EXISTS
+      (SELECT 1 FROM changes c WHERE c.book_id=b.id AND c.author=? AND c.state='accepted' AND c.kind<>'edition-request')`).all(Number(canManageTasks),user.id,user.id);
     const editions = editionBooks.map(book => ({bookId:book.id,title:book.title,
       pendingCount:this.db.prepare(`SELECT count(*) AS n FROM changes c WHERE c.book_id=? AND c.state='accepted' AND c.kind<>'edition-request' AND (c.kind NOT IN ('manuscript','book-proposal','fork') OR json_extract(c.payload,'$.metadata.targetBookId') IS NOT NULL) AND NOT EXISTS
         (SELECT 1 FROM task_changes tc JOIN tasks t ON t.id=tc.task_id WHERE tc.change_id=c.id AND t.state NOT IN ('failed','cancelled'))`).get(book.id).n,
@@ -377,12 +376,12 @@ export class DashboardStore {
       }), tasks, canManageTasks, canManageUsers: canManageTasks,
       editionCycles: this.db.prepare("SELECT * FROM approval_cycles WHERE owner=? AND kind='edition' AND phase NOT IN ('completed','rejected')").all(user.id).map(row=>this.cycles.present(row)),
       collaborators: this.db.prepare(`SELECT c.book_id,p.id,p.email,p.name FROM collaborators c JOIN people p ON p.id=c.user_id
-        JOIN books b ON b.id=c.book_id WHERE b.owner=?`).all(user.id),
+        JOIN books b ON b.id=c.book_id WHERE ? OR b.owner=?`).all(Number(canManageTasks),user.id),
       events: this.db.prepare(`SELECT e.*,COALESCE(NULLIF(trim(p.name),''),p.email) AS actor_name,
         COALESCE(NULLIF(trim(s.name),''),s.email) AS subject_name
         FROM events e JOIN books b ON b.id=e.book_id LEFT JOIN people p ON p.id=e.actor
-        LEFT JOIN people s ON s.id=e.subject_user WHERE b.owner=? OR EXISTS
-        (SELECT 1 FROM collaborators c WHERE c.book_id=b.id AND c.user_id=?) ORDER BY e.id DESC LIMIT 200`).all(user.id, user.id),
+        LEFT JOIN people s ON s.id=e.subject_user WHERE ? OR b.owner=? OR EXISTS
+        (SELECT 1 FROM collaborators c WHERE c.book_id=b.id AND c.user_id=?) ORDER BY e.id DESC LIMIT 200`).all(Number(canManageTasks),user.id,user.id),
       executionAvailable: false };
   }
 }

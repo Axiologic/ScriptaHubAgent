@@ -10,6 +10,7 @@
   const discoveryTitles = { en: "Discover", fr: "Explorer", de: "Entdecken", es: "Descubre", pt: "Descubra", it: "Scopri", ro: "Descoperă", pl: "Odkrywaj" };
   const featuredBookLabels = { en: "From the shelf", fr: "Dans les rayons", de: "Aus dem Regal", es: "De la biblioteca", pt: "Da estante", it: "Dallo scaffale", ro: "Din bibliotecă", pl: "Z biblioteki" };
   const featuredNextLabels = { en: "Next Book", fr: "Livre suivant", de: "Nächstes Buch", es: "Libro siguiente", pt: "Próximo livro", it: "Libro successivo", ro: "Cartea următoare", pl: "Następna książka" };
+  const featuredPreviousLabels = { en: "Previous Book", fr: "Livre précédent", de: "Vorheriges Buch", es: "Libro anterior", pt: "Livro anterior", it: "Libro precedente", ro: "Cartea anterioară", pl: "Poprzednia książka" };
   const librarianSectionLabels = {
     en: { kicker: "Find your next book", title: "Ask AI Librarian" },
     fr: { kicker: "Trouvez votre prochaine lecture", title: "Demandez au bibliothécaire IA" },
@@ -128,6 +129,7 @@
   const supported = collection.supportedLanguages.map((item) => item.code);
   const scriptUrl = document.currentScript?.src;
   const siteRootUrl = scriptUrl ? new URL("../", scriptUrl) : new URL("./", location.href);
+  let headerSignedIn = null;
   const siteScaleKey = "scripta-site-scale-v2";
   const siteThemeKey = "scripta-site-theme";
   const cloudInstruction = {
@@ -344,6 +346,39 @@
     else node.textContent = value;
   }
 
+  function syncHeaderAccount(menu, language) {
+    const login = menu.querySelector('.header-login');
+    const logout = menu.querySelector('[data-header-logout]');
+    const toggle = menu.querySelector('button');
+    const panel = menu.querySelector('.header-account-options');
+    const labels = {
+      en: ['Log in', 'Log out'], ro: ['Autentificare', 'Deconectare'],
+      fr: ['Connexion', 'Déconnexion'], de: ['Anmelden', 'Abmelden'],
+      es: ['Iniciar sesión', 'Cerrar sesión'], pt: ['Iniciar sessão', 'Terminar sessão'],
+      it: ['Accedi', 'Esci'], pl: ['Zaloguj się', 'Wyloguj się'],
+    };
+    const [loginLabel, logoutLabel] = labels[language] || labels.en;
+    login.textContent = loginLabel;
+    logout.textContent = logoutLabel;
+    menu.dataset.accountLanguage = language;
+    login.hidden = headerSignedIn !== false;
+    toggle.hidden = headerSignedIn !== true;
+    if (!headerSignedIn) {
+      panel.hidden = true;
+      toggle.setAttribute('aria-expanded', 'false');
+    }
+  }
+
+  async function refreshHeaderSession() {
+    const response = await fetch(new URL('api/session', siteRootUrl), {
+      method: 'HEAD', credentials: 'same-origin', cache: 'no-store', redirect: 'manual',
+    }).catch(() => null);
+    headerSignedIn = response?.status === 204;
+    for (const menu of document.querySelectorAll('.header-account-menu')) {
+      syncHeaderAccount(menu, menu.dataset.accountLanguage);
+    }
+  }
+
   function localizeGlobalHeader(language) {
     const accountLabels = { en: 'My account', ro: 'Contul meu', fr: 'Mon compte', de: 'Mein Konto', es: 'Mi cuenta', pt: 'A minha conta', it: 'Il mio account', pl: 'Moje konto' };
     document.querySelectorAll('.site-header .header-tools').forEach(tools => {
@@ -375,13 +410,29 @@
         toggle.setAttribute('aria-controls', panel.id);
         panel.setAttribute('aria-label', 'Account');
         tools.append(menu);
-        menu.append(toggle, panel);
-        panel.append(link);
+        const login = document.createElement('a');
+        login.className = 'header-login';
+        const logout = document.createElement('a');
+        logout.dataset.headerLogout = '';
+        logout.className = 'account-menu-link';
+        menu.append(toggle, panel, login);
+        panel.append(link, logout);
+        import(new URL('assets/account-context.js', siteRootUrl)).then(({ accountLoginPath, accountLogoutPath }) => {
+          function updateReturnPaths() {
+            login.href = accountLoginPath(siteRootUrl, location.href);
+            logout.href = accountLogoutPath(siteRootUrl, location.href);
+          }
+          updateReturnPaths();
+          menu.addEventListener('focusin', updateReturnPaths);
+          menu.addEventListener('click', updateReturnPaths);
+          addEventListener('popstate', updateReturnPaths);
+        });
         const close = () => { panel.hidden = true; toggle.setAttribute('aria-expanded', 'false'); };
         toggle.addEventListener('click', () => {
           panel.hidden = !panel.hidden;
           toggle.setAttribute('aria-expanded', String(!panel.hidden));
         });
+        panel.addEventListener('click', event => { if (event.target.closest('a[href]')) close(); });
         document.addEventListener('click', event => { if (!menu.contains(event.target)) close(); });
         menu.addEventListener('keydown', event => {
           if (event.key === 'Escape') { close(); toggle.focus(); }
@@ -389,6 +440,8 @@
       }
       menu.querySelector('button').setAttribute('aria-label', accountLabel);
       menu.querySelector('button').title = accountLabel;
+      menu.querySelector('nav').setAttribute('aria-label', accountLabel);
+      syncHeaderAccount(menu, language);
       link.className = 'account-menu-link';
       link.textContent = accountLabel;
       let dashboard = tools.querySelector('[data-dashboard-link]');
@@ -541,18 +594,17 @@
   function setupMissionBookStrip(container, language, details) {
     container._disposeMissionStrip?.();
     const pool = [...missionStripBooks];
+    const strip = container.closest(".home-feature-strip");
     if (!pool.length) {
       container._disposeMissionStrip = null;
       container.hidden = true;
-      const strip = container.closest(".home-feature-strip");
       strip?.classList.add("is-empty");
       strip?.querySelector("[data-featured-card-link]")?.remove();
-      strip?.querySelector("[data-featured-next]")?.remove();
       if (details) details.innerHTML = `<p>${escape(emptyShelfLabels[language])}</p>`;
       return;
     }
     container.hidden = false;
-    container.closest(".home-feature-strip")?.classList.remove("is-empty");
+    strip?.classList.remove("is-empty");
     const pending = new Set();
     let poolIndex = 0;
     let slotCount = 0;
@@ -564,7 +616,6 @@
     const renderDetails = (book) => {
       if (!details) return;
       [featuredShow] = ScriptaBookView.render(details, book, { variant: "featured", language, kicker: featuredBookLabels[language] });
-      const strip = details.closest(".home-feature-strip");
       if (strip) {
         let link = strip.querySelector("[data-featured-card-link]");
         if (!link) {
@@ -577,23 +628,6 @@
           strip.append(link);
         }
         link.href = ScriptaBookView.model(book, language).href;
-        let next = strip.querySelector("[data-featured-next]");
-        if (!next) {
-          next = document.createElement("button");
-          next.type = "button";
-          next.dataset.featuredNext = "";
-          next.className = "featured-carousel-next";
-          next.innerHTML = '<span aria-hidden="true">›</span>';
-          next.addEventListener("click", event => {
-            event.preventDefault();
-            event.stopPropagation();
-            const icon = container.querySelector("[data-mission-book]");
-            if (icon && !icon.classList.contains("is-leaving")) replaceIcon(icon);
-          });
-          strip.append(next);
-        }
-        next.setAttribute("aria-label", featuredNextLabels[language]);
-        next.title = featuredNextLabels[language];
       }
     };
 
@@ -645,10 +679,12 @@
       if (details && visibleBooks[0]) renderDetails(visibleBooks[0]);
       syncFeaturedCardHeight();
     };
-    const replaceIcon = (icon) => {
+    const replaceIcon = (icon, direction = 1) => {
       const slotIndex = [...container.querySelectorAll("[data-mission-book]")].indexOf(icon);
-      const visibleIds = new Set([...container.querySelectorAll("[data-book-id]")].map((item) => item.dataset.bookId));
-      const replacement = nextBook(visibleIds);
+      if (slotIndex < 0 || pool.length < 2) return;
+      const replacement = details
+        ? pool[(pool.indexOf(visibleBooks[slotIndex]) + direction + pool.length) % pool.length]
+        : nextBook(new Set(visibleBooks.map(book => book.id)));
       icon.classList.add("is-leaving");
       details?.classList.add("is-card-leaving");
       const swapTimer = setTimeout(() => {
@@ -698,6 +734,28 @@
       }
     };
 
+    const controls = [];
+    if (details && strip && pool.length > 1) {
+      strip.classList.add("has-featured-navigation");
+      for (const [position, direction, labels, chevron] of [
+        ["previous", -1, featuredPreviousLabels, "m14 6-6 6 6 6"],
+        ["next", 1, featuredNextLabels, "m10 6 6 6-6 6"],
+      ]) {
+        const button = document.createElement("button");
+        button.type = "button";
+        button.setAttribute(`data-featured-${position}`, "");
+        button.className = `featured-carousel-control featured-carousel-${position}`;
+        button.title = labels[language];
+        button.setAttribute("aria-label", button.title);
+        button.innerHTML = `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="${chevron}"/></svg>`;
+        button.addEventListener("click", () => {
+          const icon = container.querySelector("[data-mission-book]:not(.is-leaving)");
+          if (icon) replaceIcon(icon, direction);
+        });
+        strip.append(button);
+        controls.push(button);
+      }
+    }
     renderSlots();
     const observer = globalThis.ResizeObserver ? new ResizeObserver(renderSlots) : null;
     observer?.observe(container);
@@ -709,6 +767,8 @@
     container._disposeMissionStrip = () => {
       disposed = true;
       if (details) ScriptaBookView.unmount(details);
+      controls.forEach(button => button.remove());
+      strip?.classList.remove("has-featured-navigation");
       clearInterval(interval);
       pending.forEach(clearTimeout);
       observer?.disconnect();
@@ -1160,5 +1220,9 @@
   if (isBookPage()) { ScriptaBookView.page(collection.books.find(book => book.id === document.body.dataset.bookId), language); localizeGlobalHeader(language); setupSearch(language); setupBookHeroAlignment(); setupBookReading(language); setupCoverPreview(language); }
   else if (isAppPage()) { document.documentElement.lang = language; localizeGlobalHeader(language); setLanguagePicker(language); setupSearch(language); if (document.querySelector("[data-all-books]")) watchCatalogueChanges(); }
   else renderHome(language);
+  if (document.querySelector('.header-account-menu')) {
+    void refreshHeaderSession();
+    addEventListener('pageshow', event => { if (event.persisted) void refreshHeaderSession(); });
+  }
   if (!isBookPage() && !isAppPage()) addEventListener("popstate", () => renderKeywordSelection(new URL(location.href).searchParams.get("keyword"), selectedLanguage()));
 })();

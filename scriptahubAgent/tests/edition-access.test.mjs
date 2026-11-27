@@ -6,7 +6,7 @@ import path from 'node:path';
 import crypto from 'node:crypto';
 import {DashboardStore} from '../dashboard-store.mjs';
 
-for (const manageApprovals of [false,true]) test(`edition requests require ownership or an approved contribution (managed=${manageApprovals})`,async t=>{
+for (const manageApprovals of [false,true]) test(`edition requests require ownership, administration or an approved contribution (managed=${manageApprovals})`,async t=>{
   const root=await fs.mkdtemp(path.join(os.tmpdir(),'scripta-edition-access-'));
   const store=new DashboardStore(root,{manageApprovals});
   t.after(async()=>{store.close();await fs.rm(root,{recursive:true,force:true});});
@@ -19,7 +19,7 @@ for (const manageApprovals of [false,true]) test(`edition requests require owner
   store.access(owner,'bk-first',collaborator.email);
   const eligible=user=>store.overview(user).editions.map(book=>book.bookId);
   assert.deepEqual(new Set(eligible(owner)),new Set(['bk-first','bk-second']));
-  for(const user of [contributor,collaborator,admin]){
+  for(const user of [contributor,collaborator]){
     assert.deepEqual(eligible(user),[]);
     assert.throws(()=>store.submitEdition(user,'bk-first',crypto.randomUUID(),5),{status:403});
     assert.throws(()=>store.queueEdition(user,'bk-first',crypto.randomUUID()),{status:403});
@@ -36,9 +36,13 @@ for (const manageApprovals of [false,true]) test(`edition requests require owner
   const accepted=submit();store.decide(owner,accepted.submissionId,'accept');
   assert.deepEqual(eligible(contributor),['bk-first']);
   assert.deepEqual(eligible(collaborator),[]);
-  assert.deepEqual(eligible(admin),[]);
+  assert.deepEqual(new Set(eligible(admin)),new Set(['bk-first','bk-second']));
+  assert.equal(store.overview(admin).books.find(book=>book.id==='bk-second').owner,owner.id);
   assert.throws(()=>store.submitEdition(contributor,'bk-second',crypto.randomUUID(),5),{status:403});
   const result=store.submitEdition(contributor,'bk-first',crypto.randomUUID(),5);
   assert.ok(result.taskId);
   if(manageApprovals){assert.equal(store.cycles.read(result.id).owner,contributor.id);assert.equal(store.cycles.read(result.id).cost,5);}
+  const adminEdition=store.submitEdition(admin,'bk-second',crypto.randomUUID(),5);
+  assert.ok(adminEdition.taskId);
+  if(manageApprovals){assert.equal(store.cycles.read(adminEdition.id).owner,admin.id);assert.equal(store.cycles.read(adminEdition.id).cost,5);}
 });

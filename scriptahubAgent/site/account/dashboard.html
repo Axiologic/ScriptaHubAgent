@@ -4,8 +4,8 @@
   <script data-site-theme-bootstrap>try{const t=localStorage.getItem("scripta-site-theme");document.documentElement.dataset.theme=["light","orange","nord","dark","dark-orange"].includes(t)?t:"light"}catch{document.documentElement.dataset.theme="light"}try{const s=Number(localStorage.getItem("scripta-site-scale-v2")||1);document.documentElement.style.setProperty("--site-scale",String(Number.isFinite(s)?Math.max(.8,Math.min(1.5,s)):1));document.documentElement.dataset.largeText=String(Number.isFinite(s)&&s>=1.25)}catch{}</script>
   <meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="robots" content="noindex"><title>Dashboard · ScriptaHub</title>
-  <link rel="stylesheet" href="../assets/site.css?v=create-modes-1"><link rel="stylesheet" href="../assets/dashboard.css?v=admin-tabs-1">
-  <link rel="stylesheet" href="../assets/account.css?v=credit-release-1">
+  <link rel="stylesheet" href="../assets/site.css?v=form-actions-1"><link rel="stylesheet" href="../assets/dashboard.css?v=task-status-3">
+  <link rel="stylesheet" href="../assets/account.css?v=form-actions-1">
   <link rel="stylesheet" href="../assets/controls.css?v=uniform-controls-2">
 </head>
 <body data-app-page="true">
@@ -18,6 +18,7 @@
       <nav class="dashboard-tabs" role="tablist" data-dashboard-label="Dashboard sections" aria-label="Dashboard sections">
         <button id="dashboard-books-tab" type="button" role="tab" data-view="books" data-dashboard-text="My books" aria-selected="true" aria-controls="dashboard-content">My books</button>
         <button id="dashboard-changes-tab" type="button" role="tab" data-view="changes" data-dashboard-text="Editorial requests" aria-selected="false" aria-controls="dashboard-content" tabindex="-1">Editorial requests</button>
+        <button id="dashboard-editions-tab" type="button" role="tab" data-view="editions" data-dashboard-text="Request a new edition" aria-selected="false" aria-controls="dashboard-content" tabindex="-1" hidden>Request a new edition</button>
         <button id="dashboard-points-tab" type="button" role="tab" data-view="points" data-dashboard-text="Credits" aria-selected="false" aria-controls="dashboard-content" tabindex="-1">Credits</button>
         <button id="dashboard-admin-tab" type="button" role="tab" data-view="admin" data-dashboard-text="Administration" aria-selected="false" aria-controls="dashboard-admin-panel" tabindex="-1" hidden>Administration</button>
       </nav>
@@ -35,6 +36,6 @@
     </section>
   </main>
   <script src="../collection.js"></script><script src="../assets/site.js?v=cover-fallback-1"></script>
-  <script type="module" src="../assets/dashboard.js?v=users-errors-1"></script>
+  <script type="module" src="../assets/dashboard.js?v=task-status-3"></script>
 </body>
 </html>

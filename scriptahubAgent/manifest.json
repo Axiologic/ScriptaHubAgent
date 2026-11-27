@@ -30,63 +30,78 @@
       },
       {
         "path": "/base-agent-additional-server/scriptahubAgent/3002/index.html",
-        "access": "public"
+        "access": "public",
+        "cache": "page"
       },
       {
         "path": "/base-agent-additional-server/scriptahubAgent/3002/health",
-        "access": "public"
+        "access": "public",
+        "cache": "never"
       },
       {
         "path": "/base-agent-additional-server/scriptahubAgent/3002/favicon.ico",
-        "access": "public"
+        "access": "public",
+        "cache": "page"
       },
       {
         "path": "/base-agent-additional-server/scriptahubAgent/3002/status.html",
-        "access": "public"
+        "access": "public",
+        "cache": "page"
       },
       {
         "path": "/base-agent-additional-server/scriptahubAgent/3002/collection.js",
-        "access": "public"
+        "access": "public",
+        "cache": "page"
       },
       {
         "path": "/base-agent-additional-server/scriptahubAgent/3002/collection.json",
-        "access": "public"
+        "access": "public",
+        "cache": "page"
       },
       {
         "path": "/base-agent-additional-server/scriptahubAgent/3002/assets/*",
-        "access": "public"
+        "access": "public",
+        "cache": "page"
       },
       {
         "path": "/base-agent-additional-server/scriptahubAgent/3002/books/*",
-        "access": "public"
+        "access": "public",
+        "cache": "page"
       },
       {
         "path": "/base-agent-additional-server/scriptahubAgent/3002/reader/*",
-        "access": "public"
+        "access": "public",
+        "cache": "page"
       },
       {
         "path": "/base-agent-additional-server/scriptahubAgent/3002/all-books/*",
-        "access": "public"
+        "access": "public",
+        "cache": "page"
       },
       {
         "path": "/base-agent-additional-server/scriptahubAgent/3002/editions/*",
-        "access": "public"
+        "access": "public",
+        "cache": "page"
       },
       {
         "path": "/base-agent-additional-server/scriptahubAgent/3002/contributors/*",
-        "access": "public"
+        "access": "public",
+        "cache": "page"
       },
       {
         "path": "/base-agent-additional-server/scriptahubAgent/3002/contributors.json",
-        "access": "public"
+        "access": "public",
+        "cache": "page"
       },
       {
         "path": "/base-agent-additional-server/scriptahubAgent/3002/legal/*",
-        "access": "public"
+        "access": "public",
+        "cache": "page"
       },
       {
         "path": "/base-agent-additional-server/scriptahubAgent/3002/librarian/index.html",
-        "access": "public"
+        "access": "public",
+        "cache": "page"
       },
       {
         "path": "/base-agent-additional-server/scriptahubAgent/3002/api/*",
@@ -99,8 +114,8 @@
               "userpersisto_profile_get",
               "userpersisto_credits_balance",
               "userpersisto_credits_ledger",
-              "userpersisto_credits_grant",
-              "userpersisto_user_list",
+              "userpersisto_delegated_credits_grant",
+              "userpersisto_delegated_user_list",
               "userpersisto_billing_checkout_create",
               "userpersisto_billing_checkout_verify",
               "userpersisto_billing_credits_offer",

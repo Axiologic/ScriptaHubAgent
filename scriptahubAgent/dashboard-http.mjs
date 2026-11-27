@@ -17,7 +17,7 @@ function userAdminUpstreamError(res, operation, error) {
   let failure;
   if (status === 429) failure = [429,'try_later'];
   else if (code === 'PLOINKY_AGENT_MCP_TIMEOUT' || status === 504) failure = [504,'account_service_timeout'];
-  else if ([401,403].includes(status) || ['admin_required','authentication_required','forbidden'].includes(code)
+  else if ([401,403].includes(status) || ['admin_required','authentication_required','delegation_required','forbidden','AGENT_POLICY_DENIED','ADMIN_REQUIRED'].includes(code)
     || /delegation (?:tool not allowed|expired|target mismatch|source mismatch)/i.test(error.message ?? '')) {
     failure = [403,'account_service_access'];
   } else if (status === 400 || code === -32602) failure = [502,'account_service_rejected'];
@@ -74,7 +74,7 @@ export async function handleDashboard({ req, res, url, pathname, verifyUser, get
       const start = Number(url.searchParams.get('start') || 0);
       if (!Number.isSafeInteger(start) || start < 0) return userAdminError(res,400,'users_page_invalid');
       try {
-        result = await user.userAgentCall('userpersisto_user_list',{search:(url.searchParams.get('search') || '').slice(0,200),start,pageSize:25});
+        result = await user.userAgentCall('userpersisto_delegated_user_list',{search:(url.searchParams.get('search') || '').trim().slice(0,200),start,pageSize:25});
       } catch (error) {
         return userAdminUpstreamError(res,'list users',error);
       }
@@ -87,7 +87,7 @@ export async function handleDashboard({ req, res, url, pathname, verifyUser, get
         || typeof reason !== 'string' || !reason.trim() || reason.length > 500
         || typeof requestId !== 'string' || !/^[0-9a-f-]{36}$/i.test(requestId)) return userAdminError(res,400,'credit_award_invalid');
       try {
-        result = await user.userAgentCall('userpersisto_credits_grant',{userId,amount,reason:reason.trim(),referenceId:'scriptahub:admin:' + requestId});
+        result = await user.userAgentCall('userpersisto_delegated_credits_grant',{userId,amount,reason:reason.trim(),referenceId:'scriptahub:admin:' + requestId});
       } catch (error) {
         return userAdminUpstreamError(res,'award credits',error);
       }
@@ -112,8 +112,8 @@ export async function handleDashboard({ req, res, url, pathname, verifyUser, get
   }
   if (req.method === 'GET' && pathname === '/api/dashboard/book-context') {
     const book = store.book(url.searchParams.get('bookId'));
-    if (book.origin !== 'catalogue' && book.revision === 0 && !user.roles?.includes('admin') && !store.canRead(book,user)) { res.writeHead(404);res.end();return; }
-    result = {bookId:book.id,revision:book.revision,owner:book.owner === user.id};
+    if (book.origin !== 'catalogue' && book.revision === 0 && !store.canRead(book,user)) { res.writeHead(404);res.end();return; }
+    result = {bookId:book.id,revision:book.revision,owner:book.owner === user.id,canManageBook:store.canManageBook(book,user)};
   }
   else if (req.method === 'GET' && pathname === '/api/dashboard') result = { ...store.overview(user), pointsPolicy: policy, isBetaVersion };
   else if (req.method === 'GET' && pathname === '/api/dashboard/points-policy') result = policy;

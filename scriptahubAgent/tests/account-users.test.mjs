@@ -13,15 +13,16 @@ test('user administration is admin-only, paginated and independent of personal p
     const name=req.headers['x-test-user'];if(!name)return null;
     return {id:'user:'+name,email:name+'@example.test',roles:name==='admin'?['admin']:['user'],userAgentCall:async(tool,args)=>{
       calls.push({actor:name,tool,args});
-      if (tool === 'userpersisto_user_list') {
+      if (tool === 'userpersisto_delegated_user_list') {
         if (args.search === 'rejected') throw Object.assign(new Error('Private backend reference abc123'),{statusCode:400});
         if (args.search === 'delegation denied') throw new Error('delegation tool not allowed for internal reference abc123');
+        if (args.search === 'router denied') throw Object.assign(new Error('Access denied'),{code:-32003,statusCode:200,data:{code:'AGENT_POLICY_DENIED'}});
         if (args.search === 'timeout') throw Object.assign(new Error('Private timeout reference abc123'),{code:'PLOINKY_AGENT_MCP_TIMEOUT'});
         return {users:[{id:'reader',email:'reader@example.test',displayName:'Reader',roles:['user']}],totalCount:40};
       }
       if(tool==='userpersisto_credits_balance')return {balance:args.userId==='admin'?100:20,reservedBalance:0};
       if(tool==='userpersisto_credits_ledger')return {entries:[],totalCount:0};
-      if(tool==='userpersisto_credits_grant')return {ok:true};
+      if(tool==='userpersisto_delegated_credits_grant')return {ok:true};
       throw Error('Unexpected tool '+tool);
     }};
   };
@@ -36,14 +37,15 @@ test('user administration is admin-only, paginated and independent of personal p
   assert.equal(dashboard.canManageUsers,false);
   assert.equal(dashboard.isBetaVersion,true);
   assert.equal((await get('reader','/api/dashboard/points/users')).status,403);
-  assert.equal(calls.some(call=>call.tool==='userpersisto_user_list'),false);
-  const users=await get('admin','/api/dashboard/points/users?search=Reader&start=25');assert.equal(users.status,200);
+  assert.equal(calls.some(call=>call.tool==='userpersisto_delegated_user_list'),false);
+  const users=await get('admin','/api/dashboard/points/users?search=+Reader+&start=25');assert.equal(users.status,200);
   assert.equal((await users.json()).users[0].displayName,'Reader');
   assert.deepEqual(calls.at(-1).args,{search:'Reader',start:25,pageSize:25});
   for (const [query,status,code] of [
     ['start=-1',400,'users_page_invalid'],
     ['search=rejected',502,'account_service_rejected'],
     ['search=delegation+denied',403,'account_service_access'],
+    ['search=router+denied',403,'account_service_access'],
     ['search=timeout',504,'account_service_timeout'],
   ]) {
     const response = await get('admin','/api/dashboard/points/users?'+query);
@@ -58,6 +60,10 @@ test('user administration is admin-only, paginated and independent of personal p
   assert.equal((await send('reader')).status,403);
   assert.equal((await send('admin')).status,200);
   assert.deepEqual(calls.at(-1).args,{userId:'reader',amount:10,reason:'Contribution',referenceId:'scriptahub:admin:'+grant.requestId});
+  const manifest=JSON.parse(await fs.readFile(new URL('../manifest.json',import.meta.url),'utf8'));
+  const tools=manifest.routerAccess.httpRoutes.find(route=>route.path.endsWith('/api/*')).delegations[0].tools;
+  assert.ok(tools.includes('userpersisto_delegated_user_list'));
+  assert.ok(tools.includes('userpersisto_delegated_credits_grant'));
   const policyUrl='/api/dashboard/points/policy';
   assert.equal((await get('reader',policyUrl)).status,403);
   const policy=(await (await get('admin',policyUrl)).json()).points;

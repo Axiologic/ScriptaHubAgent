@@ -7,7 +7,11 @@ const el = (tag, text, props = {}) => Object.assign(document.createElement(tag),
 const button = (en, romanian) => el('button', t(en,romanian), {type:'button',className:'button button-quiet'});
 const personName = user => user.displayName || user.username || user.email || t('Unnamed account','Cont fără nume');
 const roles = user => (user.roles || []).map(role => role === 'admin' ? t('Administrator','Administrator') : role === 'user' || role === 'selfRegistered' ? t('Member','Membru') : role).join(' · ');
-const date = value => value ? new Date(value).toLocaleDateString(ro ? 'ro' : 'en') : '—';
+const joinedDate = new Intl.DateTimeFormat(ro ? 'ro-RO' : 'en', {dateStyle:'medium'});
+const date = value => {
+  const timestamp = value ? new Date(value) : null;
+  return timestamp && Number.isFinite(timestamp.getTime()) ? joinedDate.format(timestamp) : '—';
+};
 
 function errorMessage(error, action) {
   if (error.status === 401) return t('Your session has expired. Sign in again.','Sesiunea a expirat. Autentifică-te din nou.');
@@ -42,16 +46,21 @@ export async function mountUsers(host) {
   label.append(search);
   const find = button('Search','Caută');find.type='submit';searchForm.append(label,find);
   const status = el('p','',{role:'status',className:'account-users-status'});
+  const columns = el('div','',{className:'account-user-columns',hidden:true});
+  columns.setAttribute('aria-hidden','true');
+  columns.append(el('span',t('Name and email','Nume și email')),el('span',t('Role','Rol')),el('span',t('Joined','Înregistrat la')));
   const list = el('ul','',{className:'account-user-list'});
   const pages = el('nav','',{className:'account-user-pages'});pages.setAttribute('aria-label',t('Users pages','Paginile utilizatorilor'));
-  listView.append(el('h2',t('Users and credit awards','Utilizatori și acordare de credite')),searchForm,status,list,pages);host.replaceChildren(listView,detailView);
+  listView.append(el('h2',t('Users and credit awards','Utilizatori și acordare de credite')),searchForm,status,columns,list,pages);host.replaceChildren(listView,detailView);
   let request = 0, timer;
 
-  async function showDetails(user) {
+  async function showDetails(user, item) {
     listView.hidden=true;detailView.hidden=false;
     const back = button('Back to users','Înapoi la utilizatori');
-    back.onclick=()=>{detailView.hidden=true;listView.hidden=false;search.focus();};
+    back.onclick=()=>{detailView.hidden=true;listView.hidden=false;(item.isConnected ? item : search).focus();};
     const heading = el('h2',personName(user));heading.tabIndex=-1;
+    const header = el('header','',{className:'account-user-detail-header'});
+    header.append(heading,back);
     const facts = el('dl','',{className:'account-user-facts'});
     for (const [name,value] of [[t('Email','Email'),user.email],[t('Role','Rol'),roles(user)],[t('Joined','Înregistrat la'),date(user.createdAt)]]) {
       const row=el('div','');row.append(el('dt',name),el('dd',value || '—'));facts.append(row);
@@ -63,8 +72,12 @@ export async function mountUsers(host) {
     const field = (caption,input) => {const label=el('label',caption);label.append(input);return label;};
     const grant = button('Grant credits','Acordă credite');grant.type='submit';grant.disabled=true;
     const grantStatus = el('p','',{role:'status'});
-    grantForm.append(field(t('Credits','Credite'),amount),field(t('Reason','Motiv'),reason),grant);
-    detailView.replaceChildren(back,heading,facts,el('h3',t('Award credits','Acordă credite')),grantForm,grantStatus,balance);
+    const actions = el('div','',{className:'account-settings-actions'});
+    actions.append(grantStatus,grant);
+    grantForm.append(field(t('Credits','Credite'),amount),field(t('Reason','Motiv'),reason),actions);
+    const award = el('section','',{className:'account-user-award'});
+    award.append(el('h3',t('Award credits','Acordă credite')),grantForm);
+    detailView.replaceChildren(header,facts,award,balance);
     heading.focus();
     let requestId, pending=false;
     grantForm.oninput=()=>{if(!pending)requestId=undefined;};
@@ -91,13 +104,18 @@ export async function mountUsers(host) {
       const result=await pointsApi('/users?'+new URLSearchParams({search:search.value.trim(),start}));
       if(token!==request)return;
       list.replaceChildren();pages.replaceChildren();
+      columns.hidden=!result.users.length;
       for(const user of result.users){
         const row=el('li',''), item=el('button','',{type:'button',className:'account-user-item'});
         const identity=el('span','',{className:'account-user-identity'});
-        identity.append(el('strong',personName(user)),el('span',user.email || ''));
-        const summary=el('span',roles(user),{className:'account-user-role'});
-        item.append(identity,summary,el('span',date(user.createdAt),{className:'account-user-date'}));
-        item.onclick=()=>void showDetails(user);
+        const name=personName(user);
+        identity.append(el('strong',name));
+        if (user.email && user.email !== name) identity.append(el('span',user.email));
+        const role=el('span',roles(user) || '—',{className:'account-user-role'});
+        const joined=el('span','',{className:'account-user-date'});
+        joined.append(el('span',t('Joined: ','Înregistrat la: '),{className:'sr-only'}), date(user.createdAt));
+        item.append(identity,role,joined);
+        item.onclick=()=>void showDetails(user,item);
         row.append(item);list.append(row);
       }
       const total=result.totalCount ?? result.users.length;
@@ -105,7 +123,7 @@ export async function mountUsers(host) {
       const previous=button('Previous','Înapoi'),next=button('Next','Înainte');
       previous.onclick=()=>void load(Math.max(0,start-25));next.onclick=()=>void load(start+25);
       if(start)pages.append(previous);if(start+result.users.length<total)pages.append(next);
-    }catch(error){if(token===request){list.replaceChildren();pages.replaceChildren();status.textContent=errorMessage(error,'list');}}
+    }catch(error){if(token===request){columns.hidden=true;list.replaceChildren();pages.replaceChildren();status.textContent=errorMessage(error,'list');}}
     finally{if(token===request)list.removeAttribute('aria-busy');}
   }
   searchForm.onsubmit=event=>{event.preventDefault();clearTimeout(timer);void load();};

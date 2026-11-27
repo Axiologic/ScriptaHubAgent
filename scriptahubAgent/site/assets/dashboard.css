@@ -34,7 +34,7 @@
 .dashboard-ownership svg { display: block; width: 24px; height: 24px; }
 .dashboard-ownership.is-shared svg { width: 31px; }
 .dashboard-card-copy .dashboard-meta { margin: 5px 0 0; }
-.dashboard-actions { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 14px; }
+.dashboard-actions { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 10px; margin-top: 14px; }
 .dashboard-card-header .dashboard-actions { margin: 0; align-self: center; }
 .dashboard-card-header .button { min-height: 38px; }
 :is(.dashboard-card, .dashboard-change-card) details { border-top: 1px solid var(--line); padding-top: 8px; margin-top: 12px; }
@@ -44,8 +44,14 @@
 :is(.dashboard-card, .dashboard-change-card) form { display: flex; gap: 8px; flex-wrap: wrap; align-items: end; margin-block: 12px; }
 :is(.dashboard-card, .dashboard-change-card) label { display: grid; gap: 8px; color: var(--content); font-size: var(--action-font-size); }
 :is(.dashboard-card, .dashboard-change-card) form label { flex: 1 1 240px; }
+:is(.dashboard-card, .dashboard-change-card) form > button[type="submit"] { margin-inline-start: auto; }
+:is(.dashboard-card, .dashboard-change-card) > button.button:not([hidden]) { display: flex; width: fit-content; margin-inline-start: auto; }
 :is(.dashboard-card, .dashboard-change-card) input { box-sizing: border-box; min-width: 0; width: 100%; padding: 10px; color: var(--ink); background: var(--field); border: 1px solid var(--line); border-radius: 7px; font: inherit; }
 .dashboard-state { flex: none; padding: 3px 8px; border-radius: 6px; background: var(--field); color: var(--content); font-size: .7rem; font-weight: 550; line-height: 1.5; }
+.dashboard-task-card > .dashboard-card-header { display: grid; grid-template-columns: minmax(0, 1fr) fit-content(48%); gap: 8px 16px; }
+.dashboard-task-card .dashboard-state { grid-area: 1 / 2; justify-self: end; text-align: end; }
+.dashboard-task-card .dashboard-task-note { grid-area: 2 / 1; align-self: center; margin: 0; }
+.dashboard-task-card .dashboard-task-action { grid-area: 2 / 2; align-self: center; justify-self: end; max-width: 100%; height: auto; white-space: normal; overflow-wrap: anywhere; }
 .dashboard-change-statuses { display:flex; flex-wrap:wrap; align-items:center; gap:6px; }
 .dashboard-change-statuses .dashboard-state { display:inline-flex; flex-wrap:wrap; gap:4px; }
 .dashboard-change-statuses .dashboard-state > span { color:var(--muted); }
@@ -86,9 +92,10 @@
 
 }
 
-.dashboard-edition-toolbar { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; gap: 10px 16px; padding-block: 14px; border-bottom: 1px solid var(--line); }
-.dashboard-edition-toolbar .dashboard-meta { margin: 0; }
-.dashboard-edition-toolbar > button { flex: none; }
+.dashboard-edition-toolbar { display: flex; flex-wrap: wrap; align-items: center; gap: 10px 16px; padding-block: 14px; border-bottom: 1px solid var(--line); }
+.dashboard-edition-messages { flex: 1 1 15rem; min-width: 0; display: grid; gap: 4px; overflow-wrap: anywhere; }
+.dashboard-edition-messages .dashboard-meta { margin: 0; }
+.dashboard-edition-toolbar > .dashboard-actions { max-width: 100%; margin: 0; margin-inline-start: auto; }
 
 .dashboard-review-actions { justify-content: flex-end; gap: 8px; }
 :root .dashboard-review-action[data-decision="accept"] { color: var(--green); }

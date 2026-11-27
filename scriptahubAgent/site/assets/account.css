@@ -83,23 +83,54 @@
 .account-users { display: block; padding: clamp(16px, 3vw, 28px); border: 1px solid var(--line); border-radius: 12px; background: var(--panel); font-size: var(--control-font-size); overflow-y: auto; overscroll-behavior: contain; }
 .account-users h2, .account-users h3 { font-size: var(--control-font-size); font-weight: 650; line-height: 1.5; }
 .account-user-search label { flex: 1; }
+.account-users .account-user-search > button[type="submit"] { flex: none; margin-inline-start: auto; }
 .account-user-list { list-style: none; padding: 0; margin: 0; }
 .account-users .account-user-list > li { padding: 0; }
-:root body .site-shell .account-user-item { display: grid; grid-template-columns: minmax(0,1fr) minmax(90px,.4fr) auto; width: 100%; height: auto; min-height: 76px; padding: 12px 0; border: 0; border-radius: 0; background: transparent; color: var(--ink); text-align: start; cursor: pointer; }
-:root body .site-shell .account-user-item:hover { background: var(--field); }
-.account-user-identity { display: grid; gap: 4px; min-width: 0; overflow-wrap: anywhere; }
-.account-user-identity strong { font-weight: 550; }
-.account-user-identity > span, .account-user-role, .account-user-date, .account-users-status { color: var(--muted); font-size: var(--control-font-size); line-height: 1.5; }
-.account-user-facts { display: grid; gap: 12px; padding-block: 16px; border-block: 1px solid var(--line); }
-.account-user-facts > div { display: grid; grid-template-columns: minmax(90px,.3fr) minmax(0,1fr); gap: 12px; }
+.account-user-columns, :root body .site-shell .account-user-list .account-user-item {
+  display: grid;
+  grid-template-columns: minmax(0, 2fr) minmax(0, 1fr) 9em 12px;
+  align-items: center;
+  gap: 12px 20px;
+  padding-inline: 12px;
+}
+.account-user-columns { padding-block: 8px; border-bottom: 1px solid var(--line); color: var(--muted); font-weight: 600; }
+.account-user-columns[hidden] { display: none; }
+:root body .site-shell .account-user-list .account-user-item {
+  width: 100%; height: auto; min-height: 60px; padding-block: 12px;
+  border: 0; border-radius: 0; background: transparent; color: var(--ink);
+  font: inherit; line-height: 1.4; text-align: start; cursor: pointer;
+}
+:root body .site-shell .account-user-list .account-user-item:is(:hover,:focus-visible) { background: var(--field); }
+.account-user-item::after {
+  content: ''; grid-column: 4; width: 6px; height: 6px; justify-self: center;
+  border-block-start: 1px solid; border-inline-end: 1px solid; rotate: 45deg; color: var(--muted);
+}
+.account-user-identity { display: grid; gap: 2px; }
+.account-user-identity, .account-user-role { min-width: 0; overflow-wrap: anywhere; }
+.account-user-identity strong { font-weight: 650; }
+.account-user-identity > span, .account-user-date, .account-users-status { color: var(--muted); }
+.account-user-columns > :nth-child(3), .account-user-date { text-align: end; }
+.account-user-detail-header { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; gap: 10px 16px; }
+.account-users .account-user-detail-header h2 { margin: 0; min-width: 0; overflow-wrap: anywhere; }
+.account-user-facts { display: grid; grid-template-columns: minmax(0, 2fr) repeat(2, minmax(0, 1fr)); gap: 12px 24px; margin: 16px 0; padding-block: 12px; border-block: 1px solid var(--line); }
+.account-user-facts > div { display: grid; align-content: start; gap: 4px; min-width: 0; }
 .account-user-facts dt { color: var(--muted); }
 .account-user-facts dd { margin: 0; overflow-wrap: anywhere; }
-.account-user-grant label { flex: 1 1 160px; }
+.account-user-award h3 { margin: 0 0 10px; }
+.account-users .account-user-grant { display: grid; grid-template-columns: minmax(0, 10em) minmax(0, 1fr); gap: 12px; margin: 0; }
+.account-user-grant input { width: 100%; }
+.account-user-grant .account-settings-actions { grid-column: 1 / -1; align-items: center; margin: 0; }
+.account-user-grant [role="status"] { flex: 1 1 auto; min-width: 0; margin: 0; overflow-wrap: anywhere; }
 .account-user-points { border-top: 1px solid var(--line); margin-top: 20px; padding-top: 16px; }
-@media (max-width: 720px) {
-  :root body .site-shell .account-user-item { grid-template-columns: minmax(0,1fr) auto; gap: 8px 12px; }
-  .account-user-date { grid-column: 1 / -1; }
-  .account-user-search label { flex-basis: 100%; }
+@media (max-width: 600px) {
+  .account-user-columns { display: none; }
+  :root body .site-shell .account-user-list .account-user-item { grid-template-columns: minmax(0, 1fr) auto 12px; gap: 4px 10px; }
+  .account-user-identity { grid-column: 1 / 3; }
+  .account-user-date { grid-column: 2; }
+  .account-user-item::after { grid-column: 3; grid-row: 1 / 3; }
+  .account-user-facts { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .account-user-facts > :first-child { grid-column: 1 / -1; }
+  .account-users .account-user-grant { grid-template-columns: minmax(0, 1fr); }
 }
 
 /* Administrative rules follow the same compact controls and flat rows. */

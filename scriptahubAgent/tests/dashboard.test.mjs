@@ -124,7 +124,10 @@ test('HTTP dashboard connects existing forms to owner and collaborator workflows
   const site = path.join(directory, 'site'); await fs.mkdir(site);
   await fs.writeFile(path.join(site, 'index.html'), 'catalogue');
   const server = createSiteServer(site, { dataDir: directory,
-    verifyUser: async req => req.headers['x-test-user'] ? user(req.headers['x-test-user']) : null });
+    verifyUser: async req => {
+      const actor = req.headers['x-test-user'];
+      return actor ? {...user(actor),roles:actor === 'editor' ? ['admin'] : []} : null;
+    } });
   server.listen(0, '127.0.0.1'); await once(server, 'listening');
   t.after(async () => { await new Promise(resolve => server.close(resolve)); await fs.rm(directory, { recursive: true, force: true }); });
   const base = `http://127.0.0.1:${server.address().port}`;
@@ -147,29 +150,44 @@ test('HTTP dashboard connects existing forms to owner and collaborator workflows
   assert.equal((await request('charlie', '/api/dashboard/book-context?bookId='+bookId)).status,404);
   const context=await request('alice','/api/dashboard/book-context?bookId='+bookId);
   assert.equal(context.value.owner,true);assert.equal(context.value.revision,0);
+  const editorContext = await request('editor','/api/dashboard/book-context?bookId='+bookId);
+  assert.equal(editorContext.status,200);
+  assert.equal(editorContext.value.owner,false);
+  assert.equal(editorContext.value.canManageBook,true);
   await request('bob', '/api/session');
-  assert.equal((await request('alice', '/api/dashboard/access', { bookId, email: user('bob').email })).status, 200);
+  assert.equal((await request('editor', '/api/dashboard/access', { bookId, email: user('bob').email })).status, 200);
   const proposal = await submit('bob', 'edit', bookId); assert.equal(proposal.value.task, null);
   const owner = await request('alice', '/api/dashboard'); assert.equal(owner.value.changes.length, 2);
   assert.equal((await request('charlie', '/api/dashboard')).value.books.length, 0);
+  const editor = (await request('editor','/api/dashboard')).value;
+  assert.equal(editor.books.find(book=>book.id===bookId).owner,user('alice').id);
+  assert.ok(editor.editions.some(book=>book.bookId===bookId));
+  assert.ok(editor.collaborators.some(item=>item.book_id===bookId && item.id===user('bob').id));
+  assert.ok(editor.events.some(event=>event.book_id===bookId && event.actor===user('editor').id));
   const filePath = `/api/dashboard/files/${proposal.value.submissionId}/0`;
   assert.equal((await request('charlie', filePath)).status, 404);
   const document = await fetch(base + filePath, { headers: { 'x-test-user': 'alice' } });
   assert.equal(await document.text(), '%PDF-1.7\nexample');
+  assert.equal((await request('editor',filePath)).status,200);
   assert.equal((await request('bob', '/api/dashboard/review', { changeId: proposal.value.submissionId, decision: 'accept' })).status, 403);
-  const review = await request('alice', '/api/dashboard/review', { changeId: proposal.value.submissionId, decision: 'accept' });
+  const review = await request('editor', '/api/dashboard/review', { changeId: proposal.value.submissionId, decision: 'accept' });
   assert.equal(review.value.task, null);
   const repeated = await request('alice', '/api/dashboard/review', { changeId: proposal.value.submissionId, decision: 'accept' });
   assert.equal(repeated.value.task, null);
-  await request('alice','/api/dashboard/cancel',{taskId:creation.value.task.id});
+  assert.equal((await request('editor','/api/dashboard/cancel',{taskId:creation.value.task.id})).status,200);
   assert.equal((await request('charlie','/api/dashboard/editions',{bookId,submissionId:crypto.randomUUID(),confirmedCost:defaultPoints.editionCost})).status,403);
-  const edition = await request('alice','/api/dashboard/editions',{bookId,submissionId:crypto.randomUUID(),confirmedCost:defaultPoints.editionCost});
+  const edition = await request('editor','/api/dashboard/editions',{bookId,submissionId:crypto.randomUUID(),confirmedCost:defaultPoints.editionCost});
   assert.equal(edition.status,200);assert.equal(edition.value.changeCount,1);
-  assert.equal((await request('alice', '/api/dashboard/cancel', { taskId: edition.value.taskId })).status, 200);
+  assert.equal((await request('editor', '/api/dashboard/cancel', { taskId: edition.value.taskId })).status, 200);
   const state = (await request('bob', '/api/dashboard')).value;
   assert.deepEqual(state.tasks, []);
   assert.equal(state.canManageTasks, false);
   assert.equal(state.changes.find(change => change.id === proposal.value.submissionId).processing.state, 'cancelled');
+  const edit = await submit('editor','edit',bookId);
+  assert.equal(edit.status,202);
+  assert.equal(edit.value.state,'accepted');
+  assert.equal((await request('editor','/api/dashboard/access',{bookId,email:user('bob').email,remove:true})).status,200);
+  assert.equal((await request('bob','/api/dashboard/book-context?bookId='+bookId)).status,404);
 });
 
 test('annotations are reviewed individually, owner edits auto-accept, and typed claims exclude rejected text',async t=>{

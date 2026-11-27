@@ -110,7 +110,7 @@ export async function saveSubmission({ body, contentType, user, dataDir, store, 
     if (existing.owner !== user.id || JSON.stringify(existing.metadata) !== JSON.stringify(meta) || (meta.kind !== 'fork' && (existing.files.length !== files.length || existing.files.some((file, i) => file.sha256 !== files[i].sha256)))) {
       throw Object.assign(new Error('Submission ID already used'), { status: 409 });
     }
-    return store.submit(existing,policy);
+    return store.submit(existing,policy,user);
   };
   if (await fs.stat(directory).then(() => true, error => error.code === 'ENOENT' ? false : Promise.reject(error))) return existingReceipt();
   const cost = submissionCreditCost(meta.kind,policy);
@@ -134,7 +134,7 @@ export async function saveSubmission({ body, contentType, user, dataDir, store, 
       if (error.code !== 'EEXIST' && error.code !== 'ENOTEMPTY') throw error;
       return existingReceipt();
     }
-    return store.submit(record,policy);
+    return store.submit(record,policy,user);
   } finally { await fs.rm(staging, { recursive: true, force: true }); }
 }
 

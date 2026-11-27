@@ -1,7 +1,7 @@
 import { showToast } from './notifications.js';
 import './reading.js';
 import { newSubmissionId } from './submission-policy.js';
-import { dashboardText } from './dashboard-copy.js?v=admin-tabs-1';
+import { dashboardText } from './dashboard-copy.js?v=admin-books-1';
 import { currentChangeStatus } from './change-status.js';
 const root = new URL('../', import.meta.url);
 const t = (key, values) => dashboardText(document.documentElement.lang, key, values);
@@ -11,6 +11,7 @@ const adminContent = document.querySelector('#dashboard-admin-content');
 const tabs = [...document.querySelectorAll('[data-view]')];
 const adminTabs = [...adminPanel.querySelectorAll('[data-admin-view]')];
 const administrationTab = document.querySelector('#dashboard-admin-tab');
+const editionsTab = document.querySelector('#dashboard-editions-tab');
 let data, view = 'books', adminView = 'settings', mutation = false, initialViewApplied = false;
 let publishedBooks = globalThis.SCRIPTA_COLLECTION?.books || [];
 const disclosureStates = new Map();
@@ -123,6 +124,7 @@ async function suggest(book) {
 }
 function bookCard(book) {
   const owner = book.owner === data.user.id;
+  const canManage = owner || data.canManageTasks;
   const title = catalogueTitle(book.id, book.title);
   const creation = book.creation, cycle = creation?.cycle;
   const publishedBook = Boolean(book.revision || book.origin === 'catalogue');
@@ -130,10 +132,10 @@ function bookCard(book) {
   const origin = t(book.origin === 'catalogue' ? 'Imported book' : 'Created book');
   const node = card(title,status,publishedBook ? t('Accepted revision {revision} · {origin}', {revision:book.revision,origin}) : origin);
   if (new URL(location.href).searchParams.get('book') === book.id) node.classList.add('dashboard-book-new');
-  if (!publishedBook && cycle?.phase === 'retryable') addCycleState(node,cycle,owner);
+  if (!publishedBook && cycle?.phase === 'retryable') addCycleState(node,cycle,owner || (canManage && cycle.cost === 0));
   if (!publishedBook && creation?.error && creation.error !== cycle?.issue) node.append(element('p',creation.error,'dashboard-meta'));
   const ownership = element('span', undefined, 'dashboard-ownership');
-  ownership.title = t(owner ? 'Your book' : 'Shared with you');
+  ownership.title = t(owner ? 'Your book' : canManage ? 'Managed as administrator' : 'Shared with you');
   ownership.setAttribute('role', 'img');
   ownership.setAttribute('aria-label', ownership.title);
   const shape = owner
@@ -143,11 +145,15 @@ function bookCard(book) {
   ownership.innerHTML = `<svg viewBox="${owner ? '0 0 26 26' : '0 0 36 28'}" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${shape}</svg>`;
   node.querySelector('.dashboard-meta').prepend(ownership);
   const actions = element('div', undefined, 'dashboard-actions');
-  if (publishedBook) actions.append(button('Suggest a change', () => suggest(book)));
+  if (publishedBook) {
+    const link = viewBookLink(book.id);
+    if (link) actions.append(link);
+    actions.append(button('Suggest a change', () => suggest(book)));
+  }
   node.querySelector('.dashboard-card-header').append(actions);
-  if (owner) {
+  if (canManage) {
     const access = detail('Collaborators', `book:${book.id}:collaborators`);
-    access.append(element('p', t('Collaborators can see the workspace and propose changes. You and workspace administrators can review changes. You manage collaborators.'), 'dashboard-meta'));
+    access.append(element('p', t('Collaborators can see the workspace and propose changes.'), 'dashboard-meta'));
     for (const person of data.collaborators.filter(item => item.book_id === book.id)) {
       const row = element('div', undefined, 'dashboard-collaborator');
       row.append(element('span', person.name || person.email));
@@ -172,12 +178,24 @@ const cycleCopy = {
   restoring: 'Restoring request and credits',
   retryable: 'Ready to try again',
 };
-function addCycleState(node, cycle, owner) {
+function addCycleState(node, cycle, owner, actions = node) {
   if (!cycle || !cycleCopy[cycle.phase]) return;
   node.append(element('p', t(cycleCopy[cycle.phase]), 'dashboard-meta'));
   if (cycle.issue) node.append(element('p', cycle.missing ? t('You need {count} more credits.', {count:cycle.missing}) : t(cycle.issue), 'dashboard-meta'));
   if (owner && cycle.missing && data.isBetaVersion !== false) node.append(element('p', t('ScriptaHub is in beta. Contact a platform administrator for additional credits.'), 'dashboard-meta'));
-  if (owner && cycle.phase === 'retryable') node.append(button('Try again', () => void mutate('/retry',{cycleId:cycle.id,attempt:cycle.attempt})));
+  if (owner && cycle.phase === 'retryable') actions.append(button('Try again', () => void mutate('/retry',{cycleId:cycle.id,attempt:cycle.attempt})));
+}
+function viewBookLink(bookId) {
+  const book = publishedBooks.find(item => item.id === bookId);
+  const language = document.documentElement.lang;
+  const editions = book?.editions || {};
+  const page = editions[language]?.book || editions.en?.book || Object.values(editions).find(edition => edition.book)?.book;
+  if (!page) return null;
+  const url = new URL(page, root);
+  url.searchParams.set('lang', language);
+  const link = element('a', t('View book'), 'dashboard-view-book');
+  link.href = url.href;
+  return link;
 }
 function changeCard(change) {
   const node = card(change.author_name || t('Account unavailable'), null, t('{date} · Based on revision {revision}', { date: date(change.created_at), revision: change.base_revision }), 'h3');
@@ -185,19 +203,8 @@ function changeCard(change) {
   const current=currentChangeStatus(change);
   node.classList.remove('dashboard-card');
   node.classList.add('dashboard-change-card');node.dataset.state=current.state;
-  const published = publishedBooks.find(book => book.id === change.book_id);
-  if (published) {
-    const language = document.documentElement.lang;
-    const edition = published.editions?.[language] || published.editions?.en
-      || Object.values(published.editions || {}).find(edition => edition.book);
-    if (edition?.book) {
-      const link = element('a', t('View book'), 'dashboard-view-book');
-      const url = new URL(edition.book, root);
-      url.searchParams.set('lang', language);
-      link.href = url.href;
-      statuses.append(link);
-    }
-  }
+  const link = viewBookLink(change.book_id);
+  if (link) statuses.append(link);
   if (statuses.childElementCount) node.querySelector('.dashboard-card-header').append(statuses);
   const information = detail('View proposed changes and documents', `change:${change.id}:information`);
   let annotations=[];
@@ -207,7 +214,8 @@ function changeCard(change) {
     && (data.canManageTasks || change.owner === data.user.id)
     && (change.kind !== 'animation' || !change.cycle || change.cycle.phase === 'review')
     && (!editorial || (data.canManageTasks && change.cycle.phase === 'review'));
-  addCycleState(node,change.cycle,change.author === data.user.id);
+  addCycleState(node,change.cycle,change.author === data.user.id
+    || (Boolean(change.book_id) && change.cycle?.cost === 0 && (data.canManageTasks || change.owner === data.user.id)));
   const decisions={...(change.payload.annotationDecisions || {})}, selected=new Set();
   if (annotations.length) {
     const controls=element('div',undefined,'dashboard-actions');
@@ -303,16 +311,24 @@ function catalogueTitle(bookId, fallback) {
 }
 function taskCard(task) {
   const kinds = { 'book-proposal': 'Book proposal', manuscript: 'Manuscript', edit: 'Edit', fork: 'Derived book', animation: 'Animation', translation: 'Translation', 'librarian-feedback': 'Library feedback' };
-  const node = card(catalogueTitle(task.book_id, task.title), states[task.state], `${t(kinds[task.kind] || task.kind)} · ${date(task.created_at)}`);
-  if (task.state === 'queued') node.append(element('p', t('Waiting for a scheduled or manual processing run.'), 'dashboard-meta'));
+  const node = card(catalogueTitle(task.book_id, task.title), null, `${t(kinds[task.kind] || task.kind)} · ${date(task.created_at)}`);
+  node.classList.add('dashboard-task-card');
+  const header = node.querySelector('.dashboard-card-header');
+  if (states[task.state]) header.append(element('span', t(states[task.state]), 'dashboard-state'));
+  if (task.state === 'queued') header.append(element('p', t('Waiting for a scheduled or manual processing run.'), 'dashboard-meta dashboard-task-note'));
+  const canManage = task.owner === data.user.id || task.requester === data.user.id || data.canManageTasks;
+  if (canManage && ['queued', 'running'].includes(task.state)) {
+    const queued = task.state === 'queued';
+    const action = button(queued ? 'Cancel task' : 'Stop task', () => {
+      const message = queued ? 'Cancel this queued task? The accepted change remains in history.'
+        : 'Request stopping this task? Work already published cannot be undone.';
+      if (confirm(t(message))) void mutate('/cancel', { taskId: task.id });
+    });
+    action.classList.add('dashboard-task-action');
+    header.append(action);
+  }
   if (task.error) node.append(element('p', task.error));
   if (task.result) node.append(element('p', task.result));
-  if (task.state === 'queued' && (task.owner === data.user.id || task.requester===data.user.id || data.canManageTasks)) node.append(button('Cancel task', () => {
-    if (confirm(t('Cancel this queued task? The accepted change remains in history.'))) void mutate('/cancel', { taskId: task.id });
-  }));
-  if (task.state === 'running' && (task.owner === data.user.id || task.requester===data.user.id || data.canManageTasks)) node.append(button('Stop task', () => {
-    if (confirm(t('Request stopping this task? Work already published cannot be undone.'))) void mutate('/cancel', { taskId: task.id });
-  }));
   return node;
 }
 
@@ -324,15 +340,24 @@ async function requestEdition(bookId) {
   if(!editionSubmissionIds.has(bookId))editionSubmissionIds.set(bookId,newSubmissionId());
   if(await mutate('/editions',{bookId,submissionId:editionSubmissionIds.get(bookId),confirmedCost}))editionSubmissionIds.delete(bookId);
 }
-function editionRequestForm() {
+function editionRequestForm(selectedBook) {
   const section=element('section',undefined,'dashboard-card');
   section.append(element('h2',t('Request a new edition')));
   const label=element('label',t('Book')), select=element('select');
+  select.dataset.editionBook = '';
   const placeholder=element('option',t('Select a book'));placeholder.value='';select.append(placeholder);
   for(const book of data.editions){const option=element('option',catalogueTitle(book.bookId, book.title || book.bookId));option.value=book.bookId;select.append(option);}
-  const submit=button('Submit new edition',()=>void requestEdition(select.value));submit.disabled=true;
+  const submit=button('Submit new edition',()=>void requestEdition(select.value));
   const note=element('p',undefined,'dashboard-meta');
-  select.onchange=()=>{const book=data.editions.find(item=>item.bookId===select.value);submit.disabled=!book || Boolean(book.activeTask) || Boolean(data.editionCycles?.some(item=>item.bookId===book.bookId));note.textContent=book?.activeTask?t('An edition is already pending or running.'):t('Use {count} credits to create this edition?',{count:data.pointsPolicy?.editionCost || 0});};
+  function updateSelection() {
+    const book = data.editions.find(item => item.bookId === select.value);
+    submit.disabled = !book || Boolean(book.activeTask) || Boolean(data.editionCycles?.some(item => item.bookId === book.bookId));
+    note.textContent = !book ? '' : book.activeTask ? t('An edition is already pending or running.')
+      : t('Use {count} credits to create this edition?', {count:data.pointsPolicy?.editionCost || 0});
+  }
+  select.value = data.editions.some(book => book.bookId === selectedBook) ? selectedBook : '';
+  select.addEventListener('change', updateSelection);
+  updateSelection();
   label.append(select);section.append(label,note,submit);return section;
 }
 function renderChangeGroups(changes, target) {
@@ -404,6 +429,8 @@ function renderChangeGroups(changes, target) {
     const cycle = data.editionCycles?.find(item=>item.bookId === bookId);
     if (edition && (edition.pendingCount > 0 || edition.activeTask || cycle)) {
       const toolbar = element('div', undefined, 'dashboard-edition-toolbar');
+      const messages = element('div', undefined, 'dashboard-edition-messages');
+      const actions = element('div', undefined, 'dashboard-actions');
       const note = element('p', edition.activeTask ? t('An edition is already pending or running.')
         : t('{count} approved changes waiting for a new edition.', {count:edition.pendingCount}), 'dashboard-meta');
       const submit = button('Submit new edition', async () => {
@@ -415,7 +442,11 @@ function renderChangeGroups(changes, target) {
       });
       submit.disabled = Boolean(cycle || edition.activeTask) || !edition.pendingCount;
       if (submit.disabled) submit.title = note.textContent;
-      toolbar.append(note,submit);addCycleState(toolbar,cycle,true);list.append(toolbar);
+      messages.append(note);
+      addCycleState(messages, cycle, true, actions);
+      actions.append(submit);
+      toolbar.append(messages, actions);
+      list.append(toolbar);
     }
     for (const change of requests) list.append(changeCard(change));
     section.append(list);
@@ -432,7 +463,7 @@ function renderPointsSection(name, target) {
     entry = {node};dashboardSections.set(name,entry);
     const modules = {
       settings: () => import('./account-admin.js?v=animation-cost-1'),
-      users: () => import('./account-users.js?v=users-errors-1'),
+      users: () => import('./account-users.js?v=user-layout-1'),
       points: () => import('./account-points.js?v=credit-release-1'),
     };
     const loadModule = modules[name]();
@@ -475,6 +506,7 @@ function render() {
     tab.hidden = ['tasks','reviews'].includes(tab.dataset.adminView) ? !data.canManageTasks : !data.canManageUsers;
   }
   administrationTab.hidden = adminTabs.every(tab => tab.hidden);
+  editionsTab.hidden = !data.editions?.length;
   if (!data.canManageUsers) {
     for (const name of ['settings','users']) {
       dashboardSections.get(name)?.node.replaceChildren();
@@ -494,6 +526,11 @@ function render() {
     return;
   }
   if (view === 'points') { renderPointsSection(view, content); return; }
+  if (view === 'editions') {
+    if (editionsTab.hidden) selectView(tabs[0]);
+    else content.replaceChildren(editionRequestForm(content.querySelector('[data-edition-book]')?.value));
+    return;
+  }
   content.replaceChildren();
   if (view === 'changes') {
     const bookIds = new Set(data.books.map(book => book.id));
@@ -504,7 +541,6 @@ function render() {
   }
   const selectedBook = new URL(location.href).searchParams.get('book');
   const books = selectedBook ? [...data.books].sort((a,b) => Number(b.id === selectedBook) - Number(a.id === selectedBook)) : data.books;
-  if (data.editions?.length) content.append(editionRequestForm());
   if (!books.length) content.append(element('div', t('No books yet. Create a book to get started.'), 'dashboard-empty'));
   for (const book of books) content.append(bookCard(book));
 }
@@ -557,6 +593,7 @@ function localize() {
   document.title = `${t('Dashboard')} · ScriptaHub`;
   for (const node of document.querySelectorAll('[data-dashboard-text]')) node.textContent = t(node.dataset.dashboardText);
   for (const node of document.querySelectorAll('[data-dashboard-label]')) node.setAttribute('aria-label', t(node.dataset.dashboardLabel));
+  if (data?.canManageTasks) document.querySelector('#dashboard-books-tab').textContent = t('All books');
   document.querySelector('#refresh').title = t('Refresh dashboard');
 }
 document.addEventListener('scriptahub:language', () => {
@@ -569,8 +606,9 @@ void refresh();
 // Keep asynchronous funding, publication and restoration status visible.
 setInterval(()=>{
   const activeAdminView = view === 'admin' && ['tasks','reviews'].includes(adminView);
-  if (!mutation && !refreshing && data && (view === 'books' || view === 'changes' || activeAdminView) && document.visibilityState === 'visible'
+  if (!mutation && !refreshing && data && (view === 'books' || view === 'changes' || view === 'editions' || activeAdminView) && document.visibilityState === 'visible'
     && (data.editionCycles?.length
+      || (view === 'editions' && data.editions?.some(item => item.activeTask))
       || data.changes.some(item => ['funding','active','restoring','published'].includes(item.cycle?.phase))
       || (activeAdminView && data.tasks.some(task => ['queued','running','stop_requested'].includes(task.state))))) void refresh({background:true});
 },5000);
