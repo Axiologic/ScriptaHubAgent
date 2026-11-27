@@ -26,7 +26,7 @@ test('local UI edits are served live while generated catalogue stays in the snap
 
   const first = await request('assets/workflow.js');
   assert.equal(await first.text(), 'first edit');
-  assert.equal(first.headers.get('cache-control'), 'no-store');
+  assert.equal(first.headers.get('cache-control'), 'no-cache');
   await fs.writeFile(path.join(live, 'assets/workflow.js'), 'second edit');
   assert.equal(await (await request('assets/workflow.js')).text(), 'second edit');
   assert.equal(await (await request('collection.json')).text(), '{"bookCount":1}');

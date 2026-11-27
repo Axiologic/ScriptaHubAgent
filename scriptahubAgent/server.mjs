@@ -24,6 +24,17 @@ const dataDir = process.env.SCRIPTA_DATA_DIR || path.join(import.meta.dirname, '
 const base = '/base-agent-additional-server/scriptahubAgent/3002';
 const types = { '.html': 'text/html; charset=utf-8', '.js': 'text/javascript; charset=utf-8', '.css': 'text/css; charset=utf-8', '.json': 'application/json; charset=utf-8', '.svg': 'image/svg+xml', '.png': 'image/png', '.webp': 'image/webp', '.jpg': 'image/jpeg', '.jpeg': 'image/jpeg', '.ico': 'image/x-icon', '.pdf': 'application/pdf', '.mp3': 'audio/mpeg', '.woff2': 'font/woff2' };
 const generationId = /^[0-9a-f-]{36}$/;
+// Public pages answer no-cache: browsers and the Router revalidate. no-store stays
+// on everything authenticated or private, on audio and video, and on errors.
+const PUBLIC_CACHE = 'no-cache';
+const PRIVATE_CACHE = 'no-store';
+const isMedia = type => /^(?:audio|video)\//i.test(type || '');
+// Authenticated routes come from the manifest, so a route added there is covered.
+const authenticatedRoutes = JSON.parse(fs.readFileSync(path.join(import.meta.dirname, 'manifest.json'), 'utf8'))
+  .routerAccess.httpRoutes.filter(route => route.access === 'authenticated' && route.path.startsWith(`${base}/`))
+  .map(route => route.path.slice(base.length));
+export const isAuthenticatedPath = pathname => authenticatedRoutes.some(route =>
+  route.endsWith('/*') ? pathname.startsWith(route.slice(0, -1)) : pathname === route);
 Object.assign(types, { '.woff': 'font/woff', '.ttf': 'font/ttf', '.otf': 'font/otf', '.eot': 'application/vnd.ms-fontobject', '.gif': 'image/gif', '.avif': 'image/avif', '.wav': 'audio/wav', '.ogg': 'audio/ogg', '.m4a': 'audio/mp4', '.mp4': 'video/mp4', '.webm': 'video/webm' });
 
 export function syncIntervalMs(config, env = process.env) {
@@ -69,7 +80,7 @@ async function serveRemoteBook(req, res, relative, route, target = relative) {
   if (language && editions.some(edition => edition.fullContent || edition.shortContent)
     && !editions.some(edition => edition.fullContent === relative || edition.shortContent === relative)) {
     const html = renderBookPage(route.book, language, relative);
-    res.writeHead(200, { 'content-type': 'text/html; charset=utf-8', 'cache-control': 'no-store',
+    res.writeHead(200, { 'content-type': 'text/html; charset=utf-8', 'cache-control': PUBLIC_CACHE,
       'content-length': Buffer.byteLength(html), 'x-content-type-options': 'nosniff' });
     res.end(req.method === 'HEAD' ? undefined : html);
     return;
@@ -91,9 +102,10 @@ async function serveRemoteBook(req, res, relative, route, target = relative) {
       await upstream.body?.cancel();
       throw Object.assign(new Error('Published book resource is unavailable'), { status: upstream.status === 404 ? 404 : 502 });
     }
+    const contentType = types[path.extname(relative).toLowerCase()] || upstream.headers.get('content-type') || 'application/octet-stream';
     const outgoing = {
-      'content-type': types[path.extname(relative).toLowerCase()] || upstream.headers.get('content-type') || 'application/octet-stream',
-      'cache-control': 'no-store', 'x-content-type-options': 'nosniff',
+      'content-type': contentType,
+      'cache-control': upstream.status === 200 && !isMedia(contentType) ? PUBLIC_CACHE : PRIVATE_CACHE, 'x-content-type-options': 'nosniff',
     };
     for (const name of ['content-range', 'accept-ranges', 'etag', 'last-modified']) {
       if (upstream.headers.has(name)) outgoing[name] = upstream.headers.get(name);
@@ -126,7 +138,7 @@ async function serveContentBook(req, res, relative, route) {
     else if (inner === 'Animation/index.html' && document.metadata.animation) { text = renderAnimationPage(route.book, relative, { agent: true }); type = types['.html']; }
   }
   if (text !== undefined) {
-    res.writeHead(200, { 'content-type': type, 'cache-control': 'no-store', 'x-content-type-options': 'nosniff', 'content-length': Buffer.byteLength(text) });
+    res.writeHead(200, { 'content-type': type, 'cache-control': PUBLIC_CACHE, 'x-content-type-options': 'nosniff', 'content-length': Buffer.byteLength(text) });
     res.end(req.method === 'HEAD' ? undefined : text);
     return;
   }
@@ -272,7 +284,11 @@ export function createSiteServer(siteRoot, { dataDir: submissionDataDir = dataDi
       if (!real || !real.startsWith(`${root}${path.sep}`)) { res.writeHead(404); res.end(); return; }
       const stat = await fsp.stat(real);
       if (!stat.isFile()) { res.writeHead(404); res.end(); return; }
-      res.writeHead(200, { 'content-type': types[path.extname(real).toLowerCase()] || 'application/octet-stream', 'content-length': stat.size, 'cache-control': servedLive || /(?:^|\/)(collection\.js|collection\.json|[^/]+\.html)$/.test(relative) ? 'no-store' : 'public, max-age=300', 'x-content-type-options': 'nosniff' });
+      const contentType = types[path.extname(real).toLowerCase()] || 'application/octet-stream';
+      const revalidated = servedLive || /(?:^|\/)(collection\.js|collection\.json|[^/]+\.html)$/.test(relative);
+      const cacheControl = isMedia(contentType) || isAuthenticatedPath(`/${relative}`) ? PRIVATE_CACHE
+        : revalidated ? PUBLIC_CACHE : 'public, max-age=300';
+      res.writeHead(200, { 'content-type': contentType, 'content-length': stat.size, 'cache-control': cacheControl, 'x-content-type-options': 'nosniff' });
       if (req.method === 'HEAD') { res.end(); return; }
       fs.createReadStream(real).pipe(res);
     } catch (error) {
